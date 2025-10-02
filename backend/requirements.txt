@@ -18,3 +18,4 @@ scikit-learn>=1.4.0
 PyYAML>=6.0.1
 matplotlib>=3.8.0
 watchgod>=0.8.2
+sqlmodel>=0.0.16
