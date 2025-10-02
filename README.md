@@ -171,6 +171,7 @@ Watcher status: `GET /watch`
   - Body: `{ artifact_id, K?, iters?, bins?, beta?, seed?, units_mode? ('paragraphs'|'sentences'), include_tables? }`
   - Returns: `mhep`, `Hg`, `Hs`, `preview_rows`, and artifact paths (CSV/JSON/plot)
 - `POST /viz/datavzrd` - Materialize a datavzrd project for the artifact’s CHR CSV
+- `POST /viz/datavzrd/logs` - Materialize a datavzrd logs dashboard (all logs or per document)
 - `GET /artifacts` - List uploaded artifacts (ids, filenames)
 - `GET /documents` - List ingested documents (pdf/xml/openapi/postman)
 - `GET /tasks` and `GET /tasks/{id}` - Background task summaries + status

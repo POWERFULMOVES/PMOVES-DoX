@@ -29,6 +29,8 @@ try:
     from watchgod import watch
 except Exception:
     watch = None  # type: ignore
+import csv
+from datetime import datetime
 
 load_dotenv()
 
@@ -799,6 +801,102 @@ async def build_datavzrd(req: DataVZRDRequest):
         "viz_yaml": str(viz_yaml),
         "rel_viz": str(viz_yaml.relative_to(ARTIFACTS_DIR)) if viz_yaml.is_relative_to(ARTIFACTS_DIR) else None,
     }
+
+
+class DataVZRDLogsRequest(BaseModel):
+    document_id: str | None = None
+    title: str | None = None
+
+
+@app.post("/viz/datavzrd/logs")
+async def build_datavzrd_logs(req: DataVZRDLogsRequest):
+    # Collect logs (all or by document)
+    logs = db.list_logs(level=None, code=None, q=None, ts_from=None, ts_to=None)
+    if req.document_id:
+        logs = [l for l in logs if l.get("document_id") == req.document_id]
+    if not logs:
+        raise HTTPException(400, "No logs available for viz")
+
+    scope = req.document_id or "all"
+    proj_dir = ARTIFACTS_DIR / "datavzrd" / f"logs-{scope}"
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    csv_path = proj_dir / "logs.csv"
+    # Write CSV
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["ts","level","code","component","message"]) 
+        writer.writeheader()
+        for l in logs:
+            writer.writerow({
+                "ts": l.get("ts"),
+                "level": l.get("level"),
+                "code": l.get("code"),
+                "component": l.get("component"),
+                "message": l.get("message"),
+            })
+
+    rel_csv = os.path.relpath(csv_path, proj_dir)
+    # Build viz.yaml for logs
+    cfg = {
+        "title": req.title or f"Logs – {scope}",
+        "data": [{"id": "logs", "path": rel_csv}],
+        "pages": [
+            {
+                "title": "Overview",
+                "blocks": [
+                    {
+                        "title": "Errors by Code",
+                        "render": "plot",
+                        "data": "logs",
+                        "spec": {
+                            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                            "mark": "bar",
+                            "encoding": {
+                                "x": {"field": "code", "type": "nominal", "sort": "-y"},
+                                "y": {"aggregate": "count", "type": "quantitative"}
+                            }
+                        }
+                    },
+                    {
+                        "title": "Levels Over Time",
+                        "render": "plot",
+                        "data": "logs",
+                        "spec": {
+                            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                            "mark": "line",
+                            "encoding": {
+                                "x": {"field": "ts", "type": "temporal"},
+                                "y": {"aggregate": "count", "type": "quantitative"},
+                                "color": {"field": "level", "type": "nominal"}
+                            }
+                        }
+                    },
+                    {
+                        "title": "Top Components",
+                        "render": "plot",
+                        "data": "logs",
+                        "spec": {
+                            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                            "mark": "bar",
+                            "encoding": {
+                                "x": {"field": "component", "type": "nominal", "sort": "-y"},
+                                "y": {"aggregate": "count", "type": "quantitative"}
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "title": "Log Table",
+                "blocks": [
+                    {"title": "Logs", "render": "table", "data": "logs", "columns": ["ts","level","code","component","message"], "search": True, "download": True}
+                ]
+            }
+        ]
+    }
+    viz_yaml = proj_dir / "viz.yaml"
+    viz_yaml.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
+    rel_viz = str(viz_yaml.relative_to(ARTIFACTS_DIR)) if viz_yaml.is_relative_to(ARTIFACTS_DIR) else None
+    return {"status": "ok", "project_dir": str(proj_dir), "viz_yaml": str(viz_yaml), "rel_viz": rel_viz}
 
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
     try:

@@ -141,6 +141,14 @@ def main():
     except Exception as e:
       fail(f"ingest/query error: {e}")
 
+    # 9) datavzrd logs viz
+    try:
+      v2 = r.post(f"{API}/viz/datavzrd/logs", json={}, timeout=30)
+      v2.raise_for_status()
+      ok("/viz/datavzrd/logs")
+    except Exception as e:
+      fail(f"/viz/datavzrd/logs error: {e}")
+
     ok("Smoke tests passed.")
     sys.exit(0)
 

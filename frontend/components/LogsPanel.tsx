@@ -8,6 +8,7 @@ export default function LogsPanel() {
   const [q, setQ] = useState('');
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
+  const [building, setBuilding] = useState(false);
   const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
   const load = async () => {
@@ -28,6 +29,19 @@ export default function LogsPanel() {
 
   useEffect(() => { load(); }, []);
 
+  const buildViz = async () => {
+    setBuilding(true);
+    try {
+      const r = await fetch(`${API}/viz/datavzrd/logs`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({}) });
+      if (!r.ok) throw new Error('viz failed');
+      alert('datavzrd logs project generated. Open http://localhost:5173 to view.');
+    } catch {
+      alert('Failed to build logs viz');
+    } finally {
+      setBuilding(false);
+    }
+  };
+
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Logs</h2>
@@ -36,6 +50,9 @@ export default function LogsPanel() {
         <input className="border rounded px-2 py-1" placeholder="code" value={code} onChange={e=>setCode(e.target.value)} />
         <input className="border rounded px-2 py-1" placeholder="search text" value={q} onChange={e=>setQ(e.target.value)} />
         <button onClick={load} className="bg-blue-600 text-white rounded px-3">Filter</button>
+      </div>
+      <div className="mb-3">
+        <button onClick={buildViz} disabled={building} className="bg-green-600 text-white rounded px-3 py-1">{building ? 'Building…' : 'Generate datavzrd logs dashboard'}</button>
       </div>
       {loading ? <div>Loading…</div> : (
         <div className="max-h-80 overflow-auto border rounded">
@@ -52,4 +69,3 @@ export default function LogsPanel() {
     </div>
   );
 }
-
