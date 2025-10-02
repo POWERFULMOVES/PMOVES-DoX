@@ -237,16 +237,23 @@ Quickly verify the backend endpoints end-to-end with the included smoke script.
 
 Prereqs: Python 3.10+ on your host.
 
+Option A — use Docker from the script (recommended):
+
 ```powershell
-# With the stack running (Docker or local), in a new terminal:
 cd meeting-analyst-app
-python -m venv venv
-./venv/Scripts/Activate.ps1
+$env:SMOKE_COMPOSE = 'docker-compose.cpu.yml'    # or 'docker-compose.yml' for GPU
+python -m venv venv; ./venv/Scripts/Activate.ps1
+pip install -r smoke/requirements.txt requests
+python smoke/run_smoke_docker.py
+```
+
+Option B — run against an already running backend:
+
+```powershell
+cd meeting-analyst-app
+python -m venv venv; ./venv/Scripts/Activate.ps1
 pip install -r smoke/requirements.txt
-
-# Optionally set a custom API base (default http://localhost:8000)
 $env:API_BASE = 'http://localhost:8000'
-
 python smoke/smoke_backend.py
 ```
 
