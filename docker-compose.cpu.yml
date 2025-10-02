@@ -1,0 +1,46 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile
+    container_name: meeting-analyst-backend-cpu
+    environment:
+      - FRONTEND_ORIGIN=http://localhost:3000
+      - PORT=8000
+      - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
+      - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/artifacts:/app/artifacts
+      - ./samples:/app/samples
+      - hf-cache:/root/.cache/huggingface
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "-", "http://localhost:8000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: meeting-analyst-frontend
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+      - PORT=3000
+      - NEXT_PUBLIC_POLL_INTERVAL_MS=3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+networks:
+  default:
+    name: meeting-analyst-net
+
+volumes:
+  hf-cache:

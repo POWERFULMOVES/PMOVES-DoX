@@ -1,0 +1,823 @@
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
+import os
+from pathlib import Path
+import shutil
+from typing import List
+import uuid
+from dotenv import load_dotenv
+import time
+import json
+from docx import Document
+import subprocess
+import tempfile
+import threading
+
+from app.ingestion.pdf_processor import process_pdf
+from app.ingestion.csv_processor import process_csv
+from app.ingestion.xlsx_processor import process_xlsx
+from app.database import Database
+from app.qa_engine import QAEngine
+from app.extraction.langextract_adapter import run_langextract, write_visualization
+from app.chr_pipeline import run_chr, pca_plot
+import yaml
+try:
+    from watchgod import watch
+except Exception:
+    watch = None  # type: ignore
+
+load_dotenv()
+
+# Normalize HF token envs for Hugging Face downloads
+hf_token = (
+    os.getenv("HUGGINGFACE_HUB_TOKEN")
+    or os.getenv("HF_API_KEY")
+    or os.getenv("HF_TOKEN")
+    or os.getenv("HUGGINGFACE_TOKEN")
+)
+if hf_token and not os.getenv("HUGGINGFACE_HUB_TOKEN"):
+    os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
+
+app = FastAPI(title="Meeting Analyst API")
+
+# CORS for frontend (env-driven)
+frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+allow_origins = [o.strip() for o in frontend_origin.split(",") if o.strip()]
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=allow_origins,
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
+
+# Initialize
+UPLOAD_DIR = Path("uploads")
+ARTIFACTS_DIR = Path("artifacts")
+UPLOAD_DIR.mkdir(exist_ok=True)
+ARTIFACTS_DIR.mkdir(exist_ok=True)
+
+db = Database()
+qa_engine = QAEngine(db)
+
+# Simple in-memory task registry
+TASKS: dict[str, dict] = {}
+START_TIME = time.time()
+
+
+def _ingest_file_from_watch(src: Path, report_week: str = ""):
+    try:
+        if not src.exists() or not src.is_file():
+            return
+        file_id = str(uuid.uuid4())
+        dst = UPLOAD_DIR / f"{file_id}_{src.name}"
+        shutil.copy2(src, dst)
+        suffix = dst.suffix.lower()
+        artifact_id = db.add_artifact({
+            "id": file_id,
+            "filename": src.name,
+            "filepath": str(dst),
+            "filetype": suffix,
+            "report_week": report_week,
+            "status": "processing" if suffix == ".pdf" else "processed"
+        })
+        if suffix == ".pdf":
+            task_id = str(uuid.uuid4())
+            TASKS[task_id] = {"status": "queued", "filename": src.name, "artifact_id": artifact_id}
+            # schedule background processing using the same helper
+            _thread = threading.Thread(target=_process_and_store, args=(dst, report_week, artifact_id, suffix, task_id), daemon=True)
+            _thread.start()
+        elif suffix in (".csv", ".xlsx", ".xls"):
+            _process_and_store(dst, report_week, artifact_id, suffix, None)
+    except Exception:
+        pass
+
+
+def _watch_loop():
+    if not watch:
+        return
+    enabled = os.getenv("WATCH_ENABLED", "true").lower() == "true"
+    if not enabled:
+        return
+    watch_dir = Path(os.getenv("WATCH_DIR", "/app/watch"))
+    debounce_ms = int(os.getenv("WATCH_DEBOUNCE_MS", "1000"))
+    min_bytes = int(os.getenv("WATCH_MIN_BYTES", "1"))
+    watch_dir.mkdir(parents=True, exist_ok=True)
+    exts = {".pdf", ".csv", ".xlsx", ".xls"}
+
+    def ready(p: Path) -> bool:
+        try:
+            if not p.exists() or not p.is_file():
+                return False
+            if p.suffix.lower() not in exts:
+                return False
+            if p.stat().st_size < min_bytes:
+                return False
+            s1 = p.stat().st_size
+            time.sleep(debounce_ms / 1000.0)
+            s2 = p.stat().st_size
+            return s1 == s2
+        except Exception:
+            return False
+
+    seen: set[str] = set()
+    for changes in watch(str(watch_dir)):
+        for _evt, path_str in changes:
+            p = Path(path_str)
+            key = str(p.resolve())
+            if key in seen:
+                continue
+            if ready(p):
+                seen.add(key)
+                _ingest_file_from_watch(p)
+
+
+@app.on_event("startup")
+async def _startup_watch():
+    # Start watcher thread
+    t = threading.Thread(target=_watch_loop, daemon=True)
+    t.start()
+
+@app.get("/")
+async def root():
+    return {"message": "Meeting Analyst API", "status": "running"}
+
+@app.get("/config")
+async def config():
+    # Detect GPU availability if torch is present
+    gpu = {"available": False, "device_count": 0, "names": []}
+    try:
+        import torch  # type: ignore
+        if hasattr(torch, "cuda") and torch.cuda.is_available():
+            gpu["available"] = True
+            gpu["device_count"] = torch.cuda.device_count()
+            try:
+                gpu["names"] = [torch.cuda.get_device_name(i) for i in range(gpu["device_count"])]
+            except Exception:
+                pass
+    except Exception:
+        pass
+    return {
+        "vlm_repo": os.getenv("DOCLING_VLM_REPO"),
+        "hf_auth": bool(os.getenv("HUGGINGFACE_HUB_TOKEN")),
+        "frontend_origin": frontend_origin,
+        "gpu": gpu,
+    }
+
+
+@app.get("/tasks")
+async def list_tasks():
+    # Return a lightweight summary including counts and queued items
+    items = [
+        {"id": k, **v} for k, v in TASKS.items()
+    ]
+    queued = [t for t in items if t.get("status") == "queued"]
+    completed = [t for t in items if t.get("status") == "completed"]
+    errored = [t for t in items if t.get("status") == "error"]
+    return {
+        "total": len(items),
+        "queued": len(queued),
+        "completed": len(completed),
+        "errored": len(errored),
+        "queued_items": queued,
+    }
+
+
+@app.get("/health")
+async def health():
+    return {
+        "status": "ok",
+        "uptime_seconds": int(time.time() - START_TIME),
+    }
+
+
+@app.get("/artifacts")
+async def list_artifacts():
+    return {"artifacts": db.get_artifacts()}
+
+
+@app.get("/watch")
+async def watch_status():
+    return {
+        "enabled": os.getenv("WATCH_ENABLED", "true").lower() == "true",
+        "dir": os.getenv("WATCH_DIR", "/app/watch"),
+        "debounce_ms": int(os.getenv("WATCH_DEBOUNCE_MS", "1000")),
+        "min_bytes": int(os.getenv("WATCH_MIN_BYTES", "1")),
+        "available": bool(watch),
+    }
+
+
+# ---------------- LangExtract integration ----------------
+class LangExtractRequest(BaseModel):
+    artifact_id: str | None = None
+    text: str | None = None
+    prompt_description: str
+    examples: list[dict] | None = None
+    model_id: str | None = None
+    api_key: str | None = None
+    extraction_passes: int = 1
+    max_workers: int = 8
+    max_char_buffer: int = 4000
+
+
+def _load_text_for_artifact(artifact_id: str) -> str:
+    # Attempt to load markdown generated by pdf_processor for PDFs
+    art = next((a for a in db.get_artifacts() if a.get("id") == artifact_id), None)
+    if not art:
+        raise HTTPException(404, f"Artifact not found: {artifact_id}")
+    p = Path(art.get("filepath", ""))
+    if p.suffix.lower() == ".pdf":
+        md_path = ARTIFACTS_DIR / f"{p.stem}.md"
+        if md_path.exists():
+            return md_path.read_text(encoding="utf-8")
+    # Fallback: try raw file text for CSV/XLSX (limited utility)
+    try:
+        return Path(art.get("filepath")).read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+@app.post("/extract/langextract")
+async def extract_langextract(req: LangExtractRequest):
+    if not req.text and not req.artifact_id:
+        raise HTTPException(400, "Provide either text or artifact_id")
+    text = req.text or _load_text_for_artifact(req.artifact_id)  # type: ignore[arg-type]
+    if not text:
+        raise HTTPException(400, "No text available for extraction")
+
+    result = run_langextract(
+        text=text,
+        prompt_description=req.prompt_description,
+        examples=req.examples,
+        model_id=req.model_id,
+        api_key=req.api_key,
+        extraction_passes=req.extraction_passes,
+        max_workers=req.max_workers,
+        max_char_buffer=req.max_char_buffer,
+    )
+
+    # Save artifacts (JSON and HTML) under artifacts/
+    out_dir = ARTIFACTS_DIR / "langextract"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    json_path = out_dir / "langextract_results.json"
+    json_path.write_text(json.dumps(result, indent=2), encoding="utf-8")
+    html_path = write_visualization(result, out_dir, output_name="langextract_results")
+
+    return {
+        "status": "ok",
+        "model_id": result.get("model_id"),
+        "entities_count": len(result.get("entities", [])),
+        "artifacts": {
+            "json": str(json_path),
+            "html": str(html_path),
+        },
+    }
+
+
+# ---------------- Conversion: artifact -> txt/docx ----------------
+class ConvertRequest(BaseModel):
+    artifact_id: str
+    format: str  # 'txt' or 'docx'
+
+
+def _load_markdown_for_artifact(artifact_id: str) -> tuple[Path, str]:
+    art = next((a for a in db.get_artifacts() if a.get("id") == artifact_id), None)
+    if not art:
+        raise HTTPException(404, f"Artifact not found: {artifact_id}")
+    p = Path(art.get("filepath", ""))
+    if p.suffix.lower() == ".pdf":
+        md_path = ARTIFACTS_DIR / f"{p.stem}.md"
+        if md_path.exists():
+            return md_path, md_path.read_text(encoding="utf-8")
+        return md_path, ""
+    # CSV/XLSX fallback: return raw text for CSV or a generic message
+    try:
+        txt = p.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        txt = f"Artifact {p.name} not convertible to text in this mode."
+    md_path = ARTIFACTS_DIR / f"{p.stem}.md"
+    return md_path, txt
+
+
+@app.post("/convert")
+async def convert_artifact(req: ConvertRequest):
+    fmt = req.format.lower()
+    if fmt not in ("txt", "docx"):
+        raise HTTPException(400, "format must be 'txt' or 'docx'")
+
+    md_path, md_text = _load_markdown_for_artifact(req.artifact_id)
+    if not md_text:
+        raise HTTPException(400, "No markdown/text available for this artifact yet. Process a PDF first.")
+
+    stem = md_path.stem or "document"
+    out_dir = ARTIFACTS_DIR / "conversions"
+    out_dir.mkdir(parents=True, exist_ok=True)
+
+    if fmt == "txt":
+        txt_path = out_dir / f"{stem}.txt"
+        # Prefer pandoc for markdown -> plain text
+        try:
+            if shutil.which("pandoc") and md_path.exists():
+                subprocess.run(["pandoc", str(md_path), "-f", "gfm", "-t", "plain", "-o", str(txt_path)], check=True)
+            else:
+                txt_path.write_text(md_text, encoding="utf-8")
+        except Exception:
+            txt_path.write_text(md_text, encoding="utf-8")
+        rel = str(txt_path.relative_to(ARTIFACTS_DIR)) if txt_path.is_relative_to(ARTIFACTS_DIR) else f"conversions/{txt_path.name}"
+        return {"status": "ok", "path": str(txt_path), "rel": rel}
+
+    # DOCX
+    docx_path = out_dir / f"{stem}.docx"
+    # Prefer pandoc for markdown -> docx for high fidelity
+    try:
+        if shutil.which("pandoc") and md_path.exists():
+            subprocess.run(["pandoc", str(md_path), "-f", "gfm", "-t", "docx", "-o", str(docx_path)], check=True)
+        else:
+            raise RuntimeError("pandoc not available")
+    except Exception:
+        # Fallback naive mapping
+        doc = Document()
+        for line in md_text.splitlines():
+            if line.startswith("### "):
+                doc.add_heading(line[4:].strip(), level=3)
+            elif line.startswith("## "):
+                doc.add_heading(line[3:].strip(), level=2)
+            elif line.startswith("# "):
+                doc.add_heading(line[2:].strip(), level=1)
+            else:
+                if line.strip().startswith("- "):
+                    doc.add_paragraph(line.strip()[2:], style="List Bullet")
+                else:
+                    doc.add_paragraph(line)
+        doc.save(docx_path)
+    rel = str(docx_path.relative_to(ARTIFACTS_DIR)) if docx_path.is_relative_to(ARTIFACTS_DIR) else f"conversions/{docx_path.name}"
+    return {"status": "ok", "path": str(docx_path), "rel": rel}
+
+
+# ---------------- CHR structuring ----------------
+class CHRRequest(BaseModel):
+    artifact_id: str
+    K: int = 8
+    iters: int = 30
+    bins: int = 8
+    seed: int = 42
+    beta: float = 12.0
+    units_mode: str = "paragraphs"  # 'paragraphs' or 'sentences'
+    include_tables: bool = True
+
+
+def _sent_split(text: str) -> List[str]:
+    import re
+    rough = re.split(r"[\n\r]+|(?<=[\.!?])\s+", text.strip())
+    return [s.strip() for s in rough if s.strip()]
+
+
+def _split_units_from_markdown(md_text: str, mode: str = "paragraphs") -> List[str]:
+    blocks = [b.strip() for b in md_text.split("\n\n")]
+    blocks = [b for b in blocks if b]
+    if mode == "sentences":
+        units: List[str] = []
+        for b in blocks:
+            units.extend(_sent_split(b))
+        return units
+    return blocks
+
+
+def _units_from_pdf_json(json_path: Path, include_tables: bool, mode: str) -> List[str]:
+    try:
+        import json as _json
+        doc = _json.loads(json_path.read_text(encoding="utf-8"))
+    except Exception:
+        return []
+    units: List[str] = []
+    # texts
+    for it in doc.get("texts", []) or []:
+        t = str(it.get("text", "")).strip()
+        if not t:
+            continue
+        if mode == "sentences":
+            units.extend(_sent_split(t))
+        else:
+            units.append(t)
+    # tables
+    if include_tables:
+        for tb in doc.get("tables", []) or []:
+            # assume 'data' or export-like format
+            rows = tb.get("data") or tb.get("rows") or []
+            for row in rows:
+                vals = [str(c) for c in row if str(c).strip()]
+                if not vals:
+                    continue
+                units.append(" ".join(vals))
+    return units
+
+
+def _units_from_csv(path: Path, mode: str) -> List[str]:
+    import pandas as pd
+    try:
+        df = pd.read_csv(path)
+    except Exception:
+        return []
+    units: List[str] = []
+    for _, row in df.iterrows():
+        vals = [str(v) for v in row.tolist() if str(v).strip()]
+        if not vals:
+            continue
+        text = " ".join(vals)
+        if mode == "sentences":
+            units.extend(_sent_split(text))
+        else:
+            units.append(text)
+    return units
+
+
+def _units_from_xlsx(path: Path, mode: str) -> List[str]:
+    import pandas as pd
+    units: List[str] = []
+    try:
+        xls = pd.ExcelFile(path)
+    except Exception:
+        return []
+    for sheet in xls.sheet_names:
+        df = xls.parse(sheet)
+        for _, row in df.iterrows():
+            vals = [str(v) for v in row.tolist() if str(v).strip()]
+            if not vals:
+                continue
+            text = " ".join(vals)
+            if mode == "sentences":
+                units.extend(_sent_split(text))
+            else:
+                units.append(text)
+    return units
+
+
+@app.post("/structure/chr")
+async def structure_chr(req: CHRRequest):
+    md_path, md_text = _load_markdown_for_artifact(req.artifact_id)
+    # detect artifact type
+    art = next((a for a in db.get_artifacts() if a.get("id") == req.artifact_id), None)
+    if not art:
+        raise HTTPException(404, "Artifact not found")
+    file_path = Path(art.get("filepath", ""))
+    suffix = file_path.suffix.lower()
+
+    units: List[str] = []
+    if suffix == ".pdf":
+        json_path = ARTIFACTS_DIR / f"{file_path.stem}.json"
+        if json_path.exists():
+            units = _units_from_pdf_json(json_path, include_tables=req.include_tables, mode=req.units_mode)
+        if not units and md_text:
+            units = _split_units_from_markdown(md_text, mode=req.units_mode)
+    elif suffix == ".csv":
+        units = _units_from_csv(file_path, mode=req.units_mode)
+    elif suffix in (".xlsx", ".xls"):
+        units = _units_from_xlsx(file_path, mode=req.units_mode)
+    else:
+        # fallback to markdown/plain
+        if md_text:
+            units = _split_units_from_markdown(md_text, mode=req.units_mode)
+
+    if not units:
+        raise HTTPException(400, "Could not derive units for this artifact.")
+
+    res = run_chr(units, K=req.K, iters=req.iters, bins=req.bins, beta=req.beta, seed=req.seed)
+
+    # Persist CSV/JSON
+    import csv, json as _json
+    out_dir = ARTIFACTS_DIR / "chr"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    stem = md_path.stem or "document"
+    csv_path = out_dir / f"{stem}_chr.csv"
+    json_path = out_dir / f"{stem}_chr.json"
+    plot_path = out_dir / f"{stem}_pca.png"
+    with open(csv_path, "w", newline="", encoding="utf-8") as f:
+        writer = csv.DictWriter(f, fieldnames=["idx", "constellation", "radius", "text"])
+        writer.writeheader()
+        for row in res.rows:
+            writer.writerow(row)
+    json_obj = {
+        "backend": res.backend,
+        "K": res.K,
+        "mhep": res.mhep,
+        "Hg": res.Hg,
+        "Hs": res.Hs,
+        "Hg_traj": res.Hg_traj,
+        "Hs_traj": res.Hs_traj,
+        "rows": res.rows,
+    }
+    json_path.write_text(_json.dumps(json_obj, indent=2), encoding="utf-8")
+    # PCA plot
+    try:
+        pca_plot(res.Z, res.U, np.array(res.labels), str(plot_path))
+    except Exception:
+        pass
+
+    rel_csv = str(csv_path.relative_to(ARTIFACTS_DIR)) if csv_path.is_relative_to(ARTIFACTS_DIR) else f"chr/{csv_path.name}"
+    rel_json = str(json_path.relative_to(ARTIFACTS_DIR)) if json_path.is_relative_to(ARTIFACTS_DIR) else f"chr/{json_path.name}"
+    rel_plot = str(plot_path.relative_to(ARTIFACTS_DIR)) if plot_path.exists() and plot_path.is_relative_to(ARTIFACTS_DIR) else None
+
+    return {
+        "status": "ok",
+        "K": res.K,
+        "mhep": res.mhep,
+        "Hg": res.Hg,
+        "Hs": res.Hs,
+        "counts": {"units": len(units)},
+        "preview_rows": res.rows[:10],
+        "artifacts": {"csv": str(csv_path), "json": str(json_path), "rel_csv": rel_csv, "rel_json": rel_json, "rel_plot": rel_plot},
+    }
+
+
+@app.get("/download")
+async def download_artifact(rel: str):
+    # serve files only within ARTIFACTS_DIR
+    try:
+        # Normalize path to prevent traversal
+        target = (ARTIFACTS_DIR / rel).resolve()
+        if not str(target).startswith(str(ARTIFACTS_DIR.resolve())):
+            raise HTTPException(400, "Invalid path")
+        if not target.exists() or not target.is_file():
+            raise HTTPException(404, "File not found")
+        return FileResponse(str(target), filename=target.name)
+    except HTTPException:
+        raise
+    except Exception as e:
+        raise HTTPException(400, f"Download error: {e}")
+
+
+# ---------------- datavzrd viz project generation ----------------
+class DataVZRDRequest(BaseModel):
+    artifact_id: str
+    title: str | None = None
+
+
+@app.post("/viz/datavzrd")
+async def build_datavzrd(req: DataVZRDRequest):
+    art = next((a for a in db.get_artifacts() if a.get("id") == req.artifact_id), None)
+    if not art:
+        raise HTTPException(404, "Artifact not found")
+    file_path = Path(art.get("filepath", ""))
+    stem = file_path.stem or art.get("id")
+    chr_csv = ARTIFACTS_DIR / "chr" / f"{stem}_chr.csv"
+    if not chr_csv.exists():
+        raise HTTPException(400, "CHR CSV not found. Run /structure/chr first.")
+
+    proj_dir = ARTIFACTS_DIR / "datavzrd" / stem
+    proj_dir.mkdir(parents=True, exist_ok=True)
+    # copy path (we can reference relative path)
+    rel_csv = os.path.relpath(chr_csv, proj_dir)
+
+    cfg = {
+        "title": req.title or f"CHR – {stem}",
+        "data": [
+            {
+                "id": "chr",
+                "path": rel_csv,
+            }
+        ],
+        "pages": [
+            {
+                "title": "Overview",
+                "blocks": [
+                    {
+                        "title": "Constellation Map (PCA)",
+                        "render": "markdown",
+                        "content": f"![]({os.path.relpath(out_dir := (ARTIFACTS_DIR / 'chr' / (stem + '_pca.png')), proj_dir)})"
+                    },
+                    {
+                        "title": "Rows per Constellation",
+                        "render": "plot",
+                        "data": "chr",
+                        "spec": {
+                            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                            "mark": {"type": "bar"},
+                            "encoding": {
+                                "x": {"field": "constellation", "type": "nominal", "sort": "ascending"},
+                                "y": {"aggregate": "count", "type": "quantitative", "title": "rows"}
+                            }
+                        }
+                    },
+                    {
+                        "title": "Radius Histogram",
+                        "render": "plot",
+                        "data": "chr",
+                        "spec": {
+                            "$schema": "https://vega.github.io/schema/vega-lite/v5.json",
+                            "mark": "bar",
+                            "encoding": {
+                                "x": {"bin": True, "field": "radius", "type": "quantitative"},
+                                "y": {"aggregate": "count", "type": "quantitative"}
+                            }
+                        }
+                    }
+                ]
+            },
+            {
+                "title": "Details",
+                "blocks": [
+                    {
+                        "title": "CHR Rows",
+                        "render": "table",
+                        "data": "chr",
+                        "columns": ["idx", "constellation", "radius", "text"],
+                        "search": True,
+                        "download": True
+                    }
+                ]
+            }
+        ]
+    }
+
+    viz_yaml = proj_dir / "viz.yaml"
+    viz_yaml.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
+
+    return {
+        "status": "ok",
+        "project_dir": str(proj_dir),
+        "viz_yaml": str(viz_yaml),
+        "rel_viz": str(viz_yaml.relative_to(ARTIFACTS_DIR)) if viz_yaml.is_relative_to(ARTIFACTS_DIR) else None,
+    }
+
+def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
+    try:
+        if suffix == ".pdf":
+            # PDF is async-capable but can be used sync too
+            import anyio
+            facts, evidence = anyio.run(process_pdf, file_path, report_week, ARTIFACTS_DIR)
+        elif suffix == ".csv":
+            facts, evidence = process_csv(file_path, report_week)
+        elif suffix in [".xlsx", ".xls"]:
+            facts, evidence = process_xlsx(file_path, report_week)
+        else:
+            raise HTTPException(400, f"Unsupported file type: {suffix}")
+
+        for fact in facts:
+            fact["artifact_id"] = artifact_id
+            db.add_fact(fact)
+        for ev in evidence:
+            ev["artifact_id"] = artifact_id
+            db.add_evidence(ev)
+
+        if task_id:
+            TASKS[task_id].update({
+                "status": "completed",
+                "facts_count": len(facts),
+                "evidence_count": len(evidence)
+            })
+    except Exception as e:
+        if task_id:
+            TASKS[task_id].update({"status": "error", "error": str(e)})
+        else:
+            raise
+
+
+@app.post("/upload")
+async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile] = File(...), report_week: str = "", async_pdf: bool = True):
+    """Upload and process documents"""
+    results = []
+    
+    for file in files:
+        # Save uploaded file
+        file_id = str(uuid.uuid4())
+        file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+        
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+        
+        # Process based on file type
+        try:
+            suffix = file_path.suffix.lower()
+            # Store artifact first (status is informal metadata)
+            artifact_id = db.add_artifact({
+                "id": file_id,
+                "filename": file.filename,
+                "filepath": str(file_path),
+                "filetype": suffix,
+                "report_week": report_week,
+                "status": "processing" if (async_pdf and suffix == ".pdf") else "processed"
+            })
+            # Async for PDFs if requested
+            if async_pdf and suffix == ".pdf":
+                task_id = str(uuid.uuid4())
+                TASKS[task_id] = {"status": "queued", "filename": file.filename, "artifact_id": artifact_id}
+                background_tasks.add_task(_process_and_store, file_path, report_week, artifact_id, suffix, task_id)
+                results.append({
+                    "filename": file.filename,
+                    "status": "queued",
+                    "task_id": task_id
+                })
+            else:
+                # Synchronous processing (CSV/XLSX, or PDFs if async disabled)
+                _process_and_store(file_path, report_week, artifact_id, suffix, None)
+                # Calculate counts for the artifact we just added
+                facts_count = len([f for f in db.get_facts(report_week) if f.get("artifact_id") == artifact_id])
+                evidence_count = len([e for e in db.get_all_evidence() if e.get("artifact_id") == artifact_id])
+                results.append({
+                    "filename": file.filename,
+                    "status": "success",
+                    "facts_count": facts_count,
+                    "evidence_count": evidence_count
+                })
+            
+        except Exception as e:
+            results.append({
+                "filename": file.filename,
+                "status": "error",
+                "error": str(e)
+            })
+    
+    return {"results": results}
+
+
+@app.get("/tasks/{task_id}")
+async def get_task_status(task_id: str):
+    task = TASKS.get(task_id)
+    if not task:
+        raise HTTPException(404, "Task not found")
+    return task
+
+
+@app.post("/load_samples")
+async def load_samples(background_tasks: BackgroundTasks, report_week: str = "", async_pdf: bool = True):
+    """Server-side ingestion of sample files from SAMPLE_DIR."""
+    sample_dir = Path(os.getenv("SAMPLE_DIR", "/app/samples"))
+    if not sample_dir.exists():
+        raise HTTPException(400, f"Sample directory not found: {sample_dir}")
+
+    results = []
+    # Known sample names or all supported files in folder
+    sample_files: List[Path] = []
+    for ext in ("*.csv", "*.xlsx", "*.xls", "*.pdf"):
+        sample_files.extend(sample_dir.glob(ext))
+    if not sample_files:
+        return {"results": [{"status": "error", "error": "No sample files found"}]}
+
+    # Reuse upload logic by simulating saved files
+    for p in sample_files:
+        try:
+            file_id = str(uuid.uuid4())
+            file_path = UPLOAD_DIR / f"{file_id}_{p.name}"
+            shutil.copy2(p, file_path)
+            suffix = file_path.suffix.lower()
+
+            artifact_id = db.add_artifact({
+                "id": file_id,
+                "filename": p.name,
+                "filepath": str(file_path),
+                "filetype": suffix,
+                "report_week": report_week,
+                "status": "processing" if (async_pdf and suffix == ".pdf") else "processed"
+            })
+
+            if async_pdf and suffix == ".pdf":
+                task_id = str(uuid.uuid4())
+                TASKS[task_id] = {"status": "queued", "filename": p.name, "artifact_id": artifact_id}
+                background_tasks.add_task(_process_and_store, file_path, report_week, artifact_id, suffix, task_id)
+                results.append({"filename": p.name, "status": "queued", "task_id": task_id})
+            else:
+                _process_and_store(file_path, report_week, artifact_id, suffix, None)
+                facts_count = len([f for f in db.get_facts(report_week) if f.get("artifact_id") == artifact_id])
+                evidence_count = len([e for e in db.get_all_evidence() if e.get("artifact_id") == artifact_id])
+                results.append({
+                    "filename": p.name,
+                    "status": "success",
+                    "facts_count": facts_count,
+                    "evidence_count": evidence_count
+                })
+        except Exception as e:
+            results.append({"filename": p.name, "status": "error", "error": str(e)})
+
+    return {"results": results}
+
+@app.get("/facts")
+async def get_facts(report_week: str = None):
+    """Get all facts, optionally filtered by report week"""
+    facts = db.get_facts(report_week)
+    return {"facts": facts}
+
+@app.get("/evidence/{evidence_id}")
+async def get_evidence(evidence_id: str):
+    """Get evidence by ID"""
+    evidence = db.get_evidence(evidence_id)
+    if not evidence:
+        raise HTTPException(404, "Evidence not found")
+    return evidence
+
+@app.post("/ask")
+async def ask_question(question: str):
+    """Ask a question and get answer with citations"""
+    result = await qa_engine.ask(question)
+    return result
+
+@app.delete("/reset")
+async def reset_database():
+    """Clear all data"""
+    db.reset()
+    return {"status": "Database reset"}
+
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)

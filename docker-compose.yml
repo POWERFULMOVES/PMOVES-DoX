@@ -1,0 +1,101 @@
+services:
+  ollama:
+    image: ollama/ollama:latest
+    container_name: ollama
+    volumes:
+      - ollama:/root/.ollama
+    ports:
+      - "11434:11434"
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.gpu
+    container_name: meeting-analyst-backend
+    environment:
+      - FRONTEND_ORIGIN=http://localhost:3000
+      - PORT=8000
+      - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
+      - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
+      - OLLAMA_BASE_URL=http://ollama:11434
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/artifacts:/app/artifacts
+      - ./samples:/app/samples
+      - ./watch:/app/watch
+      - hf-cache:/root/.cache/huggingface
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "-", "http://localhost:8000/"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+    depends_on:
+      - ollama
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: meeting-analyst-frontend
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  datavzrd:
+    build:
+      context: ./tools/datavzrd
+      dockerfile: Dockerfile
+    container_name: datavzrd
+    environment:
+      - VIZ_FILE=
+    volumes:
+      - ./backend/artifacts:/app/artifacts
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  schemavzrd:
+    build:
+      context: ./tools/schemavzrd
+      dockerfile: Dockerfile
+    container_name: schemavzrd
+    environment:
+      - DB_URL=${DB_URL:-}
+      - OUTPUT_DIR=/app/out/schema
+    volumes:
+      - ./backend/artifacts:/app/out
+    ports:
+      - "5174:5174"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: meeting-analyst-net
+volumes:
+  hf-cache:
+  ollama:

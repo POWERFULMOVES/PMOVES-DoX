@@ -1,0 +1,35 @@
+# syntax=docker/dockerfile:1
+# GPU-accelerated backend using PyTorch + CUDA 12.1
+# Requires NVIDIA Container Toolkit on host and an NVIDIA GPU.
+
+FROM pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1
+
+WORKDIR /app
+
+# System deps for PDF/OCR
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    wget \
+    ca-certificates \
+    poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    ghostscript \
+    pandoc \
+  && rm -rf /var/lib/apt/lists/*
+
+COPY requirements.txt ./
+# Torch and CUDA already included in base image; install remaining deps
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app ./app
+
+# Ensure runtime dirs exist (also mounted as volumes in compose)
+RUN mkdir -p /app/uploads /app/artifacts
+
+EXPOSE 8000
+
+CMD ["python", "-m", "app.main"]
