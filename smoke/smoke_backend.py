@@ -68,24 +68,24 @@ def main():
     except Exception as e:
         fail(f"/facts error: {e}")
 
-    # 4) structure/chr
-    try:
-        payload = {"artifact_id": artifact_id, "K": 6, "units_mode": "sentences"}
-        s = r.post(f"{API}/structure/chr", json=payload, timeout=60)
-        s.raise_for_status()
-        body = s.json()
-        rel_csv = body.get("artifacts", {}).get("rel_csv")
-        if not rel_csv:
-            fail("CHR missing rel_csv")
-        ok("/structure/chr")
-        # download
-        d = r.get(f"{API}/download", params={"rel": rel_csv}, timeout=30)
-        d.raise_for_status()
-        if len(d.content) == 0:
-            fail("downloaded CHR CSV empty")
-    ok("/download CHR CSV")
-    except Exception as e:
-        fail(f"/structure/chr error: {e}")
+        # 4) structure/chr
+        try:
+            payload = {"artifact_id": artifact_id, "K": 6, "units_mode": "sentences"}
+            s = r.post(f"{API}/structure/chr", json=payload, timeout=60)
+            s.raise_for_status()
+            body = s.json()
+            rel_csv = body.get("artifacts", {}).get("rel_csv")
+            if not rel_csv:
+                fail("CHR missing rel_csv")
+            ok("/structure/chr")
+            # download
+            d = r.get(f"{API}/download", params={"rel": rel_csv}, timeout=30)
+            d.raise_for_status()
+            if len(d.content) == 0:
+                fail("downloaded CHR CSV empty")
+            ok("/download CHR CSV")
+        except Exception as e:
+            fail(f"/structure/chr error: {e}")
 
     # 5) convert -> txt and download
     try:

@@ -5,6 +5,7 @@ import { useEffect, useState } from 'react';
 export default function ArtifactsPanel() {
   const [artifacts, setArtifacts] = useState<any[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
+  const [detail, setDetail] = useState<any | null>(null);
   const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
   const load = async () => {
@@ -41,6 +42,12 @@ export default function ArtifactsPanel() {
     } finally { setBusy(null); }
   };
 
+  const openDetail = async (id: string) => {
+    const r = await fetch(`${API}/artifacts/${id}`);
+    if (!r.ok) return;
+    setDetail(await r.json());
+  };
+
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Artifacts</h2>
@@ -60,13 +67,58 @@ export default function ArtifactsPanel() {
                   <button onClick={()=>convert(a.id,'txt')} disabled={busy===a.id+'txt'} className="bg-gray-700 text-white rounded px-2 py-0.5">TXT</button>
                   <button onClick={()=>convert(a.id,'docx')} disabled={busy===a.id+'docx'} className="bg-gray-700 text-white rounded px-2 py-0.5">DOCX</button>
                   <button onClick={()=>chrViz(a.id)} disabled={busy===a.id+'viz'} className="bg-green-600 text-white rounded px-2 py-0.5">CHR Viz</button>
+                  <button onClick={()=>openDetail(a.id)} className="bg-white text-blue-700 border border-blue-600 rounded px-2 py-0.5">Details</button>
                 </td>
               </tr>
             ))}
           </tbody>
         </table>
       </div>
+
+      {detail && (
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center" onClick={()=>setDetail(null)}>
+          <div className="bg-white rounded shadow p-4 w-[720px] max-h-[80vh] overflow-auto" onClick={e=>e.stopPropagation()}>
+            <div className="flex justify-between items-center mb-2">
+              <h3 className="font-semibold">Artifact Details</h3>
+              <button onClick={()=>setDetail(null)} className="text-gray-500">✕</button>
+            </div>
+            <div className="text-sm mb-3">
+              <div><span className="font-medium">ID:</span> {detail.artifact?.id}</div>
+              <div><span className="font-medium">Filename:</span> {detail.artifact?.filename}</div>
+              <div><span className="font-medium">Type:</span> {detail.artifact?.filetype}</div>
+              <div><span className="font-medium">Path:</span> {detail.artifact?.filepath}</div>
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div>
+                <div className="font-medium mb-1">Facts ({(detail.facts||[]).length})</div>
+                <div className="border rounded max-h-60 overflow-auto">
+                  <table className="min-w-full text-left text-xs">
+                    <thead><tr className="bg-gray-50"><th className="px-2 py-1">entity</th><th className="px-2 py-1">metrics</th></tr></thead>
+                    <tbody>
+                      {(detail.facts||[]).slice(0,10).map((f:any,i:number)=> (
+                        <tr key={i} className="border-t"><td className="px-2 py-1">{f.entity||''}</td><td className="px-2 py-1">{JSON.stringify(f.metrics)}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+              <div>
+                <div className="font-medium mb-1">Evidence ({(detail.evidence||[]).length})</div>
+                <div className="border rounded max-h-60 overflow-auto">
+                  <table className="min-w-full text-left text-xs">
+                    <thead><tr className="bg-gray-50"><th className="px-2 py-1">locator</th><th className="px-2 py-1">type</th></tr></thead>
+                    <tbody>
+                      {(detail.evidence||[]).slice(0,10).map((e:any,i:number)=> (
+                        <tr key={i} className="border-t"><td className="px-2 py-1">{e.locator}</td><td className="px-2 py-1">{e.content_type}</td></tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }
-

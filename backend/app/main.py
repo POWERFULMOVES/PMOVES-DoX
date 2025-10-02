@@ -221,6 +221,16 @@ async def health():
 async def list_artifacts():
     return {"artifacts": db.get_artifacts()}
 
+@app.get("/artifacts/{artifact_id}")
+async def artifact_detail(artifact_id: str):
+    arts = db.get_artifacts()
+    art = next((a for a in arts if a.get("id") == artifact_id), None)
+    if not art:
+        raise HTTPException(404, "Artifact not found")
+    facts = [f for f in db.get_facts() if f.get("artifact_id") == artifact_id]
+    evidence = [e for e in db.get_all_evidence() if e.get("artifact_id") == artifact_id]
+    return {"artifact": art, "facts": facts, "evidence": evidence}
+
 @app.get("/documents")
 async def list_documents(type: str | None = None):
     items = db.list_documents(type=type)
@@ -731,6 +741,15 @@ async def build_datavzrd(req: DataVZRDRequest):
     # copy path (we can reference relative path)
     rel_csv = os.path.relpath(chr_csv, proj_dir)
 
+    use_spells = os.getenv("DATAVZRD_SPELLS", "true").lower() == "true"
+    # columns config for Details table
+    columns_chr = ( {
+            "idx": {},
+            "constellation": {},
+            "radius": {},
+            "text": {"spell": {"url": "v1.4.1/utils/text", "with": {"chars_per_line": 80}}}
+        } if use_spells else ["idx","constellation","radius","text"] )
+
     cfg = {
         "title": req.title or f"CHR – {stem}",
         "data": [
@@ -779,19 +798,7 @@ async def build_datavzrd(req: DataVZRDRequest):
             {
                 "title": "Details",
                 "blocks": [
-                    {
-                        "title": "CHR Rows",
-                        "render": "table",
-                        "data": "chr",
-                        "columns": {
-                            "idx": {},
-                            "constellation": {},
-                            "radius": {},
-                            "text": {"spell": {"url": "v1.4.1/utils/text", "with": {"chars_per_line": 80}}}
-                        },
-                        "search": True,
-                        "download": True
-                    }
+                    {"title": "CHR Rows", "render": "table", "data": "chr", "columns": columns_chr, "search": True, "download": True}
                 ]
             }
         ]
@@ -841,6 +848,12 @@ async def build_datavzrd_logs(req: DataVZRDLogsRequest):
 
     rel_csv = os.path.relpath(csv_path, proj_dir)
     # Build viz.yaml for logs
+    use_spells = os.getenv("DATAVZRD_SPELLS", "true").lower() == "true"
+    columns_logs = ( {
+            "ts": {}, "level": {}, "code": {}, "component": {},
+            "message": {"spell": {"url": "v1.4.1/utils/text", "with": {"chars_per_line": 80}}}
+        } if use_spells else ["ts","level","code","component","message"] )
+
     cfg = {
         "title": req.title or f"Logs – {scope}",
         "data": [{"id": "logs", "path": rel_csv}],
@@ -890,25 +903,7 @@ async def build_datavzrd_logs(req: DataVZRDLogsRequest):
                     }
                 ]
             },
-            {
-                "title": "Log Table",
-                "blocks": [
-                    {
-                        "title": "Logs",
-                        "render": "table",
-                        "data": "logs",
-                        "columns": {
-                            "ts": {},
-                            "level": {},
-                            "code": {},
-                            "component": {},
-                            "message": {"spell": {"url": "v1.4.1/utils/text", "with": {"chars_per_line": 80}}}
-                        },
-                        "search": True,
-                        "download": True
-                    }
-                ]
-            }
+            {"title": "Log Table", "blocks": [ {"title": "Logs", "render": "table", "data": "logs", "columns": columns_logs, "search": True, "download": True} ]}
         ]
     }
     viz_yaml = proj_dir / "viz.yaml"
