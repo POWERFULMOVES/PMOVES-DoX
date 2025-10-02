@@ -25,12 +25,13 @@ def wait_health(url: str, tries: int = 30, delay: float = 2.0):
 def main():
     repo_root = os.path.abspath(os.path.join(os.path.dirname(__file__), os.pardir))
     compose_file = os.getenv("SMOKE_COMPOSE", "docker-compose.cpu.yml")
+    compose_flags = os.getenv("SMOKE_FLAGS", "--compatibility").split()
     api_base = os.getenv("API_BASE", "http://localhost:8000")
 
     # Up backend
     try:
-        run(["docker", "compose", "-f", compose_file, "build", "backend"], cwd=repo_root)
-        run(["docker", "compose", "-f", compose_file, "up", "-d", "backend"], cwd=repo_root)
+        run(["docker", "compose", "-f", compose_file] + compose_flags + ["build", "backend"], cwd=repo_root)
+        run(["docker", "compose", "-f", compose_file] + compose_flags + ["up", "-d", "backend"], cwd=repo_root)
         if not wait_health(f"{api_base}/health", tries=45, delay=2):
             print("[FAIL] backend /health did not become ready")
             sys.exit(1)
@@ -43,7 +44,7 @@ def main():
     finally:
         # Teardown
         try:
-            run(["docker", "compose", "-f", compose_file, "down", "-v"], cwd=repo_root, check=False)
+            run(["docker", "compose", "-f", compose_file] + compose_flags + ["down", "-v"], cwd=repo_root, check=False)
         except Exception:
             pass
     sys.exit(code)
@@ -51,4 +52,3 @@ def main():
 
 if __name__ == "__main__":
     main()
-
