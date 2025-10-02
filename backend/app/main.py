@@ -17,7 +17,10 @@ import threading
 from app.ingestion.pdf_processor import process_pdf
 from app.ingestion.csv_processor import process_csv
 from app.ingestion.xlsx_processor import process_xlsx
-from app.database import Database
+from app.ingestion.xml_ingestion import process_xml
+from app.ingestion.openapi_ingestion import process_openapi
+from app.ingestion.postman_ingestion import process_postman
+from app.database import ExtendedDatabase
 from app.qa_engine import QAEngine
 from app.extraction.langextract_adapter import run_langextract, write_visualization
 from app.chr_pipeline import run_chr, pca_plot
@@ -58,7 +61,7 @@ ARTIFACTS_DIR = Path("artifacts")
 UPLOAD_DIR.mkdir(exist_ok=True)
 ARTIFACTS_DIR.mkdir(exist_ok=True)
 
-db = Database()
+db = ExtendedDatabase()
 qa_engine = QAEngine(db)
 
 # Simple in-memory task registry
@@ -90,6 +93,26 @@ def _ingest_file_from_watch(src: Path, report_week: str = ""):
             _thread.start()
         elif suffix in (".csv", ".xlsx", ".xls"):
             _process_and_store(dst, report_week, artifact_id, suffix, None)
+        elif suffix == ".xml":
+            doc, rows = process_xml(dst)
+            db.add_document(doc)
+            for row in rows:
+                db.add_log(row)
+        elif suffix in (".yaml", ".yml", ".json"):
+            # Try OpenAPI then Postman
+            try:
+                doc, rows = process_openapi(dst)
+                db.add_document(doc)
+                for row in rows:
+                    db.add_api(row)
+            except Exception:
+                try:
+                    doc, rows = process_postman(dst)
+                    db.add_document(doc)
+                    for row in rows:
+                        db.add_api(row)
+                except Exception:
+                    pass
     except Exception:
         pass
 
@@ -195,6 +218,63 @@ async def health():
 @app.get("/artifacts")
 async def list_artifacts():
     return {"artifacts": db.get_artifacts()}
+
+
+# ---------- ingestion: XML / OpenAPI / Postman ----------
+@app.post("/ingest/xml")
+async def ingest_xml(file: UploadFile = File(...)):
+    tmp = UPLOAD_DIR / f"tmp_{uuid.uuid4()}_{file.filename}"
+    with tmp.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+    doc, rows = process_xml(tmp)
+    db.add_document(doc)
+    for row in rows:
+        db.add_log(row)
+    return {"status": "ok", "document_id": doc["id"], "rows": len(rows)}
+
+
+@app.post("/ingest/openapi")
+async def ingest_openapi(file: UploadFile = File(...)):
+    tmp = UPLOAD_DIR / f"tmp_{uuid.uuid4()}_{file.filename}"
+    with tmp.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+    doc, rows = process_openapi(tmp)
+    db.add_document(doc)
+    for row in rows:
+        db.add_api(row)
+    return {"status": "ok", "document_id": doc["id"], "rows": len(rows)}
+
+
+@app.post("/ingest/postman")
+async def ingest_postman(file: UploadFile = File(...)):
+    tmp = UPLOAD_DIR / f"tmp_{uuid.uuid4()}_{file.filename}"
+    with tmp.open("wb") as f:
+        shutil.copyfileobj(file.file, f)
+    doc, rows = process_postman(tmp)
+    db.add_document(doc)
+    for row in rows:
+        db.add_api(row)
+    return {"status": "ok", "document_id": doc["id"], "rows": len(rows)}
+
+
+# ---------- queries: logs / apis / tags ----------
+@app.get("/logs")
+async def get_logs(level: str | None = None, code: str | None = None, q: str | None = None,
+                   ts_from: str | None = None, ts_to: str | None = None):
+    items = db.list_logs(level=level, code=code, q=q, ts_from=ts_from, ts_to=ts_to)
+    return {"logs": items}
+
+
+@app.get("/apis")
+async def get_apis(tag: str | None = None, method: str | None = None, path_like: str | None = None):
+    items = db.list_apis(tag=tag, method=method, path_like=path_like)
+    return {"apis": items}
+
+
+@app.get("/tags")
+async def get_tags(document_id: str | None = None, q: str | None = None):
+    items = db.list_tags(document_id=document_id, q=q)
+    return {"tags": items}
 
 
 @app.get("/watch")

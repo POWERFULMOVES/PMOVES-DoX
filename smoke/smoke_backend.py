@@ -83,7 +83,7 @@ def main():
         d.raise_for_status()
         if len(d.content) == 0:
             fail("downloaded CHR CSV empty")
-        ok("/download CHR CSV")
+    ok("/download CHR CSV")
     except Exception as e:
         fail(f"/structure/chr error: {e}")
 
@@ -122,6 +122,24 @@ def main():
         ok("/viz/datavzrd")
     except Exception as e:
         fail(f"/viz/datavzrd error: {e}")
+
+    # 8) ingest xml/openapi/postman
+    try:
+      with open(ROOT/"samples"/"sample.xml", "rb") as f:
+        ix = r.post(f"{API}/ingest/xml", files={"file": ("sample.xml", f, "text/xml")}, timeout=30)
+      ix.raise_for_status()
+      with open(ROOT/"samples"/"sample_openapi.json", "rb") as f:
+        ioa = r.post(f"{API}/ingest/openapi", files={"file": ("sample_openapi.json", f, "application/json")}, timeout=30)
+      ioa.raise_for_status()
+      with open(ROOT/"samples"/"sample_postman.json", "rb") as f:
+        ipm = r.post(f"{API}/ingest/postman", files={"file": ("sample_postman.json", f, "application/json")}, timeout=30)
+      ipm.raise_for_status()
+      # query logs/apis
+      ql = r.get(f"{API}/logs?level=ERROR", timeout=10); ql.raise_for_status()
+      qa = r.get(f"{API}/apis?method=GET", timeout=10); qa.raise_for_status()
+      ok("ingest xml/openapi/postman and query logs/apis")
+    except Exception as e:
+      fail(f"ingest/query error: {e}")
 
     ok("Smoke tests passed.")
     sys.exit(0)

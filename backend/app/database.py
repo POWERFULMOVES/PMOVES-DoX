@@ -139,3 +139,165 @@ class Database:
             s.exec("DELETE FROM fact")
             s.exec("DELETE FROM artifact")
             s.commit()
+
+
+# -------- Extended schema for LMS_DOCS --------
+
+class Document(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    path: str
+    type: str  # pdf|xml|openapi|postman
+    title: str | None = None
+    source: str | None = None
+    created_at: str | None = None
+
+
+class Section(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    document_id: str
+    order: int
+    text: str
+    page: int | None = None
+    bbox_json: str | None = None
+
+
+class DocTable(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    document_id: str
+    order: int
+    json: str  # rows/cells JSON
+
+
+class APIEndpoint(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    document_id: str
+    name: str | None = None
+    method: str
+    path: str
+    summary: str | None = None
+    tags_json: str | None = None
+    params_json: str | None = None
+    responses_json: str | None = None
+
+
+class LogEntry(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    document_id: str
+    ts: str | None = None
+    level: str | None = None
+    code: str | None = None
+    component: str | None = None
+    message: str | None = None
+    attrs_json: str | None = None
+
+
+class TagRow(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    document_id: str
+    tag: str
+    score: float | None = None
+    source_ptr: str | None = None
+
+
+def _ensure_extended(engine):
+    SQLModel.metadata.create_all(engine)
+
+
+class ExtendedDatabase(Database):
+    def __init__(self, db_path: Optional[str] = None):
+        super().__init__(db_path)
+        _ensure_extended(self.engine)
+
+    # ---- document helpers ----
+    def add_document(self, doc: Dict) -> str:
+        with Session(self.engine) as s:
+            row = Document(**doc)
+            s.add(row)
+            s.commit()
+        return doc["id"]
+
+    def add_section(self, section: Dict):
+        with Session(self.engine) as s:
+            s.add(Section(**section))
+            s.commit()
+
+    def add_table(self, table: Dict):
+        with Session(self.engine) as s:
+            s.add(DocTable(**table))
+            s.commit()
+
+    def add_api(self, api: Dict):
+        with Session(self.engine) as s:
+            s.add(APIEndpoint(**api))
+            s.commit()
+
+    def add_log(self, log: Dict):
+        with Session(self.engine) as s:
+            s.add(LogEntry(**log))
+            s.commit()
+
+    def add_tag(self, tag: Dict):
+        with Session(self.engine) as s:
+            s.add(TagRow(**tag))
+            s.commit()
+
+    def list_logs(self, level: str | None = None, code: str | None = None, q: str | None = None,
+                  ts_from: str | None = None, ts_to: str | None = None) -> List[Dict]:
+        with Session(self.engine) as s:
+            stmt = select(LogEntry)
+            if level:
+                stmt = stmt.where(LogEntry.level == level)
+            if code:
+                stmt = stmt.where(LogEntry.code == code)
+            rows = s.exec(stmt).all()
+        out = []
+        for e in rows:
+            if q and (q.lower() not in (e.message or '').lower()):
+                continue
+            out.append({
+                "id": e.id,
+                "document_id": e.document_id,
+                "ts": e.ts,
+                "level": e.level,
+                "code": e.code,
+                "component": e.component,
+                "message": e.message,
+                "attrs": json.loads(e.attrs_json) if e.attrs_json else None,
+            })
+        return out
+
+    def list_apis(self, tag: str | None = None, method: str | None = None, path_like: str | None = None) -> List[Dict]:
+        with Session(self.engine) as s:
+            rows = s.exec(select(APIEndpoint)).all()
+        out = []
+        for a in rows:
+            if method and a.method.lower() != method.lower():
+                continue
+            if path_like and path_like not in a.path:
+                continue
+            if tag:
+                tags = json.loads(a.tags_json) if a.tags_json else []
+                if tag not in tags:
+                    continue
+            out.append({
+                "id": a.id,
+                "document_id": a.document_id,
+                "name": a.name,
+                "method": a.method,
+                "path": a.path,
+                "summary": a.summary,
+                "tags": json.loads(a.tags_json) if a.tags_json else [],
+            })
+        return out
+
+    def list_tags(self, document_id: str | None = None, q: str | None = None) -> List[Dict]:
+        with Session(self.engine) as s:
+            rows = s.exec(select(TagRow)).all()
+        out = []
+        for t in rows:
+            if document_id and t.document_id != document_id:
+                continue
+            if q and q.lower() not in t.tag.lower():
+                continue
+            out.append({"id": t.id, "document_id": t.document_id, "tag": t.tag, "score": t.score, "source_ptr": t.source_ptr})
+        return out

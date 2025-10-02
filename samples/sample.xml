@@ -1,0 +1,16 @@
+<logs>
+  <entry>
+    <ts>2025-09-25T10:01:02Z</ts>
+    <level>ERROR</level>
+    <code>E1001</code>
+    <component>LoanService</component>
+    <message>Loan origination failed for application 12345</message>
+  </entry>
+  <entry>
+    <ts>2025-09-25T10:02:03Z</ts>
+    <level>WARN</level>
+    <code>W200</code>
+    <component>Underwriting</component>
+    <message>Missing income document for applicant 67890</message>
+  </entry>
+</logs>

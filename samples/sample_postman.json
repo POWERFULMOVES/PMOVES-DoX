@@ -1,0 +1,7 @@
+{
+  "info": {"name": "LMS Postman", "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"},
+  "item": [
+    {"name": "List Loans", "request": {"method": "GET", "url": {"raw": "http://localhost/loans", "path": ["loans"]}}, "response": []},
+    {"name": "Create Loan", "request": {"method": "POST", "url": {"raw": "http://localhost/loans", "path": ["loans"]}}, "response": []}
+  ]
+}

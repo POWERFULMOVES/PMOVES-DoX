@@ -5,12 +5,16 @@ import FileUpload from '@/components/FileUpload';
 import QAInterface from '@/components/QAInterface';
 import FactsViewer from '@/components/FactsViewer';
 import CHRPanel from '@/components/CHRPanel';
+import LogsPanel from '@/components/LogsPanel';
+import APIsPanel from '@/components/APIsPanel';
+import TagsPanel from '@/components/TagsPanel';
 
 export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [vlmRepo, setVlmRepo] = useState<string | null>(null);
   const [queuedCount, setQueuedCount] = useState<number>(0);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
+  const [tab, setTab] = useState<'workspace'|'logs'|'apis'|'tags'>('workspace');
 
   const handleUploadComplete = () => {
     setRefreshKey(prev => prev + 1);
@@ -54,17 +58,35 @@ export default function Home() {
             Processing PDFs in background: {queuedCount} file(s)…
           </div>
         )}
-        <p className="text-gray-600 mb-8">Upload documents (PDF, CSV, XLSX) and ask questions with citations</p>
-        
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <FileUpload onUploadComplete={handleUploadComplete} />
-          <QAInterface />
-        </div>
+        <p className="text-gray-600 mb-4">Upload LMS docs (PDF), XML logs, and API collections; structure, tag, and visualize.</p>
 
-        <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
-          <FactsViewer key={refreshKey} />
-          <CHRPanel />
+        <div className="mb-6 flex gap-2">
+          {(['workspace','logs','apis','tags'] as const).map(t => (
+            <button key={t} onClick={()=>setTab(t)} className={`px-3 py-1 rounded border ${tab===t?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-700'}`}>{t.toUpperCase()}</button>
+          ))}
         </div>
+        
+        {tab==='workspace' && (
+          <>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              <FileUpload onUploadComplete={handleUploadComplete} />
+              <QAInterface />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
+              <FactsViewer key={refreshKey} />
+              <CHRPanel />
+            </div>
+          </>
+        )}
+        {tab==='logs' && (
+          <LogsPanel />
+        )}
+        {tab==='apis' && (
+          <APIsPanel />
+        )}
+        {tab==='tags' && (
+          <TagsPanel />
+        )}
       </div>
     </main>
   );
