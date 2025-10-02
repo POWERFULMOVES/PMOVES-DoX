@@ -8,13 +8,14 @@ import CHRPanel from '@/components/CHRPanel';
 import LogsPanel from '@/components/LogsPanel';
 import APIsPanel from '@/components/APIsPanel';
 import TagsPanel from '@/components/TagsPanel';
+import ArtifactsPanel from '@/components/ArtifactsPanel';
 
 export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
   const [vlmRepo, setVlmRepo] = useState<string | null>(null);
   const [queuedCount, setQueuedCount] = useState<number>(0);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
-  const [tab, setTab] = useState<'workspace'|'logs'|'apis'|'tags'>('workspace');
+  const [tab, setTab] = useState<'workspace'|'logs'|'apis'|'tags'|'artifacts'>('workspace');
 
   const handleUploadComplete = () => {
     setRefreshKey(prev => prev + 1);
@@ -61,7 +62,7 @@ export default function Home() {
         <p className="text-gray-600 mb-4">Upload LMS docs (PDF), XML logs, and API collections; structure, tag, and visualize.</p>
 
         <div className="mb-6 flex gap-2">
-          {(['workspace','logs','apis','tags'] as const).map(t => (
+          {(['workspace','logs','apis','tags','artifacts'] as const).map(t => (
             <button key={t} onClick={()=>setTab(t)} className={`px-3 py-1 rounded border ${tab===t?'bg-blue-600 text-white border-blue-600':'bg-white text-gray-700'}`}>{t.toUpperCase()}</button>
           ))}
         </div>
@@ -86,6 +87,9 @@ export default function Home() {
         )}
         {tab==='tags' && (
           <TagsPanel />
+        )}
+        {tab==='artifacts' && (
+          <ArtifactsPanel />
         )}
       </div>
     </main>

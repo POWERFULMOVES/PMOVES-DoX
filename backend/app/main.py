@@ -783,7 +783,12 @@ async def build_datavzrd(req: DataVZRDRequest):
                         "title": "CHR Rows",
                         "render": "table",
                         "data": "chr",
-                        "columns": ["idx", "constellation", "radius", "text"],
+                        "columns": {
+                            "idx": {},
+                            "constellation": {},
+                            "radius": {},
+                            "text": {"spell": {"url": "v1.4.1/utils/text", "with": {"chars_per_line": 80}}}
+                        },
                         "search": True,
                         "download": True
                     }
@@ -888,7 +893,20 @@ async def build_datavzrd_logs(req: DataVZRDLogsRequest):
             {
                 "title": "Log Table",
                 "blocks": [
-                    {"title": "Logs", "render": "table", "data": "logs", "columns": ["ts","level","code","component","message"], "search": True, "download": True}
+                    {
+                        "title": "Logs",
+                        "render": "table",
+                        "data": "logs",
+                        "columns": {
+                            "ts": {},
+                            "level": {},
+                            "code": {},
+                            "component": {},
+                            "message": {"spell": {"url": "v1.4.1/utils/text", "with": {"chars_per_line": 80}}}
+                        },
+                        "search": True,
+                        "download": True
+                    }
                 ]
             }
         ]
