@@ -172,6 +172,7 @@ Watcher status: `GET /watch`
   - Returns: `mhep`, `Hg`, `Hs`, `preview_rows`, and artifact paths (CSV/JSON/plot)
 - `POST /viz/datavzrd` - Materialize a datavzrd project for the artifact’s CHR CSV
 - `GET /artifacts` - List uploaded artifacts (ids, filenames)
+- `GET /documents` - List ingested documents (pdf/xml/openapi/postman)
 - `GET /tasks` and `GET /tasks/{id}` - Background task summaries + status
 - `GET /config` - Runtime config (VLM repo, HF auth, GPU availability)
 - `GET /health` - Uptime status
@@ -255,6 +256,7 @@ What it does:
 - Runs CHR on the new artifact and downloads the CSV
 - Converts the artifact to TXT and downloads it
 - Generates a datavzrd project
+- Ingests XML/OpenAPI/Postman samples and queries `/logs` and `/apis`
 
 Exit code 0 indicates success; otherwise the script prints an error and returns non‑zero.
 ### High-fidelity DOCX via Pandoc
@@ -299,3 +301,14 @@ mangle run your.mangle -i path\to\input.csv -o meeting-analyst-app\watch\transfo
 ```
 
 You can also add a custom container for mangle later if you prefer containerized transforms.
+
+## Database Migrations (Alembic)
+
+SQLite is used by default (`db.sqlite3`). Alembic scaffolding is included:
+
+```powershell
+cd meeting-analyst-app/backend
+alembic upgrade head           # apply migrations (none initially)
+alembic revision --autogenerate -m "init"  # create a new migration from current SQLModel metadata
+alembic upgrade head
+```

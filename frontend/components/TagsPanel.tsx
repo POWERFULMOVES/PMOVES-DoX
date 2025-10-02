@@ -4,6 +4,7 @@ import { useEffect, useState } from 'react';
 
 export default function TagsPanel() {
   const [docId, setDocId] = useState('');
+  const [documents, setDocuments] = useState<any[]>([]);
   const [q, setQ] = useState('');
   const [tags, setTags] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
@@ -25,14 +26,42 @@ export default function TagsPanel() {
   };
 
   useEffect(() => { load(); }, []);
+  useEffect(() => {
+    (async () => {
+      try {
+        const r = await fetch(`${API}/documents`);
+        if (!r.ok) return;
+        const data = await r.json();
+        setDocuments(Array.isArray(data.documents) ? data.documents : []);
+      } catch {}
+    })();
+  }, []);
+
+  const extractTags = async () => {
+    if (!docId) return;
+    try {
+      const res = await fetch(`${API}/extract/tags`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ document_id: docId }) });
+      if (res.ok) {
+        load();
+      } else {
+        alert('Extract tags failed');
+      }
+    } catch {
+      alert('Extract tags error');
+    }
+  };
 
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Application Tags</h2>
       <div className="grid grid-cols-1 md:grid-cols-4 gap-2 mb-3">
-        <input className="border rounded px-2 py-1" placeholder="document_id" value={docId} onChange={e=>setDocId(e.target.value)} />
+        <select className="border rounded px-2 py-1" value={docId} onChange={e=>setDocId(e.target.value)}>
+          <option value="">Select document…</option>
+          {documents.map((d:any)=> (<option key={d.id} value={d.id}>{d.type} — {d.title || d.path}</option>))}
+        </select>
         <input className="border rounded px-2 py-1" placeholder="search tag" value={q} onChange={e=>setQ(e.target.value)} />
         <button onClick={load} className="bg-blue-600 text-white rounded px-3">Filter</button>
+        <button onClick={extractTags} disabled={!docId} className="bg-green-600 text-white rounded px-3">Extract Tags</button>
       </div>
       {loading ? <div>Loading…</div> : (
         <div className="max-h-80 overflow-auto border rounded">
@@ -49,4 +78,3 @@ export default function TagsPanel() {
     </div>
   );
 }
-

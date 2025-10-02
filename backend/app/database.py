@@ -301,3 +301,16 @@ class ExtendedDatabase(Database):
                 continue
             out.append({"id": t.id, "document_id": t.document_id, "tag": t.tag, "score": t.score, "source_ptr": t.source_ptr})
         return out
+
+    def list_documents(self, type: str | None = None) -> List[Dict]:
+        with Session(self.engine) as s:
+            stmt = select(Document)
+            if type:
+                stmt = stmt.where(Document.type == type)
+            rows = s.exec(stmt).all()
+        return [r.model_dump() for r in rows]
+
+    def list_log_messages(self, document_id: str) -> List[str]:
+        with Session(self.engine) as s:
+            rows = s.exec(select(LogEntry).where(LogEntry.document_id == document_id)).all()
+        return [r.message for r in rows if r.message]

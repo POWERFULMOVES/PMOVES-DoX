@@ -219,6 +219,11 @@ async def health():
 async def list_artifacts():
     return {"artifacts": db.get_artifacts()}
 
+@app.get("/documents")
+async def list_documents(type: str | None = None):
+    items = db.list_documents(type=type)
+    return {"documents": items}
+
 
 # ---------- ingestion: XML / OpenAPI / Postman ----------
 @app.post("/ingest/xml")
@@ -275,6 +280,81 @@ async def get_apis(tag: str | None = None, method: str | None = None, path_like:
 async def get_tags(document_id: str | None = None, q: str | None = None):
     items = db.list_tags(document_id=document_id, q=q)
     return {"tags": items}
+
+
+class ExtractTagsRequest(BaseModel):
+    document_id: str
+    model_id: str | None = None
+    api_key: str | None = None
+    prompt: str | None = None
+    examples: list[dict] | None = None
+
+
+def _compose_text_for_document(doc: Dict) -> str:
+    doc_type = (doc.get("type") or "").lower()
+    path = Path(doc.get("path", ""))
+    if doc_type == "xml":
+        # concatenate log messages
+        msgs = db.list_log_messages(doc["id"])  # type: ignore[arg-type]
+        return "\n".join(msgs)
+    elif doc_type in ("openapi", "postman"):
+        # read raw file
+        try:
+            return path.read_text(encoding="utf-8", errors="ignore")
+        except Exception:
+            return ""
+    elif doc_type == "pdf":
+        # Prefer markdown from artifacts if exists
+        md_path = ARTIFACTS_DIR / f"{path.stem}.md"
+        if md_path.exists():
+            return md_path.read_text(encoding="utf-8")
+    # fallback: file content
+    try:
+        return path.read_text(encoding="utf-8", errors="ignore")
+    except Exception:
+        return ""
+
+
+@app.post("/extract/tags")
+async def extract_tags(req: ExtractTagsRequest):
+    doc = next((d for d in db.list_documents() if d.get("id") == req.document_id), None)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+
+    text = _compose_text_for_document(doc)
+    if not text:
+        raise HTTPException(400, "No text available for tag extraction")
+
+    preset_prompt = req.prompt or os.getenv("TAGS_PROMPT", (
+        "Extract application or system tags relevant to loan management systems (LMS). "
+        "Return concise tags as exact spans from text. Examples: 'Loan Origination', 'Underwriting', 'Servicing', 'LoanService'."
+    ))
+    result = run_langextract(
+        text=text,
+        prompt_description=preset_prompt,
+        examples=req.examples,
+        model_id=req.model_id,
+        api_key=req.api_key,
+        extraction_passes=1,
+        max_workers=4,
+        max_char_buffer=4000,
+    )
+
+    entities = result.get("entities", [])
+    saved = 0
+    for e in entities:
+        tag_text = e.get("extraction_text") or e.get("text")
+        if not tag_text:
+            continue
+        db.add_tag({
+            "id": str(uuid.uuid4()),
+            "document_id": req.document_id,
+            "tag": str(tag_text),
+            "score": None,
+            "source_ptr": e.get("extraction_class") or "langextract",
+        })
+        saved += 1
+    return {"status": "ok", "document_id": req.document_id, "tags_saved": saved}
 
 
 @app.get("/watch")
