@@ -87,7 +87,6 @@ services:
     restart: unless-stopped
 
   schemavzrd:
-    profiles: ["schema"]
     build:
       context: ./tools/schemavzrd
       dockerfile: Dockerfile

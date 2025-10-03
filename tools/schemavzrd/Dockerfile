@@ -1,5 +1,11 @@
-FROM python:3.11-slim
-RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates && rm -rf /var/lib/apt/lists/*
+FROM rust:1-bookworm AS build
+RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+# schemavzrd is not published on crates.io; install from GitHub
+RUN cargo install --git https://github.com/datavzrd/schemavzrd --locked --bin schemavzrd
+
+FROM debian:bookworm-slim
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 && rm -rf /var/lib/apt/lists/*
+COPY --from=build /usr/local/cargo/bin/schemavzrd /usr/local/bin/schemavzrd
 WORKDIR /app
 COPY entrypoint.sh /usr/local/bin/entrypoint.sh
 RUN chmod +x /usr/local/bin/entrypoint.sh
