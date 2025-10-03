@@ -1,5 +1,6 @@
 import os
 import json
+import uuid
 from typing import List, Dict, Optional
 from pathlib import Path
 
@@ -199,6 +200,15 @@ class TagRow(SQLModel, table=True):
     source_ptr: str | None = None
 
 
+class TagPrompt(SQLModel, table=True):
+    id: str = Field(primary_key=True)
+    document_id: str
+    prompt_text: str
+    examples_json: str | None = None
+    created_at: str | None = None
+    author: str | None = None
+
+
 def _ensure_extended(engine):
     SQLModel.metadata.create_all(engine)
 
@@ -251,9 +261,39 @@ class ExtendedDatabase(Database):
                 stmt = stmt.where(LogEntry.code == code)
             rows = s.exec(stmt).all()
         out = []
+        # parse time bounds once
+        from datetime import datetime
+        t_from = None
+        t_to = None
+        def parse_ts(sval: str | None):
+            if not sval:
+                return None
+            # try common formats
+            for fmt in ("%Y-%m-%dT%H:%M:%S", "%Y-%m-%d %H:%M:%S", "%Y-%m-%d"):
+                try:
+                    return datetime.strptime(sval[:len(fmt)], fmt)
+                except Exception:
+                    continue
+            return None
+        if ts_from:
+            t_from = parse_ts(ts_from)
+        if ts_to:
+            t_to = parse_ts(ts_to)
         for e in rows:
+            # apply q filter
             if q and (q.lower() not in (e.message or '').lower()):
                 continue
+            # apply time window if possible
+            if t_from or t_to:
+                et = parse_ts(e.ts)
+                if et is None:
+                    # skip when we can't compare
+                    pass
+                else:
+                    if t_from and et < t_from:
+                        continue
+                    if t_to and et > t_to:
+                        continue
             out.append({
                 "id": e.id,
                 "document_id": e.document_id,
@@ -300,6 +340,65 @@ class ExtendedDatabase(Database):
             if q and q.lower() not in t.tag.lower():
                 continue
             out.append({"id": t.id, "document_id": t.document_id, "tag": t.tag, "score": t.score, "source_ptr": t.source_ptr})
+        return out
+
+    def has_tag(self, document_id: str, tag: str) -> bool:
+        with Session(self.engine) as s:
+            rows = s.exec(select(TagRow).where(TagRow.document_id == document_id)).all()
+        for r in rows:
+            if r.tag.strip().lower() == tag.strip().lower():
+                return True
+        return False
+
+    # ---- tag prompt governance ----
+    def save_tag_prompt(self, document_id: str, prompt_text: str, examples: Optional[list] = None, author: Optional[str] = None) -> str:
+        import json as _json
+        from datetime import datetime
+        row = TagPrompt(
+            id=str(uuid.uuid4()),  # type: ignore
+            document_id=document_id,
+            prompt_text=prompt_text,
+            examples_json=_json.dumps(examples) if examples is not None else None,
+            created_at=datetime.utcnow().isoformat(timespec="seconds") + "Z",
+            author=author,
+        )
+        with Session(self.engine) as s:
+            s.add(row)
+            s.commit()
+        return row.id
+
+    def get_latest_tag_prompt(self, document_id: str) -> Optional[Dict]:
+        with Session(self.engine) as s:
+            rows = s.exec(select(TagPrompt).where(TagPrompt.document_id == document_id)).all()
+        if not rows:
+            return None
+        rows.sort(key=lambda r: r.created_at or "", reverse=True)
+        r = rows[0]
+        import json as _json
+        return {
+            "id": r.id,
+            "document_id": r.document_id,
+            "prompt_text": r.prompt_text,
+            "examples": _json.loads(r.examples_json) if r.examples_json else None,
+            "created_at": r.created_at,
+            "author": r.author,
+        }
+
+    def list_tag_prompt_history(self, document_id: str, limit: int = 20) -> List[Dict]:
+        with Session(self.engine) as s:
+            rows = s.exec(select(TagPrompt).where(TagPrompt.document_id == document_id)).all()
+        rows.sort(key=lambda r: r.created_at or "", reverse=True)
+        out: List[Dict] = []
+        import json as _json
+        for r in rows[:limit]:
+            out.append({
+                "id": r.id,
+                "document_id": r.document_id,
+                "prompt_text": r.prompt_text,
+                "examples": _json.loads(r.examples_json) if r.examples_json else None,
+                "created_at": r.created_at,
+                "author": r.author,
+            })
         return out
 
     def list_documents(self, type: str | None = None) -> List[Dict]:

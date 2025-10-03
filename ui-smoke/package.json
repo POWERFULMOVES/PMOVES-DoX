@@ -1,0 +1,11 @@
+{
+  "name": "lms-analyst-ui-smoke",
+  "private": true,
+  "devDependencies": {
+    "@playwright/test": "^1.47.2"
+  },
+  "scripts": {
+    "test": "playwright test --reporter=line"
+  }
+}
+

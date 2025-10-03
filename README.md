@@ -1,15 +1,16 @@
-# Meeting Analyst App
+# PMOVES-DoX
 
-An intelligent document analysis system that processes PDFs, CSVs, and Excel files to extract metrics and answer questions with citations.
+The ultimate document structured data extraction and analysis tool. Extract, analyze, transform, and visualize data from PDFs, XML logs, CSV/XLSX, and OpenAPI/Postman collections. Local‑first with Hugging Face + Ollama; ships as standalone, Docker, and MS Teams Copilot/MCP‑friendly.
 
 ## Features
 
-- **Multi-format Document Processing**: PDF (using IBM Granite Docling), CSV, XLSX
-- **Automatic Fact Extraction**: Extracts metrics like ROAS, CPA, CTR, revenue, spend
-- **Q&A with Citations**: Ask questions and get answers with source references
-- **Location Tracking**: Tracks exact page and bounding box coordinates for PDF content
-- **FastAPI Backend**: High-performance async API
-- **React/Next.js Frontend**: Modern, responsive UI
+- Multi‑format ingestion: PDF (Docling), CSV/XLSX, XML logs, OpenAPI/Postman
+- Vector search (FAISS or NumPy fallback) with a global UI search bar
+- Logs view with time/level/code filters and CSV export
+- APIs catalog with detail modal (params/responses) and copy‑cURL
+- Tag extraction via LangExtract with LMS presets, dry‑run, and governance (save/history/restore)
+- CHR structuring + datavzrd dashboards (overview + details)
+- Q&A with citations over extracted facts
 
 ## Technology Stack
 
@@ -17,13 +18,15 @@ An intelligent document analysis system that processes PDFs, CSVs, and Excel fil
 - FastAPI
 - Docling (IBM Granite model for PDF processing)
 - Pandas for data analysis
+- FAISS (CPU) or NumPy fallback for vector search
 - Python 3.10+
 
 ### Frontend
-- Next.js 14
-- TypeScript
-- Tailwind CSS
-- Axios
+- Next.js 14 + TypeScript + Tailwind
+- Sticky header with product name, global search, and index rebuild button
+- Settings modal (API base, default author, VLM badge)
+- POML export for Microsoft Copilot Studio / POML workflows
+- Faceted views (workspace/logs/apis/tags/artifacts) with toasts for UX
 
 ## Setup Instructions (Windows/PowerShell)
 
@@ -233,9 +236,64 @@ See `ADVANCED_FEATURES_PLAN.md` for roadmap of advanced PDF processing features.
 
 ## Smoke Tests
 
-Quickly verify the backend endpoints end-to-end with the included smoke script.
+One-command smoke via npm (uses Python + Docker Compose under the hood):
 
-Prereqs: Python 3.10+ on your host.
+```bash
+cd meeting-analyst-app
+npm run smoke         # CPU compose (default)
+npm run smoke:gpu     # GPU compose
+```
+
+UI smoke with Playwright (brings up frontend + backend, runs headless tests):
+
+```bash
+cd meeting-analyst-app
+npm run smoke:ui       # CPU compose
+npm run smoke:ui:gpu   # GPU compose
+```
+
+Run the Python smoke directly against a running backend:
+
+```bash
+cd meeting-analyst-app
+API_BASE=http://localhost:8000 python smoke/smoke_backend.py
+```
+
+## MCP Usage (starter)
+
+An MCP manifest is provided for PMOVES-DoX tools (search, extract_tags, export_poml):
+
+- Path: `backend/mcp/manifest.json`
+- Tools:
+  - `search` → POST `/search` with `{ q, k? }`
+  - `extract_tags` → POST `/extract/tags` with `{ document_id, model_id?, prompt?, examples?, dry_run? }`
+  - `export_poml` → POST `/export/poml` with `{ document_id, title?, variant? }`
+
+Example client (pseudo):
+
+```ts
+import fetch from 'node-fetch';
+
+const API = process.env.API_BASE || 'http://localhost:8000';
+
+async function mcpSearch(q: string) {
+  const r = await fetch(`${API}/search`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ q, k: 5 })});
+  return await r.json();
+}
+
+async function mcpExportPOML(document_id: string, variant = 'generic') {
+  const r = await fetch(`${API}/export/poml`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ document_id, variant })});
+  const data = await r.json();
+  // download
+  const d = await fetch(`${API}/download?rel=${encodeURIComponent(data.rel)}`);
+  const text = await d.text();
+  return text;
+}
+```
+
+Copilot Studio / POML
+- Use Export POML from the UI or the API to generate a `.poml` artifact per document.
+- Variants: `generic`, `troubleshoot`, `catalog` depending on your task.
 
 Option A — use Docker from the script (recommended):
 

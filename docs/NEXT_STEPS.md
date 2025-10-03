@@ -1,19 +1,29 @@
-# Next Steps Plan (LMS‑Centered)
+# Next Steps Plan (LMS Analyst)
 
 ## Goals
 - Ingest + structure LMS Admin Guides (PDF), XML logs, and API collections
 - Extract tables/text and derive application tags with citations
 - Provide troubleshooting views and API catalogs; dashboards via datavzrd
 
-## Priorities (Week 1–2)
+## Status (as of 2025-10-03)
+- Core ingestion (PDF/XML/OpenAPI/Postman) in place
+- Vector search + global UI search shipped
+- Logs filters + CSV export shipped
+- API detail modal (params/responses + copy‑cURL) shipped
+- Tag presets, dry‑run/apply, governance (save/history/restore) shipped
+- Header with health + rebuild; Settings modal (API base, author, VLM) shipped
+- Backend and UI smoke tests wired; backend smoke passing
+
+## Priorities (Weeks 3–4)
 - P0
-  - Add FAISS vector search + `/search` endpoint + UI global search
-  - Logs time‑range filters + CSV export
-  - API detail modal (params/responses/examples)
-  - Tag prompt presets (LMS), dry‑run/apply + governance
+  - DONE: FAISS vector search + `/search` + Global search bar (header)
+  - DONE: Logs time‑range filters + CSV export
+  - DONE: API detail modal (params/responses/examples) + copy‑cURL
+  - DONE: Tag prompt presets (LMS), dry‑run/apply, governance (save/history/restore)
 - P1
   - XML XPath mapping for LMS logs; enrich OpenAPI components/security
-  - CHR parameter UI; DB indexes; Alembic auto‑run (guarded)
+  - CHR parameter UI in UI; DB indexes for logs/apis/tags; Alembic auto‑run (guarded)
+  - CI: GitHub Actions for smoke (backend + UI) on PRs/merge to main
 - P2
   - datavzrd theme/pinned dashboards; nightly GPU smoke; Copilot actions
 
@@ -22,6 +32,12 @@
 - Logs view filters by time/level/code and exports current view
 - Tag extraction writes TagRow with source pointers; re‑runs merge predictably
 - API detail modal shows params/responses and copy‑cURL
+- Tag prompt governance supports: load preset, edit, save (author), list history, restore into editor, restore & save
+
+### Performance Targets
+- PDF -> Markdown (Docling, 10-page guide) ≤ 20s on CPU, ≤ 8s on mid‑range GPU
+- Index rebuild on 1k chunks ≤ 2s; query P50 ≤ 250 ms, P95 ≤ 500 ms
+- Logs export for 50k rows completes ≤ 2s server time
 
 ## Risks & Mitigations
 - Large PDFs/logs → queue + progress; chunking + streaming
@@ -44,12 +60,33 @@
 - CI
   - Extend smoke to call `/search` and `/extract/tags`; nightly GPU job
 
+## Validation Plan
+- Backend smoke (Docker CPU):
+  - `npm run smoke` (wrapper) or `python smoke/run_smoke_docker.py`
+- UI smoke (Playwright):
+  - `npm run smoke:ui` (brings up backend+frontend, runs headless UI checks)
+- Manual spot checks:
+  - Upload PDF/XML/OpenAPI under `samples/`, verify tags, search hits, API modal
+  - Rebuild index from header and assert search latency in browser DevTools
+
 ## Compact
 - Stabilize deploy + health/migrate; better .envs
 - Ingest v2: XML XPath, OpenAPI components/security
-- Add FAISS + `/search` + UI search
-- Tag presets, dry‑run/apply, governance
-- API detail modal; Logs time filters + CSV export
+- FAISS + `/search` + UI search (DONE)
+- Tag presets, dry‑run/apply, governance (DONE)
+- API detail modal; Logs time filters + CSV export (DONE)
 - CHR controls + richer PCA; datavzrd themes/spells
 - DB indexes; Alembic auto‑run; nightly GPU smoke
-- Docs walkthroughs + screencasts
+- Docs walkthroughs + screencasts (update with LMS Analyst branding)
+
+## Short‑Term Tasks (assign/track)
+- XML XPath mapping starter (map common LMS log shapes) — owner: __, due: 2025‑10‑10
+- OpenAPI enrichment (components/security) — owner: __, due: 2025‑10‑10
+- DB indices (apis.path, apis.method, logs.level/code/ts, tags.tag) — owner: __, due: 2025‑10‑09
+- CHR panel controls (K, units mode, include tables) — owner: __, due: 2025‑10‑09
+- CI: add GH Actions workflow (smoke + ui‑smoke) — owner: __, due: 2025‑10‑08
+
+## Backlog
+- Search result deep links (open PDF chunk, API row, or log record)
+- Tag merge visualization (diff previous vs new)
+- Export/import governance presets per LMS vendor

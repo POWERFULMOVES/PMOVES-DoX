@@ -1,0 +1,11 @@
+{
+  "name": "lms-analyst-repo",
+  "private": true,
+  "scripts": {
+    "smoke": "node tools/run-smoke.js",
+    "smoke:cpu": "node tools/run-smoke.js cpu",
+    "smoke:gpu": "node tools/run-smoke.js gpu",
+    "smoke:ui": "node tools/run-ui-smoke.js",
+    "smoke:ui:gpu": "node tools/run-ui-smoke.js gpu"
+  }
+}

@@ -1,8 +1,8 @@
-# Meeting Analyst - Quick Setup Script for Windows
+# LMS Analyst - Quick Setup Script for Windows
 # Run this script in PowerShell to set up both backend and frontend
 
 Write-Host "==================================" -ForegroundColor Cyan
-Write-Host "Meeting Analyst - Setup Script" -ForegroundColor Cyan
+Write-Host "LMS Analyst - Setup Script" -ForegroundColor Cyan
 Write-Host "==================================" -ForegroundColor Cyan
 Write-Host ""
 

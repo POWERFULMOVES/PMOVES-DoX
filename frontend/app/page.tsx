@@ -9,6 +9,8 @@ import LogsPanel from '@/components/LogsPanel';
 import APIsPanel from '@/components/APIsPanel';
 import TagsPanel from '@/components/TagsPanel';
 import ArtifactsPanel from '@/components/ArtifactsPanel';
+import { useToast } from '@/components/Toast';
+import HeaderBar from '@/components/HeaderBar';
 
 export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -16,6 +18,7 @@ export default function Home() {
   const [queuedCount, setQueuedCount] = useState<number>(0);
   const pollRef = useRef<NodeJS.Timeout | null>(null);
   const [tab, setTab] = useState<'workspace'|'logs'|'apis'|'tags'|'artifacts'>('workspace');
+  const { push } = useToast();
 
   const handleUploadComplete = () => {
     setRefreshKey(prev => prev + 1);
@@ -43,10 +46,10 @@ export default function Home() {
   }, []);
 
   return (
-    <main className="min-h-screen p-8 bg-gray-50">
-      <div className="max-w-7xl mx-auto">
+    <main className="min-h-screen bg-gray-50">
+      <HeaderBar />
+      <div className="max-w-7xl mx-auto p-8">
         <div className="flex items-center gap-3 mb-2">
-          <h1 className="text-4xl font-bold">Meeting Analyst</h1>
           {vlmRepo && (
             <span title={`VLM enabled: ${vlmRepo}`} className="inline-flex items-center text-xs px-2 py-1 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">
               VLM: Granite Docling
@@ -59,7 +62,7 @@ export default function Home() {
             Processing PDFs in background: {queuedCount} file(s)…
           </div>
         )}
-        <p className="text-gray-600 mb-4">Upload LMS docs (PDF), XML logs, and API collections; structure, tag, and visualize.</p>
+        <p className="text-gray-600 mb-4">Upload LMS docs (PDF), XML logs, and API collections; structure, tag, search, and visualize.</p>
 
         <div className="mb-6 flex gap-2">
           {(['workspace','logs','apis','tags','artifacts'] as const).map(t => (

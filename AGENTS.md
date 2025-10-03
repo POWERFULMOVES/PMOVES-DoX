@@ -1,4 +1,4 @@
-# AGENTS.md — Agent Working Agreement (Meeting Analyst App)
+# AGENTS.md — Agent Working Agreement (PMOVES-DoX)
 
 This file defines how agents should work within this repository. Its scope covers the entire `meeting-analyst-app/` directory tree.
 

@@ -1,10 +1,10 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 import os
 from pathlib import Path
 import shutil
-from typing import List
+from typing import List, Dict
 import uuid
 from dotenv import load_dotenv
 import time
@@ -13,6 +13,7 @@ from docx import Document
 import subprocess
 import tempfile
 import threading
+from pydantic import BaseModel
 
 from app.ingestion.pdf_processor import process_pdf
 from app.ingestion.csv_processor import process_csv
@@ -24,6 +25,8 @@ from app.database import ExtendedDatabase
 from app.qa_engine import QAEngine
 from app.extraction.langextract_adapter import run_langextract, write_visualization
 from app.chr_pipeline import run_chr, pca_plot
+from app.search import SearchIndex
+from app.export_poml import build_poml
 import yaml
 try:
     from watchgod import watch
@@ -44,7 +47,7 @@ hf_token = (
 if hf_token and not os.getenv("HUGGINGFACE_HUB_TOKEN"):
     os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
 
-app = FastAPI(title="Meeting Analyst API")
+app = FastAPI(title="PMOVES-DoX API")
 
 # CORS for frontend (env-driven)
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
@@ -65,6 +68,7 @@ ARTIFACTS_DIR.mkdir(exist_ok=True)
 
 db = ExtendedDatabase()
 qa_engine = QAEngine(db)
+search_index = SearchIndex(db)
 
 # Simple in-memory task registry
 TASKS: dict[str, dict] = {}
@@ -163,10 +167,14 @@ async def _startup_watch():
     # Start watcher thread
     t = threading.Thread(target=_watch_loop, daemon=True)
     t.start()
+    try:
+        search_index.rebuild()
+    except Exception:
+        pass
 
 @app.get("/")
 async def root():
-    return {"message": "Meeting Analyst API", "status": "running"}
+    return {"message": "PMOVES-DoX API", "status": "running"}
 
 @app.get("/config")
 async def config():
@@ -183,11 +191,24 @@ async def config():
                 pass
     except Exception:
         pass
+    # Detect Ollama availability
+    ollama = {"available": False, "base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")}
+    try:
+        import httpx  # type: ignore
+        base = ollama["base_url"].rstrip("/")
+        resp = httpx.get(f"{base}/api/tags", timeout=2.0)
+        if resp.status_code == 200:
+            ollama["available"] = True
+    except Exception:
+        pass
+    offline = bool(os.getenv("TRANSFORMERS_OFFLINE") or os.getenv("HF_HUB_OFFLINE"))
     return {
         "vlm_repo": os.getenv("DOCLING_VLM_REPO"),
         "hf_auth": bool(os.getenv("HUGGINGFACE_HUB_TOKEN")),
         "frontend_origin": frontend_origin,
         "gpu": gpu,
+        "ollama": ollama,
+        "offline": offline,
     }
 
 
@@ -282,10 +303,55 @@ async def get_logs(level: str | None = None, code: str | None = None, q: str | N
     return {"logs": items}
 
 
+@app.get("/logs/export")
+async def export_logs(level: str | None = None, code: str | None = None, q: str | None = None,
+                      ts_from: str | None = None, ts_to: str | None = None):
+    items = db.list_logs(level=level, code=code, q=q, ts_from=ts_from, ts_to=ts_to)
+    def gen():
+        yield "ts,level,code,component,message\n"
+        for l in items:
+            # naive CSV escaping
+            def esc(v: str | None) -> str:
+                if v is None:
+                    return ""
+                s = str(v).replace("\r", " ").replace("\n", " ")
+                if "," in s or '"' in s:
+                    s = '"' + s.replace('"', '""') + '"'
+                return s
+            row = ",".join([
+                esc(l.get("ts")), esc(l.get("level")), esc(l.get("code")), esc(l.get("component")), esc(l.get("message"))
+            ])
+            yield row + "\n"
+    return StreamingResponse(gen(), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=logs.csv"})
+
+
 @app.get("/apis")
 async def get_apis(tag: str | None = None, method: str | None = None, path_like: str | None = None):
     items = db.list_apis(tag=tag, method=method, path_like=path_like)
     return {"apis": items}
+
+
+@app.get("/apis/{api_id}")
+async def get_api_detail(api_id: str):
+    # fetch raw row from DB
+    from sqlmodel import Session
+    from app.database import APIEndpoint
+    with Session(db.engine) as s:  # type: ignore[attr-defined]
+        row = s.get(APIEndpoint, api_id)
+    if not row:
+        raise HTTPException(404, "API not found")
+    import json as _json
+    return {
+        "id": row.id,
+        "document_id": row.document_id,
+        "name": row.name,
+        "method": row.method,
+        "path": row.path,
+        "summary": row.summary,
+        "tags": _json.loads(row.tags_json) if row.tags_json else [],
+        "parameters": _json.loads(row.params_json) if row.params_json else [],
+        "responses": _json.loads(row.responses_json) if row.responses_json else {},
+    }
 
 
 @app.get("/tags")
@@ -300,6 +366,7 @@ class ExtractTagsRequest(BaseModel):
     api_key: str | None = None
     prompt: str | None = None
     examples: list[dict] | None = None
+    dry_run: bool = False
 
 
 def _compose_text_for_document(doc: Dict) -> str:
@@ -341,32 +408,94 @@ async def extract_tags(req: ExtractTagsRequest):
         "Extract application or system tags relevant to loan management systems (LMS). "
         "Return concise tags as exact spans from text. Examples: 'Loan Origination', 'Underwriting', 'Servicing', 'LoanService'."
     ))
-    result = run_langextract(
-        text=text,
-        prompt_description=preset_prompt,
-        examples=req.examples,
-        model_id=req.model_id,
-        api_key=req.api_key,
-        extraction_passes=1,
-        max_workers=4,
-        max_char_buffer=4000,
+    # If dry_run and no API key/model configured, use a heuristic fallback to avoid external calls during smoke.
+    use_fallback = (
+        req.dry_run and not (req.api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("LANGEXTRACT_API_KEY"))
     )
+    if use_fallback:
+        import re as _re
+        # simple heuristic: grab capitalized multi-word phrases up to 3
+        candidates = _re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-zA-Z]+){0,2})\b", text)
+        unique = []
+        for c in candidates:
+            c = c.strip()
+            if c not in unique:
+                unique.append(c)
+            if len(unique) >= 5:
+                break
+        result = {"entities": [{"extraction_text": t, "extraction_class": "heuristic"} for t in unique]}
+    else:
+        result = run_langextract(
+            text=text,
+            prompt_description=preset_prompt,
+            examples=req.examples,
+            model_id=req.model_id,
+            api_key=req.api_key,
+            extraction_passes=1,
+            max_workers=4,
+            max_char_buffer=4000,
+        )
 
     entities = result.get("entities", [])
     saved = 0
+    extracted: List[str] = []
     for e in entities:
         tag_text = e.get("extraction_text") or e.get("text")
         if not tag_text:
             continue
-        db.add_tag({
-            "id": str(uuid.uuid4()),
-            "document_id": req.document_id,
-            "tag": str(tag_text),
-            "score": None,
-            "source_ptr": e.get("extraction_class") or "langextract",
-        })
-        saved += 1
-    return {"status": "ok", "document_id": req.document_id, "tags_saved": saved}
+        tag_text = str(tag_text).strip()
+        extracted.append(tag_text)
+        if req.dry_run:
+            continue
+        if not db.has_tag(req.document_id, tag_text):
+            db.add_tag({
+                "id": str(uuid.uuid4()),
+                "document_id": req.document_id,
+                "tag": tag_text,
+                "score": None,
+                "source_ptr": e.get("extraction_class") or "langextract",
+            })
+            saved += 1
+    return {"status": "ok", "document_id": req.document_id, "tags_saved": saved, "tags": extracted}
+
+
+@app.get("/tags/presets")
+async def tag_presets():
+    default_prompt = os.getenv("TAGS_PROMPT", (
+        "Extract application or system tags relevant to loan management systems (LMS). "
+        "Return concise tags as exact spans from text. Examples: 'Loan Origination', 'Underwriting', 'Servicing', 'LoanService'."
+    ))
+    examples = [
+        {"text": "The LMS core supports Loan Origination and Loan Servicing.", "labels": ["Loan Origination", "Loan Servicing"]},
+        {"text": "Enable Underwriting via RulesEngine v2.", "labels": ["Underwriting", "RulesEngine"]},
+    ]
+    return {"prompt": default_prompt, "examples": examples}
+
+
+class TagPromptSaveRequest(BaseModel):
+    prompt_text: str
+    examples: list[dict] | None = None
+    author: str | None = None
+
+
+@app.get("/tags/prompt/{document_id}")
+async def get_tag_prompt(document_id: str):
+    item = db.get_latest_tag_prompt(document_id)
+    if not item:
+        return {"prompt": None}
+    return item
+
+
+@app.get("/tags/prompt/{document_id}/history")
+async def get_tag_prompt_history(document_id: str, limit: int = 20):
+    items = db.list_tag_prompt_history(document_id, limit=limit)
+    return {"items": items}
+
+
+@app.post("/tags/prompt/{document_id}")
+async def save_tag_prompt(document_id: str, req: TagPromptSaveRequest):
+    pid = db.save_tag_prompt(document_id, req.prompt_text, req.examples, req.author)
+    return {"status": "ok", "id": pid}
 
 
 @app.get("/watch")
@@ -445,6 +574,33 @@ async def extract_langextract(req: LangExtractRequest):
             "html": str(html_path),
         },
     }
+
+
+# ---------------- Vector Search ----------------
+class SearchRequest(BaseModel):
+    q: str
+    k: int = 10
+
+
+@app.post("/search")
+async def search(req: SearchRequest):
+    t0 = time.time()
+    hits = search_index.search(req.q, k=req.k)
+    elapsed_ms = int((time.time() - t0) * 1000)
+    return {
+        "took_ms": elapsed_ms,
+        "count": len(hits),
+        "results": [
+            {"score": h.score, "text": h.text, "meta": h.meta}
+            for h in hits
+        ],
+    }
+
+
+@app.post("/search/rebuild")
+async def search_rebuild():
+    info = search_index.rebuild()
+    return {"status": "ok", **info}
 
 
 # ---------------- Conversion: artifact -> txt/docx ----------------
@@ -910,6 +1066,49 @@ async def build_datavzrd_logs(req: DataVZRDLogsRequest):
     viz_yaml.write_text(yaml.safe_dump(cfg, sort_keys=False), encoding="utf-8")
     rel_viz = str(viz_yaml.relative_to(ARTIFACTS_DIR)) if viz_yaml.is_relative_to(ARTIFACTS_DIR) else None
     return {"status": "ok", "project_dir": str(proj_dir), "viz_yaml": str(viz_yaml), "rel_viz": rel_viz}
+
+
+# ---------------- POML export ----------------
+class ExportPOMLRequest(BaseModel):
+    document_id: str
+    title: str | None = None
+    variant: str | None = None  # generic|troubleshoot|catalog
+
+
+@app.post("/export/poml")
+async def export_poml(req: ExportPOMLRequest):
+    doc = next((d for d in db.list_documents() if d.get("id") == req.document_id), None)
+    if not doc:
+        raise HTTPException(404, "Document not found")
+    apis = db.list_apis(tag=None, method=None, path_like=None)
+    apis = [a for a in apis if a.get("document_id") == req.document_id]
+    tags = db.list_tags(document_id=req.document_id, q=None)
+    logs = db.list_logs(level=None, code=None, q=None, ts_from=None, ts_to=None)
+    logs = [l for l in logs if l.get("document_id") == req.document_id]
+    # Try to attach local resources
+    md_path = None
+    chr_csv = None
+    try:
+        src = Path(doc.get("path", ""))
+        stem = src.stem
+        # markdown if PDF processed
+        cand_md = ARTIFACTS_DIR / f"{stem}.md"
+        if cand_md.exists():
+            md_path = cand_md
+        # CHR CSV if exists
+        cand_chr = ARTIFACTS_DIR / "chr" / f"{stem}_chr.csv"
+        if cand_chr.exists():
+            chr_csv = cand_chr
+    except Exception:
+        pass
+    poml = build_poml({**doc, **({"title": req.title} if req.title else {})}, apis, tags, logs, md_path, chr_csv, (req.variant or "generic"))
+    out_dir = ARTIFACTS_DIR / "poml"
+    out_dir.mkdir(parents=True, exist_ok=True)
+    name = (Path(doc.get("path"," ")).stem or doc.get("id")) + ".poml"
+    path = out_dir / name
+    path.write_text(poml, encoding="utf-8")
+    rel = str(path.relative_to(ARTIFACTS_DIR))
+    return {"status": "ok", "rel": rel, "path": str(path)}
 
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
     try:

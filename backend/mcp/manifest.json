@@ -1,0 +1,44 @@
+{
+  "schema_version": "1.0",
+  "name_for_human": "PMOVES-DoX",
+  "name_for_model": "pmoves_dox",
+  "description_for_model": "Document ingestion, vector search, tag extraction, and POML export tools.",
+  "capabilities": {
+    "tools": {
+      "search": {
+        "description": "Vector search across PDFs, APIs, tags, and logs.",
+        "input_schema": {
+          "type": "object",
+          "properties": { "q": {"type":"string"}, "k": {"type":"integer","default":10} },
+          "required": ["q"]
+        },
+        "endpoint": { "method": "POST", "path": "/search" }
+      },
+      "extract_tags": {
+        "description": "Extract application tags from a document using LangExtract or Ollama.",
+        "input_schema": {
+          "type": "object",
+          "properties": {
+            "document_id": {"type":"string"},
+            "model_id": {"type":"string"},
+            "prompt": {"type":"string"},
+            "examples": {"type":"array"},
+            "dry_run": {"type":"boolean","default": false}
+          },
+          "required": ["document_id"]
+        },
+        "endpoint": { "method": "POST", "path": "/extract/tags" }
+      },
+      "export_poml": {
+        "description": "Export a POML prompt for a given document (includes APIs, tags, logs).",
+        "input_schema": {
+          "type": "object",
+          "properties": { "document_id": {"type":"string"}, "title": {"type":"string"} },
+          "required": ["document_id"]
+        },
+        "endpoint": { "method": "POST", "path": "/export/poml" }
+      }
+    }
+  }
+}
+

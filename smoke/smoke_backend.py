@@ -68,24 +68,24 @@ def main():
     except Exception as e:
         fail(f"/facts error: {e}")
 
-        # 4) structure/chr
-        try:
-            payload = {"artifact_id": artifact_id, "K": 6, "units_mode": "sentences"}
-            s = r.post(f"{API}/structure/chr", json=payload, timeout=60)
-            s.raise_for_status()
-            body = s.json()
-            rel_csv = body.get("artifacts", {}).get("rel_csv")
-            if not rel_csv:
-                fail("CHR missing rel_csv")
-            ok("/structure/chr")
-            # download
-            d = r.get(f"{API}/download", params={"rel": rel_csv}, timeout=30)
-            d.raise_for_status()
-            if len(d.content) == 0:
-                fail("downloaded CHR CSV empty")
-            ok("/download CHR CSV")
-        except Exception as e:
-            fail(f"/structure/chr error: {e}")
+    # 4) structure/chr
+    try:
+        payload = {"artifact_id": artifact_id, "K": 6, "units_mode": "sentences"}
+        s = r.post(f"{API}/structure/chr", json=payload, timeout=60)
+        s.raise_for_status()
+        body = s.json()
+        rel_csv = body.get("artifacts", {}).get("rel_csv")
+        if not rel_csv:
+            fail("CHR missing rel_csv")
+        ok("/structure/chr")
+        # download
+        d = r.get(f"{API}/download", params={"rel": rel_csv}, timeout=30)
+        d.raise_for_status()
+        if len(d.content) == 0:
+            fail("downloaded CHR CSV empty")
+        ok("/download CHR CSV")
+    except Exception as e:
+        fail(f"/structure/chr error: {e}")
 
     # 5) convert -> txt and download
     try:
@@ -148,6 +148,76 @@ def main():
       ok("/viz/datavzrd/logs")
     except Exception as e:
       fail(f"/viz/datavzrd/logs error: {e}")
+
+    # 10) export POML and download
+    try:
+      docs = r.get(f"{API}/documents", timeout=10)
+      docs.raise_for_status()
+      docs_list = docs.json().get("documents", [])
+      if not docs_list:
+          fail("no documents to export poml")
+      did = docs_list[0]["id"]
+      e = r.post(f"{API}/export/poml", json={"document_id": did, "variant": "catalog"}, timeout=30)
+      e.raise_for_status()
+      rel = e.json().get("rel")
+      if not rel:
+          fail("poml export missing rel")
+      d = r.get(f"{API}/download", params={"rel": rel}, timeout=30)
+      d.raise_for_status()
+      text = d.text
+      if "<poml" not in text or "<output-schema" not in text:
+          fail("downloaded POML missing core tags")
+      ok("/export/poml and download")
+    except Exception as e:
+      fail(f"export/poml error: {e}")
+
+    # 11) search rebuild + query
+    try:
+        sr = r.post(f"{API}/search/rebuild", timeout=30)
+        sr.raise_for_status()
+        sq = r.post(f"{API}/search", json={"q": "loan", "k": 5}, timeout=10)
+        sq.raise_for_status()
+        ok("/search rebuild + query")
+    except Exception as e:
+        fail(f"search error: {e}")
+
+    # 12) logs export CSV
+    try:
+        le = r.get(f"{API}/logs/export?level=ERROR", timeout=10)
+        le.raise_for_status()
+        if not le.text.startswith("ts,level,code,component,message"):
+            fail("logs/export missing header")
+        ok("/logs/export")
+    except Exception as e:
+        fail(f"logs/export error: {e}")
+
+    # 13) API detail modal endpoint
+    try:
+        apis = r.get(f"{API}/apis", timeout=10)
+        apis.raise_for_status()
+        items = apis.json().get("apis", [])
+        if items:
+            aid = items[0]["id"]
+            ad = r.get(f"{API}/apis/{aid}", timeout=10)
+            ad.raise_for_status()
+        ok("/apis/{id} detail")
+    except Exception as e:
+        fail(f"api detail error: {e}")
+
+    # 14) Tag presets + dry-run
+    try:
+        presets = r.get(f"{API}/tags/presets", timeout=10)
+        presets.raise_for_status()
+        docs = r.get(f"{API}/documents", timeout=10)
+        docs.raise_for_status()
+        docs_list = docs.json().get("documents", [])
+        if docs_list:
+            did = docs_list[0]["id"]
+            dr = r.post(f"{API}/extract/tags", json={"document_id": did, "dry_run": True}, timeout=60)
+            dr.raise_for_status()
+        ok("/tags presets + dry-run extract")
+    except Exception as e:
+        fail(f"tags/presets or extract error: {e}")
 
     ok("Smoke tests passed.")
     sys.exit(0)

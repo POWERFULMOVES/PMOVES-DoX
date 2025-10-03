@@ -2,6 +2,8 @@
 
 import { useState } from 'react';
 import axios from 'axios';
+import { useToast } from '@/components/Toast';
+import { getApiBase } from '@/lib/config';
 
 interface FileUploadProps {
   onUploadComplete: () => void;
@@ -13,7 +15,8 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [asyncPdf, setAsyncPdf] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<any[]>([]);
-  const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+  const API = getApiBase();
+  const { push } = useToast();
 
   const pollTasks = async (taskIds: string[]) => {
     const remaining = new Set(taskIds);
@@ -65,7 +68,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
       setFiles(null);
     } catch (error) {
       console.error('Upload failed:', error);
-      alert('Upload failed. See console for details.');
+      push('Upload failed. See console for details.', 'error');
     } finally {
       setUploading(false);
     }
@@ -85,7 +88,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
       }
     } catch (e) {
       console.error(e);
-      alert('Failed to load samples.');
+      push('Failed to load samples.', 'error');
     } finally {
       setUploading(false);
     }
@@ -167,4 +170,3 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
     </div>
   );
 }
-
