@@ -52,7 +52,8 @@ export default function HeaderBar() {
 
   const rebuild = async () => {
     try {
-      const r = await fetch(`${API}/search/rebuild`, { method: 'POST' });
+      const base = getApiBase().replace(/\/$/, '');
+      const r = await fetch(`${base}/search/rebuild`, { method: 'POST' });
       const data = await r.json().catch(()=>({}));
       if (r.ok) {
         push(`Search index rebuilt (${data.items ?? 'n/a'} items).`, 'success');
