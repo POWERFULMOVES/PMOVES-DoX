@@ -104,7 +104,7 @@ export default function TagsPanel() {
       const res = await fetch(`${API}/extract/tags`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (res.ok) { const data = await res.json(); const list = (data?.tags || []).join(', '); const base = list ? `Preview: ${list}` : 'No tags found'; const hasSteps = (data?.hrm?.steps!=null); if (hasSteps) { const n=Number(data.hrm.steps); setLastHrmSteps(n); try{ localStorage.setItem('lms_hrm_last_steps', String(n)); }catch{} } const msg = hasSteps ? `${base} (HRM steps: ${data.hrm.steps})` : base; push(msg, list ? 'info' : 'error'); } else { push('Preview failed', 'error'); }
     } catch { push('Preview error', 'error'); }
-    } finally {
+    finally {
       setDryRunLoading(false);
     }
   };
