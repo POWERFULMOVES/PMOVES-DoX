@@ -20,6 +20,7 @@ jobs:
         env:
           AUTO_MIGRATE: 'true'
           HRM_ENABLED: 'true'
+          OPEN_PDF_ENABLED: 'true'
         run: |
           docker compose -f docker-compose.cpu.yml build backend
       - name: Run backend
@@ -27,6 +28,7 @@ jobs:
         env:
           AUTO_MIGRATE: 'true'
           HRM_ENABLED: 'true'
+          OPEN_PDF_ENABLED: 'true'
         run: |
           docker compose -f docker-compose.cpu.yml up -d backend
       - name: Wait for health
@@ -69,6 +71,7 @@ jobs:
           API_BASE: http://localhost:8000
           AUTO_MIGRATE: 'true'
           HRM_ENABLED: 'true'
+          OPEN_PDF_ENABLED: 'true'
         run: |
           python smoke/run_smoke_docker.py
 
@@ -86,5 +89,6 @@ jobs:
         env:
           AUTO_MIGRATE: 'true'
           HRM_ENABLED: 'true'
+          OPEN_PDF_ENABLED: 'true'
         run: |
           node tools/run-ui-smoke.js cpu
