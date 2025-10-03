@@ -1,5 +1,5 @@
 # syntax=docker/dockerfile:1
-FROM rust:1-bookworm AS build
+FROM rust:1.82-bookworm AS build
 
 RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates python3 && rm -rf /var/lib/apt/lists/*
 
@@ -15,4 +15,3 @@ RUN chmod +x /usr/local/bin/entrypoint.sh
 EXPOSE 5173
 ENV VIZ_FILE=""
 CMD ["/usr/local/bin/entrypoint.sh"]
-

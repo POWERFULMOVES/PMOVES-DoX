@@ -1,5 +1,7 @@
-FROM rust:1-bookworm AS build
-RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates && rm -rf /var/lib/apt/lists/*
+FROM rust:1.82-bookworm AS build
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git build-essential pkg-config libssl-dev ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 # schemavzrd is not published on crates.io; install from GitHub
 RUN cargo install --git https://github.com/datavzrd/schemavzrd --locked --bin schemavzrd
 
