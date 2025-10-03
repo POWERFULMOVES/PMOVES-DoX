@@ -56,7 +56,12 @@ export default function GlobalSearch() {
           {hits.map((h, i) => (
             <div key={i} className="px-3 py-2 border-b last:border-b-0 hover:bg-gray-50 cursor-pointer" onClick={()=>{ try { window.dispatchEvent(new CustomEvent('global-deeplink', { detail: h?.meta?.deeplink || {} })); } catch {}; setOpen(false); }}>
               <div className="text-xs text-gray-500 flex justify-between">
-                <span>{(h.meta?.type || 'text').toUpperCase()}</span>
+                <span>
+                  {(h.meta?.type || 'text').toUpperCase()}
+                  {h?.meta?.type === 'pdf' && (h?.meta?.page || h?.meta?.page === 0) ? (
+                    <span className="ml-1 text-[10px] text-gray-600">p. {h.meta.page}</span>
+                  ) : null}
+                </span>
                 <span>{h.score.toFixed(3)}</span>
               </div>
               <div className="text-sm line-clamp-3 whitespace-pre-wrap">{h.text}</div>
