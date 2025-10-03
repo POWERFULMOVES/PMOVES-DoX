@@ -221,8 +221,8 @@ def main():
             tg = r.get(f"{API}/tags?document_id={did}", timeout=10)
             tg.raise_for_status()
             tlist = tg.json().get("tags", [])
-            # at least don't crash; hrm_steps may or may not exist depending on backend env
-    ok("/tags presets + dry-run extract")
+            _ = tlist  # no strict assertion; presence is enough
+        ok("/tags presets + dry-run extract")
     except Exception as e:
         fail(f"tags/presets or extract error: {e}")
 
