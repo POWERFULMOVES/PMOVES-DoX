@@ -1,9 +1,17 @@
 # syntax=docker/dockerfile:1
-FROM rust:1.82-bookworm AS build
+FROM rust:1.84-bookworm AS build
 
-RUN apt-get update && apt-get install -y --no-install-recommends pkg-config libssl-dev ca-certificates python3 && rm -rf /var/lib/apt/lists/*
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    git build-essential pkg-config libssl-dev ca-certificates \
+    python3 python3-dev python3.11 python3.11-dev \
+    nodejs npm \
+    && rm -rf /var/lib/apt/lists/*
 
-RUN cargo install datavzrd --locked || cargo install datavzrd
+# datavzrd's build.rs invokes a web build using pnpm; install it
+RUN npm install -g pnpm@9
+
+# Arrow 56.x used by datavzrd requires rustc >= 1.84
+RUN cargo install datavzrd --locked
 
 FROM debian:bookworm-slim
 RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates python3 && rm -rf /var/lib/apt/lists/*

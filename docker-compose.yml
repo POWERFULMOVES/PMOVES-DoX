@@ -1,11 +1,9 @@
 services:
   ollama:
     image: ollama/ollama:latest
-    container_name: ollama
+    profiles: ["ollama"]
     volumes:
       - ollama:/root/.ollama
-    ports:
-      - "11434:11434"
     deploy:
       resources:
         reservations:
@@ -76,6 +74,7 @@ services:
       context: ./tools/datavzrd
       dockerfile: Dockerfile
     container_name: datavzrd
+    profiles: ["tools"]
     environment:
       - VIZ_FILE=
     volumes:
@@ -91,6 +90,7 @@ services:
       context: ./tools/schemavzrd
       dockerfile: Dockerfile
     container_name: schemavzrd
+    profiles: ["tools"]
     environment:
       - DB_URL=${DB_URL:-}
       - OUTPUT_DIR=/app/out/schema

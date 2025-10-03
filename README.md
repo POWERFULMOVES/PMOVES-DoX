@@ -4,14 +4,29 @@ The ultimate document structured data extraction and analysis tool. Extract, ana
 
 ## Quick Start
 
-Option A - Docker (CPU)
+Option A - Docker (CPU, default)
 
 ```bash
 cd PMOVES_DoX
-docker compose -f docker-compose.cpu.yml up --build
+cp .env.example .env  # first time only
+docker compose -f docker-compose.cpu.yml up --build -d
 ```
 
-Option B — Local dev
+Option B — GPU + Tools (internal Ollama, no host port conflicts)
+
+```bash
+cd PMOVES_DoX
+cp .env.example .env  # first time only
+# Start full stack with GPU backend + internal Ollama + tools (datavzrd/schemavzrd)
+docker compose --compatibility --profile ollama --profile tools up --build -d
+```
+
+Notes
+- Internal Ollama is reachable on the compose network at `http://ollama:11434` and does not bind a host port.
+- Backend already points to `OLLAMA_BASE_URL=http://ollama:11434` by default (.env).
+- To use a global host Ollama instead, copy `docker-compose.override.yml.example` to `docker-compose.override.yml` and start without the `ollama` profile.
+
+Option C — Local dev
 
 1) Backend
 ```bash
@@ -175,7 +190,7 @@ $env:DOCLING_VLM_REPO = 'ibm-granite/granite-docling-258M'
 
 ```
 cd PMOVES_DoX
-docker compose --compatibility up --build
+docker compose --compatibility --profile ollama --profile tools up --build -d
 ```
 
 This uses `backend/Dockerfile.gpu` based on `pytorch/pytorch:2.3.1-cuda12.1-cudnn8-runtime` and requests a GPU from Docker Desktop.
@@ -288,7 +303,7 @@ One-command smoke via npm (uses Python + Docker Compose under the hood):
 ```bash
 cd PMOVES_DoX
 npm run smoke         # CPU compose (default)
-npm run smoke:gpu     # GPU compose
+npm run smoke:gpu     # GPU compose (internal Ollama)
 ```
 
 UI smoke with Playwright (brings up frontend + backend, runs headless tests):

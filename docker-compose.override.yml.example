@@ -1,0 +1,11 @@
+services:
+  # Point backend at a host-level Ollama instead of the internal service
+  backend:
+    environment:
+      OLLAMA_BASE_URL: http://host.docker.internal:11434
+
+# Usage:
+# 1) Copy this file to docker-compose.override.yml
+# 2) Ensure a global Ollama is running on port 11434 on the host
+# 3) Start the stack WITHOUT the internal ollama profile:
+#    docker compose --compatibility --profile tools up -d
