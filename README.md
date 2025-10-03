@@ -43,6 +43,7 @@ Local-first models
 
 - Multi‑format ingestion: PDF (Docling), CSV/XLSX, XML logs, OpenAPI/Postman
 - Vector search (FAISS or NumPy fallback) with a global UI search bar
+- PDF page awareness: Global Search displays page numbers for PDF hits; optional "Open PDF at page" links when enabled
 - Logs view with time/level/code filters and CSV export
 - APIs catalog with detail modal (params/responses) and copy-cURL
 - Tag extraction via LangExtract with LMS presets, dry‑run, and governance (save/history/restore)
@@ -496,3 +497,12 @@ window.dispatchEvent(new CustomEvent('global-deeplink', {
 - During PDF ingestion, the backend writes `artifacts/<stem>.text_units.json` containing an array of `{ text, page }` extracted from Docling's text items.
 - The search index prefers this file to build PDF chunks with page numbers. If missing, it falls back to splitting the Markdown.
 - To regenerate: delete the existing `artifacts/<stem>.text_units.json` and re-run ingestion for that PDF.
+
+### Enable "Open PDF at page" links
+- Set `OPEN_PDF_ENABLED=true` in the backend environment (compose already passes this in CI). When enabled, the UI shows a button to open the source PDF at the reported page for a search hit.
+- Local (PowerShell):
+  - `$env:OPEN_PDF_ENABLED = 'true'`
+  - `docker compose -f docker-compose.cpu.yml up --build`
+- Notes:
+  - Endpoint: `GET /open/pdf?artifact_id=<ID>&page=<N>` (served by the backend; simple file responder for now).
+  - Security: this serves files from the artifacts directory only; consider a dedicated viewer for finer control later.

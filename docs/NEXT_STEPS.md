@@ -14,6 +14,11 @@
 - Header with health + rebuild; Settings modal (API base, author, VLM) shipped
 - Backend and UI smoke tests wired; backend smoke passing
 
+### Recent Updates (2025-10-03)
+- Global Search now shows a page indicator for PDF hits (e.g., “PDF p. 7”).
+- CI workflows set `OPEN_PDF_ENABLED=true` across CPU/GPU/UI jobs so smoke tests can validate PDF open links.
+- Minor UI polish: added the small page badge next to the result type label.
+
 ## Priorities (Weeks 3–4)
 - P0
   - DONE: FAISS vector search + `/search` + Global search bar (header)
@@ -24,6 +29,7 @@
   - XML XPath mapping for LMS logs; enrich OpenAPI components/security
   - CHR parameter UI in UI; DB indexes for logs/apis/tags; Alembic auto‑run (guarded)
   - CI: GitHub Actions for smoke (backend + UI) on PRs/merge to main
+  - PDF deep-links: ensure per-sentence page mapping in CHR when `units_mode='sentences'` (fallback to nearest preceding unit page)
 - P2
   - datavzrd theme/pinned dashboards; nightly GPU smoke; Copilot actions
 
@@ -68,6 +74,7 @@
 - Manual spot checks:
   - Upload PDF/XML/OpenAPI under `samples/`, verify tags, search hits, API modal
   - Rebuild index from header and assert search latency in browser DevTools
+  - In Global Search, verify PDF results display a page label; if `OPEN_PDF_ENABLED=true`, “Open PDF at page” should download or open the file.
 
 ## Compact
 - Stabilize deploy + health/migrate; better .envs
@@ -104,6 +111,12 @@
 - DB indices (apis.path, apis.method, logs.level/code/ts, tags.tag) - owner: __, due: 2025-10-09
 - CHR panel controls (K, units mode, include tables) - owner: __, due: 2025-10-09
 - CI: add GH Actions workflow (smoke + ui-smoke) - owner: __, due: 2025-10-08
+  - Ensure `OPEN_PDF_ENABLED` present (DONE)
+
+- Tests
+  - /search filters + deeplink construction edge cases (invalid/empty type lists) - owner: __, due: 2025-10-06
+  - PDF page mapping fallbacks (missing or mismatched `text_units.json`) - owner: __, due: 2025-10-06
+  - `/open/pdf` toggle + error paths (disabled, missing artifact, non-PDF) - owner: __, due: 2025-10-07
 
 - HRM sidecar experiment wired to backend `/experiments/hrm/*` - owner: __, due: 2025-10-09
 - Add HRM toggle + params to Settings modal - owner: __, due: 2025-10-10
