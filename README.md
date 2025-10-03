@@ -1,4 +1,4 @@
-# PMOVES-DoX
+# PMOVES_DoX
 
 The ultimate document structured data extraction and analysis tool. Extract, analyze, transform, and visualize data from PDFs, XML logs, CSV/XLSX, and OpenAPI/Postman collections. Local‑first with Hugging Face + Ollama; ships as standalone, Docker, and MS Teams Copilot/MCP‑friendly.
 
@@ -261,7 +261,7 @@ API_BASE=http://localhost:8000 python smoke/smoke_backend.py
 
 ## MCP Usage (starter)
 
-An MCP manifest is provided for PMOVES-DoX tools (search, extract_tags, export_poml):
+An MCP manifest is provided for PMOVES_DoX tools (search, extract_tags, export_poml):
 
 - Path: `backend/mcp/manifest.json`
 - Tools:

@@ -47,7 +47,7 @@ hf_token = (
 if hf_token and not os.getenv("HUGGINGFACE_HUB_TOKEN"):
     os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
 
-app = FastAPI(title="PMOVES-DoX API")
+app = FastAPI(title="PMOVES_DoX API")
 
 # CORS for frontend (env-driven)
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
@@ -174,7 +174,7 @@ async def _startup_watch():
 
 @app.get("/")
 async def root():
-    return {"message": "PMOVES-DoX API", "status": "running"}
+    return {"message": "PMOVES_DoX API", "status": "running"}
 
 @app.get("/config")
 async def config():

@@ -48,7 +48,7 @@ export default function HeaderBar() {
   return (
     <div className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b">
       <div className="max-w-7xl mx-auto flex items-center gap-3 p-3">
-        <div className="font-semibold text-lg">PMOVES-DoX</div>
+        <div className="font-semibold text-lg">PMOVES_DoX</div>
         <div className="flex-1"><GlobalSearch /></div>
         <button onClick={rebuild} className="border rounded px-3 py-2 bg-white hover:bg-gray-50 text-gray-700" title="Rebuild vector index">Rebuild Index</button>
         <div
