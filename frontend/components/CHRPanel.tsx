@@ -1,6 +1,6 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useEffect, useState, useRef } from 'react';
 
 export default function CHRPanel() {
   const [artifactId, setArtifactId] = useState('');
@@ -13,6 +13,13 @@ export default function CHRPanel() {
   const [convertRel, setConvertRel] = useState<string | null>(null);
   const [vizBusy, setVizBusy] = useState(false);
   const [vizRel, setVizRel] = useState<string | null>(null);
+  const [highlightIdx, setHighlightIdx] = useState<number | null>(null);
+  const highlightRef = useRef<HTMLTableRowElement | null>(null);
+  const [pageNum, setPageNum] = useState<number | null>(null);
+  // HRM demo
+  const [hrmDigits, setHrmDigits] = useState('93241');
+  const [hrmTrace, setHrmTrace] = useState<string[] | null>(null);
+  const [hrmSteps, setHrmSteps] = useState<number | null>(null);
   const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
   useEffect(() => {
@@ -87,9 +94,50 @@ export default function CHRPanel() {
     }
   };
 
+  const runHRMDemo = async () => {
+    setHrmTrace(null); setHrmSteps(null);
+    try {
+      const res = await fetch(`${API}/experiments/hrm/sort_digits`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ seq: hrmDigits }) });
+      if (!res.ok) throw new Error('hrm demo failed');
+      const data = await res.json();
+      setHrmTrace(Array.isArray(data.trace) ? data.trace : []);
+      setHrmSteps(typeof data.steps === 'number' ? data.steps : null);
+    } catch {
+      alert('HRM demo failed.');
+    }
+  };
+
+  // Handle deep links to workspace/pdf chunk: { panel:'workspace', artifact_id, chunk? }
+  useEffect(() => {
+    function onDeeplink(ev: any){
+      const dl = ev?.detail || {};
+      if (String(dl.panel||'').toLowerCase() !== 'workspace') return;
+      if (dl.artifact_id) {
+        setArtifactId(String(dl.artifact_id));
+        if (typeof dl.chunk === 'number') setHighlightIdx(Number(dl.chunk));
+        if (typeof dl.page === 'number') setPageNum(Number(dl.page));
+        setTimeout(runCHR, 0);
+      }
+    }
+    if (typeof window !== 'undefined') window.addEventListener('global-deeplink' as any, onDeeplink as any);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('global-deeplink' as any, onDeeplink as any); };
+  }, []);
+
+  // Scroll to highlighted row when available
+  useEffect(() => {
+    if (highlightRef.current) {
+      try { highlightRef.current.scrollIntoView({ behavior: 'smooth', block: 'center' }); } catch {}
+    }
+  }, [highlightIdx, result]);
+
   return (
     <div className="bg-white p-6 rounded-lg shadow">
-      <h2 className="text-2xl font-bold mb-4">Structure (CHR)</h2>
+      <h2 className="text-2xl font-bold mb-2">Structure (CHR)</h2>
+      {artifactId && pageNum!=null && (
+        <div className="mb-2 text-xs">
+          <a className="text-blue-700 underline" href={`${API}/open/pdf?artifact_id=${encodeURIComponent(artifactId)}#page=${pageNum}`} target="_blank">Open PDF at page</a>
+        </div>
+      )}
       <div className="space-y-4">
         <div>
           <label className="block text-sm font-medium mb-2">Artifact ID</label>
@@ -134,6 +182,12 @@ export default function CHRPanel() {
             <div className="font-semibold">MHEP: {result.mhep?.toFixed?.(1) ?? result.mhep}</div>
             <div>Hg: {result.Hg?.toFixed?.(4) ?? result.Hg} | Hs: {result.Hs?.toFixed?.(4) ?? result.Hs}</div>
             <div>K: {result.K}</div>
+            {pageNum!=null && (<div className="mt-1 text-xs text-gray-700">Approx. page: {pageNum}</div>)}
+            {artifactId && pageNum!=null && (
+              <div className="mt-1 text-xs">
+                <a className="text-blue-700 underline" href={`${API}/open/pdf?artifact_id=${encodeURIComponent(artifactId)}#page=${pageNum}`} target="_blank">Open PDF at page</a>
+              </div>
+            )}
           </div>
           {result.artifacts?.rel_plot && (
             <div>
@@ -155,7 +209,12 @@ export default function CHRPanel() {
                   </thead>
                   <tbody>
                     {result.preview_rows.map((r: any, i: number) => (
-                      <tr key={i} className="border-t">
+                      <tr
+                        key={i}
+                        data-idx={r.idx}
+                        ref={(el) => { if (el && highlightIdx!=null && r.idx===highlightIdx) highlightRef.current = el; }}
+                        className={`border-t ${highlightIdx!=null && r.idx===highlightIdx ? 'bg-yellow-50' : ''}`}
+                      >
                         <td className="px-2 py-1">{r.idx}</td>
                         <td className="px-2 py-1">{r.constellation}</td>
                         <td className="px-2 py-1">{typeof r.radius === 'number' ? r.radius.toFixed(3) : r.radius}</td>
@@ -217,6 +276,22 @@ export default function CHRPanel() {
           )}
         </div>
         <p className="text-xs text-gray-600">Use datavzrd CLI to serve: <code>datavzrd serve artifacts/datavzrd/&lt;stem&gt;/viz.yaml</code></p>
+      </div>
+
+      <div className="mt-6">
+        <h3 className="text-lg font-semibold mb-2">HRM Demo (toy)</h3>
+        <div className="flex items-center gap-2 mb-2">
+          <input className="border rounded px-2 py-1" value={hrmDigits} onChange={e=>setHrmDigits(e.target.value)} placeholder="digits e.g. 93241" />
+          <button onClick={runHRMDemo} className="bg-purple-600 text-white px-3 py-1 rounded">Run</button>
+          {hrmSteps!=null && (<span className="text-xs text-gray-600">steps: {hrmSteps}</span>)}
+        </div>
+        {hrmTrace && (
+          <div className="text-xs bg-purple-50 border rounded p-2">
+            {hrmTrace.map((t,i)=> (
+              <div key={i} className="font-mono">{i===0? 'in ' : (i===hrmTrace.length-1? 'out' : `s${i}`)}: {t}</div>
+            ))}
+          </div>
+        )}
       </div>
     </div>
   );

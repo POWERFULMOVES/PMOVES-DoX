@@ -3,12 +3,19 @@ services:
     build:
       context: ./backend
       dockerfile: Dockerfile
-    container_name: meeting-analyst-backend-cpu
+    container_name: pmoves-dox-backend-cpu
     environment:
       - FRONTEND_ORIGIN=http://localhost:3000
       - PORT=8000
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
       - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
+      - AUTO_MIGRATE=${AUTO_MIGRATE:-false}
+      - HRM_ENABLED=${HRM_ENABLED:-false}
+      - HRM_MMAX=${HRM_MMAX:-6}
+      - HRM_MMIN=${HRM_MMIN:-2}
+      - XML_XPATH_MAP=${XML_XPATH_MAP:-}
+      - XML_XPATH_MAP_FILE=${XML_XPATH_MAP_FILE:-}
+      - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-false}
     ports:
       - "8000:8000"
     volumes:
@@ -27,7 +34,7 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: meeting-analyst-frontend
+    container_name: pmoves-dox-frontend
     environment:
       - NEXT_PUBLIC_API_BASE=http://localhost:8000
       - PORT=3000
@@ -40,7 +47,7 @@ services:
 
 networks:
   default:
-    name: meeting-analyst-net
+    name: pmoves-dox-net
 
 volumes:
   hf-cache:

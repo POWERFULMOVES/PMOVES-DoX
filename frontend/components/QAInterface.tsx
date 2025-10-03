@@ -2,20 +2,30 @@
 
 import { useState } from 'react';
 import axios from 'axios';
+import { getApiBase, getHRMEnabled, getHRMMmax, getHRMMmin } from '@/lib/config';
 
 export default function QAInterface() {
   const [question, setQuestion] = useState('');
   const [answer, setAnswer] = useState<any>(null);
   const [loading, setLoading] = useState(false);
+  const [hrmOn, setHrmOn] = useState(false);
+  const [hrmMmax, setHrmMmax] = useState<number>(6);
+  const [hrmMmin, setHrmMmin] = useState<number>(2);
+
+  // initialize HRM view-only params
+  useEffect(()=>{
+    try { setHrmOn(getHRMEnabled()); setHrmMmax(getHRMMmax()); setHrmMmin(getHRMMmin()); } catch {}
+  }, []);
 
   const handleAsk = async () => {
     if (!question.trim()) return;
 
     setLoading(true);
     try {
-      const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+      const API = getApiBase();
+      const useHrm = getHRMEnabled();
       const response = await axios.post(
-        `${API}/ask?question=${encodeURIComponent(question)}`
+        `${API}/ask?question=${encodeURIComponent(question)}&use_hrm=${useHrm ? 'true' : 'false'}`
       );
       setAnswer(response.data);
     } catch (error) {
@@ -40,13 +50,15 @@ export default function QAInterface() {
             onKeyPress={(e) => e.key === 'Enter' && handleAsk()}
             className="w-full px-4 py-2 border rounded"
           />
-        </div>
-        
-        <button
-          onClick={handleAsk}
-          disabled={loading || !question.trim()}
-          className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 disabled:bg-gray-300"
-        >
+      </div>
+        {hrmOn && (
+          <div className="text-[10px] text-gray-600 -mt-2 mb-1">HRM: Mmax {hrmMmax}, Mmin {hrmMmin}</div>
+        )}
+      <button
+        onClick={handleAsk}
+        disabled={loading || !question.trim()}
+        className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 disabled:bg-gray-300"
+      >
           {loading ? 'Thinking...' : 'Ask'}
         </button>
       </div>
@@ -54,7 +66,9 @@ export default function QAInterface() {
       {answer && (
         <div className="mt-6 space-y-4">
           <div className="bg-blue-50 p-4 rounded">
-            <h3 className="font-semibold mb-2">Answer:</h3>
+            <h3 className="font-semibold mb-2 flex items-center gap-2">Answer: {answer?.hrm?.enabled && (typeof answer?.hrm?.steps === 'number') && (
+              <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200" title="HRM refinement steps">HRM {answer.hrm.steps}</span>
+            )}</h3>
             <pre className="whitespace-pre-wrap text-sm">{answer.answer}</pre>
           </div>
           

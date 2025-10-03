@@ -2,15 +2,60 @@
 
 The ultimate document structured data extraction and analysis tool. Extract, analyze, transform, and visualize data from PDFs, XML logs, CSV/XLSX, and OpenAPI/Postman collections. Local‑first with Hugging Face + Ollama; ships as standalone, Docker, and MS Teams Copilot/MCP‑friendly.
 
+## Quick Start
+
+Option A - Docker (CPU)
+
+```bash
+cd PMOVES_DoX
+docker compose -f docker-compose.cpu.yml up --build
+```
+
+Option B — Local dev
+
+1) Backend
+```bash
+cd PMOVES_DoX/backend
+python -m venv venv && . venv/bin/activate  # Windows: .\venv\Scripts\Activate.ps1
+pip install -r requirements.txt
+uvicorn app.main:app --host 0.0.0.0 --port 8000
+```
+
+2) Frontend
+```bash
+cd PMOVES_DoX/frontend
+npm i
+npm run dev
+```
+
+Then:
+- Visit http://localhost:3000
+- Settings → confirm API Base = http://localhost:8000
+- Upload sample CSV/PDF or click “Load Samples”
+- Try Global Search; explore Logs/APIs/Tags
+- Tags → Load LMS Preset → Preview/Extract → Export POML (pick variant)
+
+Local-first models
+- Ollama (optional): docker compose up ollama (GPU compose) and toggle “Use Ollama” in Tags.
+- Offline HF: set TRANSFORMERS_OFFLINE/HF_HUB_OFFLINE to prefer cached models.
+
 ## Features
 
 - Multi‑format ingestion: PDF (Docling), CSV/XLSX, XML logs, OpenAPI/Postman
 - Vector search (FAISS or NumPy fallback) with a global UI search bar
 - Logs view with time/level/code filters and CSV export
-- APIs catalog with detail modal (params/responses) and copy‑cURL
+- APIs catalog with detail modal (params/responses) and copy-cURL
 - Tag extraction via LangExtract with LMS presets, dry‑run, and governance (save/history/restore)
 - CHR structuring + datavzrd dashboards (overview + details)
 - Q&A with citations over extracted facts
+
+OpenAPI/XML enrichments
+- OpenAPI: path-level parameters are merged into each operation; effective security is normalized and surfaced under `responses.x_security.schemes`.
+- XML logs: optional XPath mapping lets you map arbitrary XML shapes to {ts, level, code, component, message}. Configure via `XML_XPATH_MAP` or `XML_XPATH_MAP_FILE`.
+   - Sample mapping: `docs/samples/xpath_lms.yaml`
+   - Example (PowerShell):
+     - `$env:XML_XPATH_MAP_FILE = "${PWD}\docs\samples\xpath_lms.yaml"`
+     - `docker compose -f docker-compose.cpu.yml up --build`
 
 ## Technology Stack
 
@@ -34,7 +79,7 @@ The ultimate document structured data extraction and analysis tool. Extract, ana
 
 ```powershell
 # Navigate to backend directory
-cd meeting-analyst-app/backend
+cd PMOVES_DoX/backend
 
 # Copy env template (optional)
 copy .env.example .env
@@ -63,7 +108,7 @@ Backend will run on `http://localhost:8000`
 
 ```powershell
 # Navigate to frontend directory
-cd meeting-analyst-app/frontend
+cd PMOVES_DoX/frontend
 
 # Copy env template (optional)
 copy .env.local.example .env.local
@@ -82,7 +127,7 @@ Frontend will run on `http://localhost:3000`
 Prereqs: Docker Desktop installed and running.
 
 ```powershell
-cd meeting-analyst-app
+cd PMOVES_DoX
 # Optional (recommended on Docker Desktop):
 docker compose --compatibility up --build
 ```
@@ -93,7 +138,7 @@ docker compose --compatibility up --build
  - schemavzrd schema docs (if DB_URL is set): http://localhost:5174
 
 Data folders `backend/uploads` and `backend/artifacts` are volume-mounted.
-There is also a watch folder: `meeting-analyst-app/watch` mounted to `/app/watch` in the backend.
+There is also a watch folder: `PMOVES_DoX/watch` mounted to `/app/watch` in the backend.
 
 PDF OCR support in container: the backend image installs `poppler-utils`, `tesseract-ocr`, and `tesseract-ocr-eng` to support Docling’s PDF parsing and OCR.
 
@@ -128,7 +173,7 @@ $env:DOCLING_VLM_REPO = 'ibm-granite/granite-docling-258M'
 2) Start (GPU is default in docker-compose.yml):
 
 ```
-cd meeting-analyst-app
+cd PMOVES_DoX
 docker compose --compatibility up --build
 ```
 
@@ -146,12 +191,12 @@ Troubleshooting:
 4. **View Citations**: See exactly where each fact came from with page numbers and coordinates
 
 ### Sample files
-- CSV: `meeting-analyst-app/samples/sample.csv`
-- PDF: `meeting-analyst-app/samples/sample.pdf` (downloaded by `setup.ps1`; or use any PDF you have)
+- CSV: `PMOVES_DoX/samples/sample.csv`
+- PDF: `PMOVES_DoX/samples/sample.pdf` (downloaded by `setup.ps1`; or use any PDF you have)
 
 ### Watch Folder
 
-Drop `.pdf`, `.csv`, `.xlsx`, or `.xls` files into `meeting-analyst-app/watch` and the backend will auto‑ingest them. Behavior is controlled by env vars (see `backend/.env.example`):
+Drop `.pdf`, `.csv`, `.xlsx`, or `.xls` files into `PMOVES_DoX/watch` and the backend will auto-ingest them. Behavior is controlled by env vars (see `backend/.env.example`):
 
 - `WATCH_ENABLED` (default `true`)
 - `WATCH_DIR` (default `/app/watch` in the container)
@@ -165,9 +210,10 @@ Watcher status: `GET /watch`
 - `POST /upload` - Upload and process documents
 - `GET /facts` - Retrieve all extracted facts
 - `GET /evidence/{id}` - Get specific evidence by ID
-- `POST /ask` - Ask a question and get answer with citations
+- `POST /ask` - Ask a question and get answer with citations (accepts `use_hrm=true`)
 - `DELETE /reset` - Clear all data
 - `POST /extract/langextract` - Run Google LangExtract over an artifact or raw text (returns structured entities + HTML visualization path)
+- `POST /extract/tags` - Extract application tags (accepts JSON body `use_hrm: true` for iterative refine/dedupe; response may include `{ hrm: { enabled, steps } }`)
 - `POST /convert` - Convert processed artifact to txt or docx
 - `GET /download?rel=...` - Download artifacts (whitelisted under `artifacts/`)
 - `POST /structure/chr` - Run Constellation Harvest Regularization over an artifact (PDF/CSV/XLSX)
@@ -207,7 +253,7 @@ Notes:
 ## Project Structure
 
 ```
-meeting-analyst-app/
+PMOVES_DoX/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # FastAPI application
@@ -239,7 +285,7 @@ See `ADVANCED_FEATURES_PLAN.md` for roadmap of advanced PDF processing features.
 One-command smoke via npm (uses Python + Docker Compose under the hood):
 
 ```bash
-cd meeting-analyst-app
+cd PMOVES_DoX
 npm run smoke         # CPU compose (default)
 npm run smoke:gpu     # GPU compose
 ```
@@ -247,7 +293,7 @@ npm run smoke:gpu     # GPU compose
 UI smoke with Playwright (brings up frontend + backend, runs headless tests):
 
 ```bash
-cd meeting-analyst-app
+cd PMOVES_DoX
 npm run smoke:ui       # CPU compose
 npm run smoke:ui:gpu   # GPU compose
 ```
@@ -255,7 +301,7 @@ npm run smoke:ui:gpu   # GPU compose
 Run the Python smoke directly against a running backend:
 
 ```bash
-cd meeting-analyst-app
+cd PMOVES_DoX
 API_BASE=http://localhost:8000 python smoke/smoke_backend.py
 ```
 
@@ -291,6 +337,38 @@ async function mcpExportPOML(document_id: string, variant = 'generic') {
 }
 ```
 
+## Experiments (HRM)
+
+- Understanding HRM: see `docs/Understanding the HRM Model_ A Simple Guide.md` for an overview of the L‑Module refinement loop and Q‑Head halting.
+- Colab/Script prototype: `docs/hrm_transformer_sidecar_colab.py` implements a sidecar HRM around a tiny transformer on a toy sorting task.
+  - Run locally: `python docs/hrm_transformer_sidecar_colab.py` (requires PyTorch; GPU optional).
+  - Outputs exact‑match accuracy and average refinement steps; demonstrates early halting.
+  - This is a prototype; backend/UI integration is planned in NEXT_STEPS under “HRM/Reasoning Enhancements”.
+
+Backend integration (experimental)
+- Enable in backend: set `HRM_ENABLED=true` in `backend/.env` (defaults: `HRM_MMAX=6`, `HRM_MMIN=2`).
+- Endpoints:
+  - `POST /experiments/hrm/echo` with `{ "text": "  a   b  c  " }` → returns normalized `out`, `steps`, `variants`.
+  - `POST /experiments/hrm/sort_digits` with `{ "seq": "93241" }` → returns `trace` of refinement and `steps`.
+  - `GET /metrics/hrm` → totals and rolling averages.
+- UI toggles:
+  - Settings → “Use HRM Sidecar (experimental)”: when on, the Q&A panel calls `/ask?use_hrm=true`, and the Tags panel passes `use_hrm: true` to `/extract/tags` for a simple iterative refine/dedupe pass with early halting.
+
+Examples
+- Extract tags with HRM (body flag) and preview response:
+
+```bash
+curl -s -X POST http://localhost:8000/extract/tags \
+  -H 'Content-Type: application/json' \
+  -d '{"document_id":"<DOC_ID>", "use_hrm": true, "dry_run": true}' | jq
+```
+
+- Ask with HRM (query flag):
+
+```bash
+curl -s -X POST "http://localhost:8000/ask?question=what%20is%20the%20total%20revenue%3F&use_hrm=true" | jq
+```
+
 Copilot Studio / POML
 - Use Export POML from the UI or the API to generate a `.poml` artifact per document.
 - Variants: `generic`, `troubleshoot`, `catalog` depending on your task.
@@ -298,7 +376,7 @@ Copilot Studio / POML
 Option A — use Docker from the script (recommended):
 
 ```powershell
-cd meeting-analyst-app
+cd PMOVES_DoX
 $env:SMOKE_COMPOSE = 'docker-compose.cpu.yml'    # or 'docker-compose.yml' for GPU
 python -m venv venv; ./venv/Scripts/Activate.ps1
 pip install -r smoke/requirements.txt requests
@@ -308,7 +386,7 @@ python smoke/run_smoke_docker.py
 Option B — run against an already running backend:
 
 ```powershell
-cd meeting-analyst-app
+cd PMOVES_DoX
 python -m venv venv; ./venv/Scripts/Activate.ps1
 pip install -r smoke/requirements.txt
 $env:API_BASE = 'http://localhost:8000'
@@ -363,7 +441,7 @@ To include https://github.com/google/mangle in your workflow, run it alongside t
 go install github.com/google/mangle/cmd/mangle@latest
 
 # Transform a CSV and drop into watch folder for auto-ingest
-mangle run your.mangle -i path\to\input.csv -o meeting-analyst-app\watch\transformed.csv
+mangle run your.mangle -i path\to\input.csv -o PMOVES_DoX\watch\transformed.csv
 ```
 
 You can also add a custom container for mangle later if you prefer containerized transforms.
@@ -373,8 +451,48 @@ You can also add a custom container for mangle later if you prefer containerized
 SQLite is used by default (`db.sqlite3`). Alembic scaffolding is included:
 
 ```powershell
-cd meeting-analyst-app/backend
+cd PMOVES_DoX/backend
 alembic upgrade head           # apply migrations (none initially)
 alembic revision --autogenerate -m "init"  # create a new migration from current SQLModel metadata
 alembic upgrade head
 ```
+### Search Filters + Deep Links
+- Filters: The global search bar supports type filters (PDF, API, LOG, TAG). Toggle them to filter results server-side.
+- Deep links: Results include a target panel and identifier. Clicking “Open in…” switches to the right panel:
+  - PDF → Workspace panel (future: scroll to chunk)
+  - API → APIs panel and opens the endpoint detail modal
+  - LOG → Logs panel with code pre-filter
+  - TAG → Tags panel with document/q pre-filled
+  
+API:
+- `POST /search` with `{ q, k?, types?: ['pdf','api','log','tag'] }` → `{ results: [{ score, text, meta: { type, deeplink, ... } }] }`
+- `POST /search/rebuild` → rebuilds the vector index
+
+### Deeplink API (UI)
+- From the browser console or client code, trigger panel navigation with:
+
+```js
+// Open APIs panel and show a specific endpoint
+window.dispatchEvent(new CustomEvent('global-deeplink', {
+  detail: { panel: 'apis', api_id: '<API_ID>' }
+}));
+
+// Open Logs panel, pre-filter by code
+window.dispatchEvent(new CustomEvent('global-deeplink', {
+  detail: { panel: 'logs', code: 'ERROR' }
+}));
+
+// Open Tags panel for a document and query
+window.dispatchEvent(new CustomEvent('global-deeplink', {
+  detail: { panel: 'tags', document_id: '<DOC_ID>', q: 'Loan Origination' }
+}));
+
+// Open Workspace and highlight a PDF chunk (by index)
+window.dispatchEvent(new CustomEvent('global-deeplink', {
+  detail: { panel: 'workspace', artifact_id: '<ARTIFACT_ID>', chunk: 12 }
+}));
+```
+### PDF Text Units + Page Map
+- During PDF ingestion, the backend writes `artifacts/<stem>.text_units.json` containing an array of `{ text, page }` extracted from Docling's text items.
+- The search index prefers this file to build PDF chunks with page numbers. If missing, it falls back to splitting the Markdown.
+- To regenerate: delete the existing `artifacts/<stem>.text_units.json` and re-run ingestion for that PDF.

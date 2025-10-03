@@ -45,6 +45,28 @@ export default function Home() {
     };
   }, []);
 
+  // Handle global deep links from search results
+  useEffect(() => {
+    function onDeeplink(e: any){
+      try {
+        const dl = e?.detail || {};
+        const panel = String(dl.panel || '').toLowerCase();
+        if (panel === 'apis') setTab('apis');
+        else if (panel === 'logs') setTab('logs');
+        else if (panel === 'tags') setTab('tags');
+        else if (panel === 'workspace') setTab('workspace');
+      } catch {}
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('global-deeplink' as any, onDeeplink as any);
+    }
+    return () => {
+      if (typeof window !== 'undefined') {
+        window.removeEventListener('global-deeplink' as any, onDeeplink as any);
+      }
+    };
+  }, []);
+
   return (
     <main className="min-h-screen bg-gray-50">
       <HeaderBar />

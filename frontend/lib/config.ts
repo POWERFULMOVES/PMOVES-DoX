@@ -65,3 +65,47 @@ export function setOfflineHint(v: boolean) {
     localStorage.setItem('lms_offline', v ? 'true' : 'false');
   }
 }
+
+// HRM settings
+export function getHRMEnabled(): boolean {
+  if (typeof window !== 'undefined') {
+    return localStorage.getItem('lms_hrm_enabled') === 'true';
+  }
+  return false;
+}
+
+export function setHRMEnabled(v: boolean) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('lms_hrm_enabled', v ? 'true' : 'false');
+  }
+}
+
+export function getHRMMmax(): number {
+  if (typeof window !== 'undefined') {
+    const v = localStorage.getItem('lms_hrm_mmax');
+    const n = v ? parseInt(v, 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 6;
+  }
+  return 6;
+}
+
+export function setHRMMmax(n: number) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('lms_hrm_mmax', String(n));
+  }
+}
+
+export function getHRMMmin(): number {
+  if (typeof window !== 'undefined') {
+    const v = localStorage.getItem('lms_hrm_mmin');
+    const n = v ? parseInt(v, 10) : NaN;
+    return Number.isFinite(n) && n > 0 ? n : 2;
+  }
+  return 2;
+}
+
+export function setHRMMmin(n: number) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('lms_hrm_mmin', String(n));
+  }
+}

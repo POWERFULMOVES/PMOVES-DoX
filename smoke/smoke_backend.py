@@ -213,11 +213,33 @@ def main():
         docs_list = docs.json().get("documents", [])
         if docs_list:
             did = docs_list[0]["id"]
-            dr = r.post(f"{API}/extract/tags", json={"document_id": did, "dry_run": True}, timeout=60)
+            dr = r.post(f"{API}/extract/tags", json={"document_id": did, "dry_run": True, "use_hrm": True}, timeout=60)
             dr.raise_for_status()
-        ok("/tags presets + dry-run extract")
+            # persist once to test stored hrm metadata
+            pr = r.post(f"{API}/extract/tags", json={"document_id": did, "use_hrm": True}, timeout=60)
+            pr.raise_for_status()
+            tg = r.get(f"{API}/tags?document_id={did}", timeout=10)
+            tg.raise_for_status()
+            tlist = tg.json().get("tags", [])
+            # at least don't crash; hrm_steps may or may not exist depending on backend env
+    ok("/tags presets + dry-run extract")
     except Exception as e:
         fail(f"tags/presets or extract error: {e}")
+
+    # 15) HRM experiments and metrics
+    try:
+        e1 = r.post(f"{API}/experiments/hrm/echo", json={"text":"  a   b  c  "}, timeout=10)
+        e1.raise_for_status()
+        s1 = r.post(f"{API}/experiments/hrm/sort_digits", json={"seq":"93241"}, timeout=10)
+        s1.raise_for_status()
+        m1 = r.get(f"{API}/metrics/hrm", timeout=10)
+        m1.raise_for_status()
+        ok("/experiments/hrm/* + /metrics/hrm")
+        # Optional /ask with HRM flag (may be a no-op if HRM not enabled)
+        a1 = r.post(f"{API}/ask", params={"question": "what is the total revenue?", "use_hrm": "true"}, timeout=10)
+        a1.raise_for_status()
+    except Exception as e:
+        fail(f"hrm endpoints error: {e}")
 
     ok("Smoke tests passed.")
     sys.exit(0)

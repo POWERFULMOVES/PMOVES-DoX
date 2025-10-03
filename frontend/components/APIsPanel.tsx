@@ -32,6 +32,20 @@ export default function APIsPanel() {
 
   useEffect(() => { load(); }, []);
 
+  // Handle deep links to specific API id
+  useEffect(() => {
+    function onDeeplink(ev: any){
+      const dl = ev?.detail || {};
+      if (String(dl.panel||'').toLowerCase() !== 'apis') return;
+      if (dl.api_id) openDetail(String(dl.api_id));
+      if (dl.path_like) { setPathLike(String(dl.path_like)); setTimeout(load, 0); }
+    }
+    if (typeof window !== 'undefined') {
+      window.addEventListener('global-deeplink' as any, onDeeplink as any);
+    }
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('global-deeplink' as any, onDeeplink as any); };
+  }, []);
+
   const openDetail = async (id: string) => {
     try {
       const r = await fetch(`${API}/apis/${id}`);

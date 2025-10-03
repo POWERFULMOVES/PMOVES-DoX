@@ -53,6 +53,7 @@ async def process_pdf(
     # Export to structured formats
     markdown_path = artifacts_dir / f"{file_path.stem}.md"
     json_path = artifacts_dir / f"{file_path.stem}.json"
+    text_units_path = artifacts_dir / f"{file_path.stem}.text_units.json"
     
     # Save markdown
     markdown_content = doc.export_to_markdown()
@@ -61,6 +62,25 @@ async def process_pdf(
     # Save JSON for structured analysis
     doc_dict = doc.export_to_dict()
     json_path.write_text(json.dumps(doc_dict, indent=2), encoding="utf-8")
+
+    # Save text units with page mapping for search/deeplinks
+    try:
+        units = []
+        for item in getattr(doc, 'texts', []) or []:
+            txt = (getattr(item, 'text', '') or '').strip()
+            if not txt:
+                continue
+            page = None
+            try:
+                if getattr(item, 'prov', None):
+                    page = getattr(item.prov[0], 'page', None)
+            except Exception:
+                page = None
+            units.append({"text": txt, "page": page})
+        if units:
+            text_units_path.write_text(json.dumps(units, ensure_ascii=False, indent=2), encoding='utf-8')
+    except Exception:
+        pass
     
     # Extract facts from tables and text
     facts = []

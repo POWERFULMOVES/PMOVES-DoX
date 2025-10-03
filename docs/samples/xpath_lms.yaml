@@ -1,0 +1,15 @@
+entry: "//entry | //log | //record"
+fields:
+  ts: "./ts | ./timestamp | ./time | ./@time"
+  level: "./level | ./severity | ./@level"
+  code: "./code | ./error/code | ./status | ./@code"
+  component: "./component | ./service | ./module | ./source | ./@component"
+  message: "./message | ./msg | ./text | ./description"
+
+# Notes
+# - xml.etree.ElementTree has limited XPath: we split on '|' and try each selector.
+# - Attributes are supported via ./@attr in this declarative file, but the current
+#   loader resolves attributes by checking .find(sel).text only; for attributes,
+#   also include an equivalent element path if available (e.g., ./time).
+# - Adjust selectors to your LMS vendor’s XML log schema as needed.
+

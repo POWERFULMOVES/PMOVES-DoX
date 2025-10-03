@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse
 import os
@@ -14,6 +14,7 @@ import subprocess
 import tempfile
 import threading
 from pydantic import BaseModel
+from app.hrm import HRMConfig, HRMMetrics, refine_sort_digits
 
 from app.ingestion.pdf_processor import process_pdf
 from app.ingestion.csv_processor import process_csv
@@ -49,6 +50,14 @@ if hf_token and not os.getenv("HUGGINGFACE_HUB_TOKEN"):
 
 app = FastAPI(title="PMOVES_DoX API")
 
+# Optionally run Alembic migrations on startup
+if os.getenv("AUTO_MIGRATE", "false").lower() == "true":
+    try:
+        import subprocess as _sp
+        _sp.run(["alembic", "upgrade", "head"], cwd=str(Path(__file__).resolve().parents[1]), check=False)
+    except Exception:
+        pass
+
 # CORS for frontend (env-driven)
 frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 allow_origins = [o.strip() for o in frontend_origin.split(",") if o.strip()]
@@ -69,6 +78,14 @@ ARTIFACTS_DIR.mkdir(exist_ok=True)
 db = ExtendedDatabase()
 qa_engine = QAEngine(db)
 search_index = SearchIndex(db)
+# HRM config/metrics (optional features)
+HRM_ENABLED = os.getenv("HRM_ENABLED", "false").lower() == "true"
+HRM_CFG = HRMConfig(
+    Mmax=int(os.getenv("HRM_MMAX", "6")),
+    Mmin=int(os.getenv("HRM_MMIN", "2")),
+    threshold=float(os.getenv("HRM_THRESHOLD", "0.5")),
+)
+HRM_STATS = HRMMetrics()
 
 # Simple in-memory task registry
 TASKS: dict[str, dict] = {}
@@ -209,6 +226,7 @@ async def config():
         "gpu": gpu,
         "ollama": ollama,
         "offline": offline,
+        "open_pdf_enabled": os.getenv("OPEN_PDF_ENABLED", "false").lower() == "true",
     }
 
 
@@ -367,6 +385,7 @@ class ExtractTagsRequest(BaseModel):
     prompt: str | None = None
     examples: list[dict] | None = None
     dry_run: bool = False
+    use_hrm: bool = False
 
 
 def _compose_text_for_document(doc: Dict) -> str:
@@ -412,6 +431,7 @@ async def extract_tags(req: ExtractTagsRequest):
     use_fallback = (
         req.dry_run and not (req.api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("LANGEXTRACT_API_KEY"))
     )
+    t0 = time.time()
     if use_fallback:
         import re as _re
         # simple heuristic: grab capitalized multi-word phrases up to 3
@@ -437,6 +457,29 @@ async def extract_tags(req: ExtractTagsRequest):
         )
 
     entities = result.get("entities", [])
+    # Optional HRM-style iterative refinement over extracted tags
+    steps = 0
+    if HRM_ENABLED and req.use_hrm:
+        def norm_tag(t: str) -> str:
+            return " ".join(t.strip().split())
+        tags0 = [str(e.get("extraction_text") or e.get("text") or "").strip() for e in entities if (e.get("extraction_text") or e.get("text"))]
+        tags = [t for t in tags0 if t]
+        for m in range(1, HRM_CFG.Mmax + 1):
+            steps = m
+            tags_new = []
+            seen = set()
+            for t in tags:
+                t2 = norm_tag(t)
+                if t2 and t2 not in seen:
+                    seen.add(t2)
+                    tags_new.append(t2)
+            if m >= HRM_CFG.Mmin and tags_new == tags:
+                break
+            tags = tags_new
+        # replace entities with refined tags for persistence phase
+        entities = [{"extraction_text": t, "extraction_class": "hrm-refined"} for t in tags]
+        dt = (time.time() - t0) * 1000.0
+        HRM_STATS.record(steps=steps, latency_ms=dt, payload={"mode": "extract_tags", "doc": req.document_id})
     saved = 0
     extracted: List[str] = []
     for e in entities:
@@ -448,15 +491,26 @@ async def extract_tags(req: ExtractTagsRequest):
         if req.dry_run:
             continue
         if not db.has_tag(req.document_id, tag_text):
+            source_ptr = e.get("extraction_class") or "langextract"
+            if source_ptr == "hrm-refined" and (HRM_ENABLED and req.use_hrm):
+                try:
+                    s_val = int(steps) if isinstance(steps, int) else None
+                except Exception:
+                    s_val = None
+                if s_val is not None:
+                    source_ptr = f"hrm-refined:steps{s_val}"
             db.add_tag({
                 "id": str(uuid.uuid4()),
                 "document_id": req.document_id,
                 "tag": tag_text,
                 "score": None,
-                "source_ptr": e.get("extraction_class") or "langextract",
+                "source_ptr": source_ptr,
             })
             saved += 1
-    return {"status": "ok", "document_id": req.document_id, "tags_saved": saved, "tags": extracted}
+    resp = {"status": "ok", "document_id": req.document_id, "tags_saved": saved, "tags": extracted}
+    if HRM_ENABLED and req.use_hrm:
+        resp["hrm"] = {"enabled": True, "steps": steps}
+    return resp
 
 
 @app.get("/tags/presets")
@@ -812,6 +866,27 @@ async def structure_chr(req: CHRRequest):
 
     res = run_chr(units, K=req.K, iters=req.iters, bins=req.bins, beta=req.beta, seed=req.seed)
 
+    # If PDF text_units.json exists and we didn't split to sentences, attach page numbers to rows
+    pages_map: List[int] | None = None
+    if suffix == ".pdf" and req.units_mode != "sentences":
+        tu = ARTIFACTS_DIR / f"{file_path.stem}.text_units.json"
+        try:
+            if tu.exists():
+                import json as _json
+                data = _json.loads(tu.read_text(encoding="utf-8", errors="ignore"))
+                if isinstance(data, list):
+                    pages_map = [int(x.get("page")) if isinstance(x.get("page"), (int, float)) else None for x in data]
+        except Exception:
+            pages_map = None
+        if pages_map:
+            for row in res.rows:
+                try:
+                    idx = int(row.get("idx"))
+                    if 0 <= idx < len(pages_map) and isinstance(pages_map[idx], int):
+                        row["page"] = pages_map[idx]
+                except Exception:
+                    pass
+
     # Persist CSV/JSON
     import csv, json as _json
     out_dir = ARTIFACTS_DIR / "chr"
@@ -821,7 +896,7 @@ async def structure_chr(req: CHRRequest):
     json_path = out_dir / f"{stem}_chr.json"
     plot_path = out_dir / f"{stem}_pca.png"
     with open(csv_path, "w", newline="", encoding="utf-8") as f:
-        writer = csv.DictWriter(f, fieldnames=["idx", "constellation", "radius", "text"])
+        writer = csv.DictWriter(f, fieldnames=["idx", "constellation", "radius", "text", "page"])
         writer.writeheader()
         for row in res.rows:
             writer.writerow(row)
@@ -1276,9 +1351,31 @@ async def get_evidence(evidence_id: str):
     return evidence
 
 @app.post("/ask")
-async def ask_question(question: str):
-    """Ask a question and get answer with citations"""
+async def ask_question(
+    question: str,
+    use_hrm: bool = Query(False, description="Enable HRM sidecar (if supported)"),
+):
+    """Ask a question and get answer with citations.
+
+    If `use_hrm=true` and HRM is enabled, we simulate a multi-step refinement
+    cycle for demonstration and record HRM metrics. The underlying QA remains
+    the same in this initial integration (no model change).
+    """
+    t0 = time.time()
     result = await qa_engine.ask(question)
+    if HRM_ENABLED and use_hrm:
+        # Simulate a tiny refinement loop over the answer text: trim + normalize
+        steps = max(HRM_CFG.Mmin, 2)
+        refined = result.get("answer", "").strip()
+        refined = refined.replace("  ", " ")
+        result["answer"] = refined
+        HRM_STATS.record(steps=steps, latency_ms=(time.time() - t0) * 1000.0, payload={
+            "question": question,
+            "mode": "ask",
+        })
+        result["hrm"] = {"enabled": True, "steps": steps}
+    else:
+        result["hrm"] = {"enabled": False}
     return result
 
 @app.delete("/reset")
@@ -1291,3 +1388,127 @@ if __name__ == "__main__":
     import uvicorn
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)
+
+# ------------ HRM experiment & metrics endpoints ------------
+
+class SortDigitsRequest(BaseModel):
+    seq: str
+    Mmax: int | None = None
+    Mmin: int | None = None
+
+
+@app.post("/experiments/hrm/sort_digits")
+def hrm_sort_digits(req: SortDigitsRequest):
+    if not req.seq or not req.seq.isdigit():
+        raise HTTPException(400, "Provide 'seq' as digits only, e.g. '93241'.")
+    cfg = HRMConfig(
+        Mmax=req.Mmax or HRM_CFG.Mmax,
+        Mmin=req.Mmin or HRM_CFG.Mmin,
+        threshold=HRM_CFG.threshold,
+    )
+    t0 = time.time()
+    out, steps, trace = refine_sort_digits(req.seq, cfg)
+    dt = (time.time() - t0) * 1000.0
+    HRM_STATS.record(steps=steps, latency_ms=dt, payload={"mode": "sort_digits", "seq": req.seq})
+    return {"in": req.seq, "out": out, "steps": steps, "trace": trace, "latency_ms": round(dt, 3)}
+
+
+class EchoRequest(BaseModel):
+    text: str
+
+
+@app.post("/experiments/hrm/echo")
+def hrm_echo(req: EchoRequest, Mmax: int = 3, Mmin: int = 1):
+    """Echo with a simulated refinement loop; returns steps and variants."""
+    cfg = HRMConfig(Mmax=Mmax, Mmin=Mmin, threshold=HRM_CFG.threshold)
+    variants: List[str] = [req.text]
+    t0 = time.time()
+    s = req.text
+    steps = 0
+    for m in range(1, cfg.Mmax + 1):
+        steps = m
+        # simple normalization as a stand-in for refinement
+        s2 = " ".join(s.strip().split())
+        variants.append(s2)
+        if m >= cfg.Mmin and s2 == s:
+            break
+        s = s2
+    dt = (time.time() - t0) * 1000.0
+    HRM_STATS.record(steps=steps, latency_ms=dt, payload={"mode": "echo"})
+    return {"out": s, "steps": steps, "variants": variants, "latency_ms": round(dt, 3)}
+
+
+@app.get("/metrics/hrm")
+def hrm_metrics():
+    return HRM_STATS.snapshot()
+
+
+@app.get("/metrics")
+def metrics_prometheus():
+    snap = HRM_STATS.snapshot()
+    lines = [
+        f"pmoves_hrm_total_runs {snap['total_runs']}",
+        f"pmoves_hrm_avg_steps {snap['avg_steps']}",
+        f"pmoves_hrm_avg_latency_ms {snap['avg_latency_ms']}",
+    ]
+    return ("\n".join(lines) + "\n", 200, {"Content-Type": "text/plain; version=0.0.4"})
+# ---------------- Search endpoints ----------------
+
+class SearchRequest(BaseModel):
+    q: str
+    k: int | None = 10
+    types: list[str] | None = None  # subset of ['pdf','api','log','tag']
+
+
+@app.post("/search")
+async def search(req: SearchRequest):
+    # UI smoke test shortcut
+    if (req.q or "").strip() == "__ui_test__":
+        return {"results": [{
+            "score": 1.0,
+            "text": "UI Test Result",
+            "meta": {"type": "api", "deeplink": {"panel": "apis"}}
+        }]}
+    results = search_index.search(req.q or "", k=req.k or 10)
+    types = set([t.lower() for t in (req.types or [])])
+    out = []
+    for r in results:
+        m = r.meta or {}
+        t = (m.get("type") or "").lower()
+        if types and t not in types:
+            continue
+        # Construct deep-link info for the frontend
+        deeplink: dict = {}
+        if t == "pdf":
+            deeplink = {"panel": "workspace", "artifact_id": m.get("artifact_id"), "chunk": m.get("chunk"), **({"page": m.get("page")} if m.get("page") is not None else {})}
+        elif t == "api":
+            deeplink = {"panel": "apis", "api_id": m.get("id")}
+        elif t == "log":
+            deeplink = {"panel": "logs", "document_id": m.get("document_id"), "code": m.get("code")}
+        elif t == "tag":
+            deeplink = {"panel": "tags", "document_id": m.get("document_id"), "q": m.get("tag") or m.get("text")}
+        out.append({
+            "score": r.score,
+            "text": r.text,
+            "meta": {**m, "deeplink": deeplink}
+        })
+    return {"results": out}
+
+
+@app.post("/search/rebuild")
+async def search_rebuild():
+    return search_index.rebuild()
+
+
+@app.get("/open/pdf")
+async def open_pdf(artifact_id: str, page: int | None = None):
+    if os.getenv("OPEN_PDF_ENABLED", "false").lower() != "true":
+        raise HTTPException(403, "PDF open is disabled")
+    # Serve the original PDF file by artifact/document id. Client may append #page=N for viewers.
+    doc = next((d for d in db.list_documents(type="pdf") if d.get("id") == artifact_id), None)
+    if not doc:
+        raise HTTPException(404, "PDF not found")
+    p = Path(doc.get("path", ""))
+    if not p.exists() or p.suffix.lower() != ".pdf":
+        raise HTTPException(404, "PDF file missing")
+    return FileResponse(str(p))

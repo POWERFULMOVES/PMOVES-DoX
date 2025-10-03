@@ -61,11 +61,36 @@ class SearchIndex:
             fp = Path(a.get("filepath", ""))
             if fp.suffix.lower() != ".pdf":
                 continue
+            # Prefer text units with page map if available
+            tu = Path("artifacts") / f"{fp.stem}.text_units.json"
+            if tu.exists():
+                try:
+                    units = json.loads(tu.read_text(encoding="utf-8", errors="ignore"))
+                    if isinstance(units, list):
+                        for i, u in enumerate(units):
+                            txt = (u.get("text") or "").strip()
+                            if not txt:
+                                continue
+                            page = u.get("page")
+                            chunks.append({
+                                "id": f"md:{a.get('id')}:{i}",
+                                "text": txt[:2000],
+                                "meta": {
+                                    "type": "pdf",
+                                    "artifact_id": a.get("id"),
+                                    "filename": a.get("filename"),
+                                    "chunk": i,
+                                    **({"page": int(page)} if isinstance(page, (int, float)) else {}),
+                                }
+                            })
+                        continue
+                except Exception:
+                    pass
             md = Path("artifacts") / f"{fp.stem}.md"
             if not md.exists():
                 continue
             text = md.read_text(encoding="utf-8", errors="ignore")
-            # Simple chunking by headers or paragraphs
+            # Simple chunking by headers or paragraphs (fallback)
             parts = [p.strip() for p in text.split("\n\n") if p.strip()]
             for i, p in enumerate(parts):
                 chunks.append({
@@ -177,4 +202,3 @@ class SearchIndex:
             ch = self.payloads[idx]
             out.append(SearchResult(score=float(score), text=ch["text"], meta=ch["meta"]))
         return out
-

@@ -198,6 +198,7 @@ class TagRow(SQLModel, table=True):
     tag: str
     score: float | None = None
     source_ptr: str | None = None
+    hrm_steps: int | None = None
 
 
 class TagPrompt(SQLModel, table=True):
@@ -339,7 +340,17 @@ class ExtendedDatabase(Database):
                 continue
             if q and q.lower() not in t.tag.lower():
                 continue
-            out.append({"id": t.id, "document_id": t.document_id, "tag": t.tag, "score": t.score, "source_ptr": t.source_ptr})
+            # prefer stored column, fall back to legacy encoding in source_ptr
+            hrm_steps = t.hrm_steps
+            if hrm_steps is None and t.source_ptr and isinstance(t.source_ptr, str) and t.source_ptr.startswith("hrm-refined:steps"):
+                try:
+                    hrm_steps = int(t.source_ptr.replace("hrm-refined:steps", ""))
+                except Exception:
+                    hrm_steps = None
+            item = {"id": t.id, "document_id": t.document_id, "tag": t.tag, "score": t.score, "source_ptr": t.source_ptr}
+            if hrm_steps is not None:
+                item["hrm_steps"] = hrm_steps
+            out.append(item)
         return out
 
     def has_tag(self, document_id: str, tag: str) -> bool:

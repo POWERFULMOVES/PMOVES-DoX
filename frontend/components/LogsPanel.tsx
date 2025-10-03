@@ -37,6 +37,19 @@ export default function LogsPanel() {
 
   useEffect(() => { load(); }, []);
 
+  // Handle deep links to logs (code/document_id pre-filters)
+  useEffect(() => {
+    function onDeeplink(ev: any){
+      const dl = ev?.detail || {};
+      if (String(dl.panel||'').toLowerCase() !== 'logs') return;
+      if (dl.code) setCode(String(dl.code));
+      if (dl.document_id) setQ((prev)=>prev);
+      setTimeout(load, 0);
+    }
+    if (typeof window !== 'undefined') window.addEventListener('global-deeplink' as any, onDeeplink as any);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('global-deeplink' as any, onDeeplink as any); };
+  }, []);
+
   const buildViz = async () => {
     setBuilding(true);
     try {

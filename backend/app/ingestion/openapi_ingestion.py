@@ -28,17 +28,35 @@ def process_openapi(file_path: Path) -> Tuple[Dict, List[Dict]]:
     }
 
     rows: List[Dict] = []
+    comp = data.get('components', {}) or {}
+    sec_schemes = comp.get('securitySchemes', {}) or {}
+    global_sec = data.get('security', None)  # list of requirement objects or None
     paths = data.get('paths', {}) or {}
     for path, methods in paths.items():
         if not isinstance(methods, dict):
             continue
+        path_params = methods.get('parameters') or []
         for method, op in methods.items():
             if method.upper() not in {"GET","POST","PUT","PATCH","DELETE","HEAD","OPTIONS"}:
                 continue
             op = op or {}
             tags = op.get('tags') or []
-            params = op.get('parameters') or []
+            # merge path-level parameters into op-level
+            params = (path_params or []) + (op.get('parameters') or [])
+            # compute effective security for this op: op.security or global security
+            op_sec = op.get('security', global_sec)
+            # normalize into a simple list of scheme names used (union)
+            used_schemes: List[str] = []
+            if isinstance(op_sec, list):
+                for req in op_sec:
+                    if isinstance(req, dict):
+                        for k in req.keys():
+                            if k not in used_schemes:
+                                used_schemes.append(k)
             responses = op.get('responses') or {}
+            # attach normalized security info under an extension key
+            if used_schemes:
+                responses = {**responses, "x_security": {"schemes": used_schemes}}
             rows.append({
                 "id": str(uuid.uuid4()),
                 "document_id": doc_id,
@@ -51,4 +69,3 @@ def process_openapi(file_path: Path) -> Tuple[Dict, List[Dict]]:
                 "responses_json": json.dumps(responses),
             })
     return doc, rows
-

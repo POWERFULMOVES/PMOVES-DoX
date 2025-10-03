@@ -1,4 +1,4 @@
-# Next Steps Plan (LMS Analyst)
+# Next Steps Plan (PMOVES_DoX)
 
 ## Goals
 - Ingest + structure LMS Admin Guides (PDF), XML logs, and API collections
@@ -77,14 +77,37 @@
 - API detail modal; Logs time filters + CSV export (DONE)
 - CHR controls + richer PCA; datavzrd themes/spells
 - DB indexes; Alembic auto‑run; nightly GPU smoke
-- Docs walkthroughs + screencasts (update with LMS Analyst branding)
+- Docs walkthroughs + screencasts (update with PMOVES_DoX branding)
 
-## Short‑Term Tasks (assign/track)
-- XML XPath mapping starter (map common LMS log shapes) — owner: __, due: 2025‑10‑10
-- OpenAPI enrichment (components/security) — owner: __, due: 2025‑10‑10
-- DB indices (apis.path, apis.method, logs.level/code/ts, tags.tag) — owner: __, due: 2025‑10‑09
-- CHR panel controls (K, units mode, include tables) — owner: __, due: 2025‑10‑09
-- CI: add GH Actions workflow (smoke + ui‑smoke) — owner: __, due: 2025‑10‑08
+## HRM/Reasoning Enhancements
+- Sidecar HRM for iterative refinement
+  - Backend: add optional HRM sidecar module to wrap existing encoders/heads used in `qa_engine` and tag extraction. Support `Mmax`, `Mmin`, and `halt_threshold` with ACT-style halting at inference.
+  - Endpoints: `/experiments/hrm/sort_digits` (toy) and `/experiments/hrm/echo` for sanity; flags to enable HRM in `/ask` and `/extract/tags`.
+- Metrics + evaluation
+  - Track exact-match accuracy, avg refinement steps, and latency deltas (with/without halting). Expose at `/metrics/hrm` and log to artifacts.
+  - Add dataset harness in `samples/experiments/hrm/` and a quick evaluator script.
+- UI controls
+  - Settings: toggle “Use HRM Sidecar”, sliders for `Mmax`/`Mmin`, and a threshold input. Show per-request steps badge in header.
+  - Visualization: small panel in CHR view to compare outputs across steps for a sample.
+- Docs & Colab
+  - Link and ship `docs/Understanding the HRM Model_ A Simple Guide.md` and `docs/hrm_transformer_sidecar_colab.py` under an Experiments section in README.
+  - Brief how-to for enabling HRM in backend and UI, with screenshots.
+
+### Acceptance (HRM)
+- With HRM+halting enabled on toy tasks, accuracy improves vs. no-halting baseline and average steps < `Mmax`.
+- Toggling HRM in Settings updates behavior of `/ask` and tag extraction without restart.
+- Metrics endpoint reports rolling averages and last-run details (accuracy, steps, latency).
+
+## Short-Term Tasks (assign/track)
+- XML XPath mapping starter (map common LMS log shapes) - owner: __, due: 2025-10-10
+- OpenAPI enrichment (components/security) - owner: __, due: 2025-10-10
+- DB indices (apis.path, apis.method, logs.level/code/ts, tags.tag) - owner: __, due: 2025-10-09
+- CHR panel controls (K, units mode, include tables) - owner: __, due: 2025-10-09
+- CI: add GH Actions workflow (smoke + ui-smoke) - owner: __, due: 2025-10-08
+
+- HRM sidecar experiment wired to backend `/experiments/hrm/*` - owner: __, due: 2025-10-09
+- Add HRM toggle + params to Settings modal - owner: __, due: 2025-10-10
+- HRM evaluator script + metrics endpoint - owner: __, due: 2025-10-10
 
 ## Backlog
 - Search result deep links (open PDF chunk, API row, or log record)

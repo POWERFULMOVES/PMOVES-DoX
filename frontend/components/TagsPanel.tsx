@@ -2,7 +2,7 @@
 
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/Toast';
-import { getApiBase, getAuthorDefault, setAuthorDefault, getUseOllama } from '@/lib/config';
+import { getApiBase, getAuthorDefault, setAuthorDefault, getUseOllama, getHRMEnabled, getHRMMmax, getHRMMmin, setHRMMmax, setHRMMmin } from '@/lib/config';
 
 export default function TagsPanel() {
   const [docId, setDocId] = useState('');
@@ -20,6 +20,9 @@ export default function TagsPanel() {
   const [selectedHistory, setSelectedHistory] = useState<any | null>(null);
   const [lastSavedAt, setLastSavedAt] = useState<string>('');
   const [useOllama, setUseOllamaState] = useState<boolean>(false);
+  const [hrmMmax, setHrmMmax] = useState<number>(getHRMMmax());
+  const [hrmMmin, setHrmMmin] = useState<number>(getHRMMmin());
+  const [lastHrmSteps, setLastHrmSteps] = useState<number | null>(null);
   const API = getApiBase();
   const { push } = useToast();
 
@@ -39,6 +42,18 @@ export default function TagsPanel() {
   };
 
   useEffect(() => { load(); }, []);
+  // Handle deep links to tags panel (document/q)
+  useEffect(() => {
+    function onDeeplink(ev: any){
+      const dl = ev?.detail || {};
+      if (String(dl.panel||'').toLowerCase() !== 'tags') return;
+      if (dl.document_id) setDocId(String(dl.document_id));
+      if (dl.q) setQ(String(dl.q));
+      setTimeout(load, 0);
+    }
+    if (typeof window !== 'undefined') window.addEventListener('global-deeplink' as any, onDeeplink as any);
+    return () => { if (typeof window !== 'undefined') window.removeEventListener('global-deeplink' as any, onDeeplink as any); };
+  }, []);
   useEffect(() => {
     // load author from localStorage
     try {
@@ -56,15 +71,22 @@ export default function TagsPanel() {
     })();
   }, []);
 
+  useEffect(() => {
+    try {
+      const v = typeof window !== 'undefined' ? localStorage.getItem('lms_hrm_last_steps') : null;
+      if (v) setLastHrmSteps(parseInt(v, 10));
+    } catch {}
+  }, []);
+
   const extractTags = async () => {
     if (!docId) return;
     try {
-      const body: any = { document_id: docId };
+      const body: any = { document_id: docId, use_hrm: getHRMEnabled() };
       if (hasPreset && presetPrompt.trim()) body.prompt = presetPrompt;
       if (hasPreset && presetExamples) body.examples = presetExamples;
       if (useOllama) body.model_id = 'ollama:gemma3';
       const res = await fetch(`${API}/extract/tags`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (res.ok) { load(); push('Tags extracted', 'success'); }
+      if (res.ok) { const data = await res.json(); load(); if (data?.hrm?.steps!=null) { const n=Number(data.hrm.steps); setLastHrmSteps(n); try{ localStorage.setItem('lms_hrm_last_steps', String(n)); }catch{} push(`Tags extracted (HRM steps: ${n})`, 'success'); } else { setLastHrmSteps(null); try{ localStorage.removeItem('lms_hrm_last_steps'); }catch{} push('Tags extracted', 'success'); } }
       else { push('Extract tags failed', 'error'); }
     } catch {
       alert('Extract tags error');
@@ -75,16 +97,12 @@ export default function TagsPanel() {
     if (!docId) return;
     setDryRunLoading(true);
     try {
-      const body: any = { document_id: docId, dry_run: true };
+      const body: any = { document_id: docId, dry_run: true, use_hrm: getHRMEnabled() };
       if (hasPreset && presetPrompt.trim()) body.prompt = presetPrompt;
       if (hasPreset && presetExamples) body.examples = presetExamples;
       if (useOllama) body.model_id = 'ollama:gemma3';
       const res = await fetch(`${API}/extract/tags`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (res.ok) {
-        const data = await res.json();
-        const list = (data?.tags || []).join(', ');
-        push(list ? `Preview: ${list}` : 'No tags found', list ? 'info' : 'error');
-      } else { push('Preview failed', 'error'); }
+      if (res.ok) { const data = await res.json(); const list = (data?.tags || []).join(', '); const base = list ? `Preview: ${list}` : 'No tags found'; const hasSteps = (data?.hrm?.steps!=null); if (hasSteps) { const n=Number(data.hrm.steps); setLastHrmSteps(n); try{ localStorage.setItem('lms_hrm_last_steps', String(n)); }catch{} } const msg = hasSteps ? `${base} (HRM steps: ${data.hrm.steps})` : base; push(msg, list ? 'info' : 'error'); } else { push('Preview failed', 'error'); }
     } catch { push('Preview error', 'error'); }
     } finally {
       setDryRunLoading(false);
@@ -181,6 +199,13 @@ export default function TagsPanel() {
         <button onClick={loadPreset} className="bg-gray-700 text-white rounded px-3">Load LMS Preset</button>
         <button onClick={previewTags} disabled={!docId || dryRunLoading} className="bg-gray-700 text-white rounded px-3">{dryRunLoading ? 'Previewing…' : 'Preview (dry run)'}</button>
         <button onClick={extractTags} disabled={!docId} className="bg-green-600 text-white rounded px-3">Extract Tags</button>
+        <div className="flex items-center gap-1 text-xs text-gray-700">
+          <span className="text-gray-600">HRM</span>
+          <label className="text-gray-600">Mmax</label>
+          <input type="number" min={1} value={hrmMmax} onChange={e=>{ const n=parseInt(e.target.value||'6',10); setHrmMmax(n); setHRMMmax(n); }} className="w-16 border rounded px-1 py-0.5" />
+          <label className="text-gray-600">Mmin</label>
+          <input type="number" min={1} value={hrmMmin} onChange={e=>{ const n=parseInt(e.target.value||'2',10); setHrmMmin(n); setHRMMmin(n); }} className="w-16 border rounded px-1 py-0.5" />
+        </div>
         <label className="flex items-center gap-1 text-xs text-gray-700"><input type="checkbox" checked={useOllama} onChange={e=>{ setUseOllamaState(e.target.checked); try{ localStorage.setItem('lms_use_ollama', e.target.checked ? 'true' : 'false'); } catch{} }} /> Use Ollama</label>
       </div>
 
@@ -249,10 +274,20 @@ export default function TagsPanel() {
       {loading ? <div>Loading…</div> : (
         <div className="max-h-80 overflow-auto border rounded">
           <table className="min-w-full text-left text-xs">
-            <thead><tr className="bg-gray-50"><th className="px-2 py-1">tag</th><th className="px-2 py-1">score</th><th className="px-2 py-1">document</th><th className="px-2 py-1">source</th></tr></thead>
+            <thead><tr className="bg-gray-50"><th className="px-2 py-1">tag</th><th className="px-2 py-1">score</th><th className="px-2 py-1">document</th><th className="px-2 py-1">source</th><th className="px-2 py-1">hrm</th></tr></thead>
             <tbody>
               {tags.map((t,i)=> (
-                <tr key={i} className="border-t"><td className="px-2 py-1">{t.tag}</td><td className="px-2 py-1">{t.score ?? ''}</td><td className="px-2 py-1">{t.document_id}</td><td className="px-2 py-1">{t.source_ptr || ''}</td></tr>
+                <tr key={i} className="border-t">
+                  <td className="px-2 py-1">{t.tag}</td>
+                  <td className="px-2 py-1">{t.score ?? ''}</td>
+                  <td className="px-2 py-1">{t.document_id}</td>
+                  <td className="px-2 py-1">{t.source_ptr || ''}</td>
+                  <td className="px-2 py-1">{(t.hrm_steps!=null) ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200" title="HRM refinement steps (stored)">{t.hrm_steps}</span>
+                  ) : (lastHrmSteps!=null ? (
+                    <span className="text-[10px] px-2 py-0.5 rounded-full bg-purple-50 text-purple-600 border border-purple-100" title="HRM refinement steps (last run)">{lastHrmSteps}</span>
+                  ) : '')}</td>
+                </tr>
               ))}
             </tbody>
           </table>

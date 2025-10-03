@@ -23,23 +23,22 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
       - name: Build and push backend (CPU)
-        working-directory: meeting-analyst-app
+        working-directory: PMOVES_DoX
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/meeting-analyst-backend:latest
-            ghcr.io/${{ github.repository }}/meeting-analyst-backend:${{ github.sha }}
+            ghcr.io/${{ github.repository }}/pmoves-dox-backend:latest
+            ghcr.io/${{ github.repository }}/pmoves-dox-backend:${{ github.sha }}
       - name: Build and push backend (GPU)
-        working-directory: meeting-analyst-app
+        working-directory: PMOVES_DoX
         uses: docker/build-push-action@v6
         with:
           context: ./backend
           file: ./backend/Dockerfile.gpu
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/meeting-analyst-backend-gpu:latest
-            ghcr.io/${{ github.repository }}/meeting-analyst-backend-gpu:${{ github.sha }}
-
+            ghcr.io/${{ github.repository }}/pmoves-dox-backend-gpu:latest
+            ghcr.io/${{ github.repository }}/pmoves-dox-backend-gpu:${{ github.sha }}
