@@ -1,6 +1,6 @@
 'use client';
 
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import axios from 'axios';
 import { getApiBase, getHRMEnabled, getHRMMmax, getHRMMmin } from '@/lib/config';
 
