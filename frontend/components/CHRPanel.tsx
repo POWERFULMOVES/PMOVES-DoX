@@ -16,6 +16,7 @@ export default function CHRPanel() {
   const [highlightIdx, setHighlightIdx] = useState<number | null>(null);
   const highlightRef = useRef<HTMLTableRowElement | null>(null);
   const [pageNum, setPageNum] = useState<number | null>(null);
+  const [openPdfEnabled, setOpenPdfEnabled] = useState<boolean>(false);
   // HRM demo
   const [hrmDigits, setHrmDigits] = useState('93241');
   const [hrmTrace, setHrmTrace] = useState<string[] | null>(null);
@@ -29,6 +30,15 @@ export default function CHRPanel() {
         if (!r.ok) return;
         const data = await r.json();
         setArtifacts(Array.isArray(data.artifacts) ? data.artifacts : []);
+      } catch {}
+    })();
+    // fetch config for OPEN_PDF_ENABLED
+    (async () => {
+      try {
+        const r = await fetch(`${API}/config`);
+        if (!r.ok) return;
+        const cfg = await r.json();
+        setOpenPdfEnabled(!!cfg?.open_pdf_enabled);
       } catch {}
     })();
   }, []);
@@ -133,7 +143,7 @@ export default function CHRPanel() {
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-2">Structure (CHR)</h2>
-      {artifactId && pageNum!=null && (
+      {artifactId && pageNum!=null && openPdfEnabled && (
         <div className="mb-2 text-xs">
           <a className="text-blue-700 underline" href={`${API}/open/pdf?artifact_id=${encodeURIComponent(artifactId)}#page=${pageNum}`} target="_blank">Open PDF at page</a>
         </div>
@@ -183,7 +193,7 @@ export default function CHRPanel() {
             <div>Hg: {result.Hg?.toFixed?.(4) ?? result.Hg} | Hs: {result.Hs?.toFixed?.(4) ?? result.Hs}</div>
             <div>K: {result.K}</div>
             {pageNum!=null && (<div className="mt-1 text-xs text-gray-700">Approx. page: {pageNum}</div>)}
-            {artifactId && pageNum!=null && (
+            {artifactId && pageNum!=null && openPdfEnabled && (
               <div className="mt-1 text-xs">
                 <a className="text-blue-700 underline" href={`${API}/open/pdf?artifact_id=${encodeURIComponent(artifactId)}#page=${pageNum}`} target="_blank">Open PDF at page</a>
               </div>
@@ -213,7 +223,7 @@ export default function CHRPanel() {
                         key={i}
                         data-idx={r.idx}
                         ref={(el) => { if (el && highlightIdx!=null && r.idx===highlightIdx) highlightRef.current = el; }}
-                        className={`border-t ${highlightIdx!=null && r.idx===highlightIdx ? 'bg-yellow-50' : ''}`}
+                        className={`border-t ${highlightIdx!=null && r.idx===highlightIdx ? 'bg-yellow-50 border-l-4 border-yellow-400' : ''}`}
                       >
                         <td className="px-2 py-1">{r.idx}</td>
                         <td className="px-2 py-1">{r.constellation}</td>

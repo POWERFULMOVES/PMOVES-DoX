@@ -30,8 +30,17 @@ def main():
 
     # Up backend
     try:
-        run(["docker", "compose", "-f", compose_file] + compose_flags + ["build", "backend"], cwd=repo_root)
-        run(["docker", "compose", "-f", compose_file] + compose_flags + ["up", "-d", "backend"], cwd=repo_root)
+        # Retry build/up once on transient failures
+        try:
+            run(["docker", "compose", "-f", compose_file] + compose_flags + ["build", "backend"], cwd=repo_root)
+        except subprocess.CalledProcessError:
+            time.sleep(5)
+            run(["docker", "compose", "-f", compose_file] + compose_flags + ["build", "backend"], cwd=repo_root)
+        try:
+            run(["docker", "compose", "-f", compose_file] + compose_flags + ["up", "-d", "backend"], cwd=repo_root)
+        except subprocess.CalledProcessError:
+            time.sleep(3)
+            run(["docker", "compose", "-f", compose_file] + compose_flags + ["up", "-d", "backend"], cwd=repo_root)
         if not wait_health(f"{api_base}/health", tries=45, delay=2):
             print("[FAIL] backend /health did not become ready")
             sys.exit(1)

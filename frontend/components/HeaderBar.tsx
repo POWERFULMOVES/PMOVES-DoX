@@ -13,6 +13,7 @@ export default function HeaderBar() {
   const [health, setHealth] = useState<'unknown'|'ok'|'down'>('unknown');
   const [hrm, setHrm] = useState(false);
   const [deeplinkInfo, setDeeplinkInfo] = useState<string | null>(null);
+  const [lastDeeplink, setLastDeeplink] = useState<any>(null);
 
   useEffect(()=>{
     setApiBase(getApiBase());
@@ -41,6 +42,7 @@ export default function HeaderBar() {
       const panel = String(dl.panel || '').toUpperCase();
       const extra = dl.api_id ? `#${dl.api_id}` : dl.document_id ? `:${String(dl.document_id).slice(0,8)}` : (dl.code || dl.q || dl.chunk!=null ? '…' : '');
       setDeeplinkInfo(`${panel}${extra ? ' ' + extra : ''}`);
+      setLastDeeplink(dl);
       // auto-hide after a few seconds
       setTimeout(()=>setDeeplinkInfo(null), 5000);
     }
@@ -66,7 +68,17 @@ export default function HeaderBar() {
     <div className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b">
       <div className="max-w-7xl mx-auto flex items-center gap-3 p-3">
         <div className="font-semibold text-lg flex items-center gap-2">PMOVES_DoX {hrm && (<span title="HRM Sidecar enabled" className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">HRM</span>)}
-          {deeplinkInfo && (<span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200" title="Last deeplink target">{deeplinkInfo}</span>)}</div>
+          {deeplinkInfo && (
+            <>
+              <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200" title="Last deeplink target">{deeplinkInfo}</span>
+              <button
+                className="text-[10px] border rounded px-2 py-0.5 ml-1"
+                title="Reopen last deeplink"
+                onClick={()=>{ try { if (lastDeeplink) window.dispatchEvent(new CustomEvent('global-deeplink', { detail: lastDeeplink })); } catch {} }}
+              >Reopen</button>
+            </>
+          )}
+        </div>
         <div className="flex-1"><GlobalSearch /></div>
         <button onClick={rebuild} className="border rounded px-3 py-2 bg-white hover:bg-gray-50 text-gray-700" title="Rebuild vector index">Rebuild Index</button>
         <div
