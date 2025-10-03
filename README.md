@@ -199,6 +199,28 @@ Troubleshooting:
 - Make sure the NVIDIA drivers and Container Toolkit are installed. Run `nvidia-smi` on the host, and `docker run --gpus all nvidia/cuda:12.1.1-runtime-ubuntu22.04 nvidia-smi` to confirm GPU is available in containers.
 - If the container cannot access the GPU, ensure Docker Desktop settings have GPU support enabled and the NVIDIA toolkit is installed.
 
+### Jetson Nano (JetPack / L4T)
+
+Use the Jetson-specific compose and Dockerfile that are compatible with NVIDIA L4T (ARM64) and JetPack 4.x (r32.7.1):
+
+```bash
+# On the Jetson device (ARM64)
+cd PMOVES_DoX
+cp .env.example .env
+
+# Start backend + frontend (CPU/GPU via L4T runtime)
+docker compose -f docker-compose.jetson.yml up -d --build
+
+# Optionally include internal Ollama and tools (resource-heavy on Nano)
+docker compose -f docker-compose.jetson.yml --profile ollama --profile tools up -d --build
+```
+
+Notes
+- Backend base: `nvcr.io/nvidia/l4t-ml:r32.7.1-py3` (includes CUDA/cuDNN, JetPack 4.x).
+- The backend image does not pin `torch`; it uses the version provided by the base image.
+- Ollama on Jetson is ARM64 but large models may exceed Nano’s 4GB; prefer small models.
+- Ensure the NVIDIA Container Runtime is active; if `runtime: nvidia` fails, install the NVIDIA Container Toolkit for L4T.
+
 ## Usage
 
 1. **Upload Documents**: Drag and drop or select PDF, CSV, or XLSX files
