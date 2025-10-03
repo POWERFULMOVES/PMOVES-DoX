@@ -866,24 +866,47 @@ async def structure_chr(req: CHRRequest):
 
     res = run_chr(units, K=req.K, iters=req.iters, bins=req.bins, beta=req.beta, seed=req.seed)
 
-    # If PDF text_units.json exists and we didn't split to sentences, attach page numbers to rows
+    # If PDF, try to attach page numbers to rows
     pages_map: List[int] | None = None
-    if suffix == ".pdf" and req.units_mode != "sentences":
+    if suffix == ".pdf":
         tu = ARTIFACTS_DIR / f"{file_path.stem}.text_units.json"
         try:
             if tu.exists():
                 import json as _json
                 data = _json.loads(tu.read_text(encoding="utf-8", errors="ignore"))
                 if isinstance(data, list):
-                    pages_map = [int(x.get("page")) if isinstance(x.get("page"), (int, float)) else None for x in data]
+                    if req.units_mode != "sentences":
+                        # 1:1 mapping with units array
+                        pages_map = [int(x.get("page")) if isinstance(x.get("page"), (int, float)) else None for x in data]
+                    else:
+                        # sentences mode: expand page map by splitting each unit into sentences
+                        def _sent_split_local(text: str) -> list[str]:
+                            import re as _re
+                            rough = _re.split(r"[\n\r]+|(?<=[\.!?])\s+", (text or "").strip())
+                            return [s.strip() for s in rough if s and s.strip()]
+                        expanded: list[int | None] = []
+                        for x in data:
+                            txt = (x.get("text") or "").strip()
+                            cnt = len(_sent_split_local(txt)) if txt else 0
+                            pg = int(x.get("page")) if isinstance(x.get("page"), (int, float)) else None
+                            if cnt <= 0:
+                                continue
+                            expanded.extend([pg] * cnt)
+                        pages_map = expanded
         except Exception:
             pages_map = None
         if pages_map:
             for row in res.rows:
                 try:
                     idx = int(row.get("idx"))
-                    if 0 <= idx < len(pages_map) and isinstance(pages_map[idx], int):
-                        row["page"] = pages_map[idx]
+                    # Bound-check; if sentences produced more/less items than units, clamp by last known page
+                    pg = None
+                    if 0 <= idx < len(pages_map):
+                        pg = pages_map[idx]
+                    elif len(pages_map) > 0:
+                        pg = pages_map[-1]
+                    if isinstance(pg, int):
+                        row["page"] = pg
                 except Exception:
                     pass
 
@@ -1191,6 +1214,17 @@ def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suff
             # PDF is async-capable but can be used sync too
             import anyio
             facts, evidence = anyio.run(process_pdf, file_path, report_week, ARTIFACTS_DIR)
+            # Ensure a PDF document row exists for deeplinks/open
+            try:
+                db.add_document({
+                    "id": artifact_id,
+                    "path": str(file_path),
+                    "type": "pdf",
+                    "title": file_path.name,
+                    "source": "watch|upload",
+                })
+            except Exception:
+                pass
         elif suffix == ".csv":
             facts, evidence = process_csv(file_path, report_week)
         elif suffix in [".xlsx", ".xls"]:
@@ -1504,11 +1538,33 @@ async def search_rebuild():
 async def open_pdf(artifact_id: str, page: int | None = None):
     if os.getenv("OPEN_PDF_ENABLED", "false").lower() != "true":
         raise HTTPException(403, "PDF open is disabled")
-    # Serve the original PDF file by artifact/document id. Client may append #page=N for viewers.
+    # Locate by document id (preferred) or fall back to artifact id
+    p: Path | None = None
     doc = next((d for d in db.list_documents(type="pdf") if d.get("id") == artifact_id), None)
-    if not doc:
-        raise HTTPException(404, "PDF not found")
-    p = Path(doc.get("path", ""))
-    if not p.exists() or p.suffix.lower() != ".pdf":
+    if doc:
+        p = Path(doc.get("path", ""))
+    else:
+        art = next((a for a in db.get_artifacts() if a.get("id") == artifact_id and str(a.get("filepath",""))).__iter__(), None)
+        # The above ".__iter__()" trick is to avoid mypy complaining; essentially select the first match
+        if not art:
+            # try explicit scan
+            for a in db.get_artifacts():
+                if a.get("id") == artifact_id:
+                    art = a
+                    break
+        if art:
+            p = Path(art.get("filepath", ""))
+    if not p or not p.exists() or p.suffix.lower() != ".pdf":
         raise HTTPException(404, "PDF file missing")
-    return FileResponse(str(p))
+    # Restrict to uploads dir
+    try:
+        if not Path(p).resolve().is_relative_to(UPLOAD_DIR.resolve()):
+            raise HTTPException(403, "Access denied")
+    except Exception:
+        # Python <3.9 fallback: emulate is_relative_to
+        up = str(UPLOAD_DIR.resolve())
+        pr = str(Path(p).resolve())
+        if not pr.startswith(up):
+            raise HTTPException(403, "Access denied")
+    headers = {"Content-Disposition": f"inline; filename=\"{p.name}\""}
+    return FileResponse(str(p), media_type="application/pdf", headers=headers)

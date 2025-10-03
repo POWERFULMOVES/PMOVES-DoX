@@ -68,6 +68,40 @@ def main():
     except Exception as e:
         fail(f"/facts error: {e}")
 
+    # 3b) upload a tiny PDF (for /open/pdf and PDF paths) and run CHR(sentences)
+    #    Create a minimal valid PDF from base64 inline to avoid extra deps
+    try:
+        import base64
+        pdf_b64 = (
+            b"JVBERi0xLjQKJcTl8uXrp/Og0MTGCjEgMCBvYmoKPDwvVHlwZS9DYXRhbG9nIC9QYWdlcyAyIDAgUj4+IGVuZG9iago"
+            b"yIDAgb2JqCjw8IC9UeXBlIC9QYWdlcyAvS2lkcyBbMyAwIFJdIC9Db3VudCAxID4+IGVuZG9iagozIDAgb2JqCjw8IC9U"
+            b"eXBlIC9QYWdlIC9QYXJlbnQgMiAwIFIgL01lZGlhQm94IFswIDAgMjAwIDIwMF0gL0NvbnRlbnRzIDQgMCBSIC9SZXNvdXJj"
+            b"ZXMgPDwgL0ZvbnQgPDwgL0YxIDUgMCBSID4+ID4+ID4+IGVuZG9iago0IDAgb2JqCjw8IC9MZW5ndGggNDQgPj4gc3RyZWFtCkJUIC9GMQogMjQgVGYgNzIgMTIwIFRkIChIZWxsbyBQREYpIFRqIEVUCmVuZHN0cmVhbQplbmRvYmoKNSAwIG9iago8PCAvVHlwZSAvRm9udCAvU3VidHlwZSAvVHlwZTEgL05hbWUgL0YxIC9CYXNlRm9udCAvSGVsdmV0aWNhID4+IGVuZG9iagp4cmVmCjAgNgowMDAwMDAwMDAwIDY1NTM1IGYgCjAwMDAwMDAwMTAgMDAwMDAgbiAKMDAwMDAwMDA2MiAwMDAwMCBuIAowMDAwMDAwMTE4IDAwMDAwIG4gCjAwMDAwMDAyNzAgMDAwMDAgbiAKMDAwMDAwMDM3MyAwMDAwMCBuIAp0cmFpbGVyCjw8IC9TaXplIDYgL1Jvb3QgMSAwIFIgPj4Kc3RhcnR4cmVmCjQ3MAolJUVPRgo="
+        )
+        pdf_bytes = base64.b64decode(pdf_b64)
+        files_pdf = [("files", ("smoke.pdf", pdf_bytes, "application/pdf"))]
+        u2 = r.post(f"{API}/upload?async_pdf=false", files=files_pdf, timeout=60)
+        u2.raise_for_status()
+        ok("/upload smoke.pdf (sync)")
+    except Exception as e:
+        fail(f"/upload pdf error: {e}")
+
+    # Fetch latest artifacts again
+    try:
+        a2 = r.get(f"{API}/artifacts", timeout=10)
+        a2.raise_for_status()
+        arts2 = a2.json().get("artifacts", [])
+        pdf_artifact_id = None
+        for item in reversed(arts2):
+            if str(item.get("filetype","")) == ".pdf":
+                pdf_artifact_id = item["id"]
+                break
+        if not pdf_artifact_id:
+            fail("no PDF artifact found after upload")
+        ok(f"PDF artifact -> {pdf_artifact_id}")
+    except Exception as e:
+        fail(f"/artifacts after pdf error: {e}")
+
     # 4) structure/chr
     try:
         payload = {"artifact_id": artifact_id, "K": 6, "units_mode": "sentences"}
@@ -86,6 +120,25 @@ def main():
         ok("/download CHR CSV")
     except Exception as e:
         fail(f"/structure/chr error: {e}")
+
+    # 4b) CHR on PDF (sentences) and verify JSON rows present; page mapping is optional
+    try:
+        payload_pdf = {"artifact_id": pdf_artifact_id, "K": 4, "units_mode": "sentences"}
+        s_pdf = r.post(f"{API}/structure/chr", json=payload_pdf, timeout=90)
+        s_pdf.raise_for_status()
+        body_pdf = s_pdf.json()
+        rel_json = body_pdf.get("artifacts", {}).get("rel_json")
+        if not rel_json:
+            fail("CHR PDF missing rel_json")
+        djson = r.get(f"{API}/download", params={"rel": rel_json}, timeout=30)
+        djson.raise_for_status()
+        data = djson.json()
+        rows = data.get("rows", [])
+        if not isinstance(rows, list) or len(rows) == 0:
+            fail("CHR PDF JSON rows missing")
+        ok("/structure/chr (pdf sentences)")
+    except Exception as e:
+        fail(f"/structure/chr pdf error: {e}")
 
     # 5) convert -> txt and download
     try:
@@ -181,6 +234,18 @@ def main():
     except Exception as e:
         fail(f"search error: {e}")
 
+    # 11b) search with type filters (api/log/tag), invalid type, and empty types
+    try:
+        for types in (["api"], ["log"], ["tag"], ["bogus"], []):
+            payload = {"q": "loan", "k": 5}
+            if types:
+                payload["types"] = types
+            resp = r.post(f"{API}/search", json=payload, timeout=10)
+            resp.raise_for_status()
+        ok("/search with filters + invalid type")
+    except Exception as e:
+        fail(f"search filters error: {e}")
+
     # 12) logs export CSV
     try:
         le = r.get(f"{API}/logs/export?level=ERROR", timeout=10)
@@ -225,6 +290,15 @@ def main():
         ok("/tags presets + dry-run extract")
     except Exception as e:
         fail(f"tags/presets or extract error: {e}")
+
+    # 12) /open/pdf (allow 200 if enabled or 403 if disabled)
+    try:
+        op = r.get(f"{API}/open/pdf", params={"artifact_id": pdf_artifact_id, "page": 1}, timeout=15)
+        if op.status_code not in (200, 403):
+            fail(f"/open/pdf unexpected status: {op.status_code}")
+        ok("/open/pdf")
+    except Exception as e:
+        fail(f"open/pdf error: {e}")
 
     # 15) HRM experiments and metrics
     try:
