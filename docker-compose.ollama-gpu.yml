@@ -1,0 +1,13 @@
+services:
+  ollama:
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+
+# Usage (enable GPU for internal Ollama only when your Docker Desktop GPU integration works):
+#   docker compose -f docker-compose.yml -f docker-compose.ollama-gpu.yml \
+#     --compatibility --profile ollama --profile tools up -d

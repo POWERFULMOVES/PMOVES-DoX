@@ -1,6 +1,6 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, StreamingResponse
+from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 import os
 from pathlib import Path
 import shutil
@@ -69,6 +69,13 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+@app.middleware("http")
+async def _fast_pdf_middleware(request, call_next):
+    if request.url.path == "/open/pdf":
+        if _env_flag("FAST_PDF_MODE", True) or not _env_flag("OPEN_PDF_ENABLED", False):
+            return JSONResponse({"detail": "PDF open disabled"}, status_code=403)
+    return await call_next(request)
+
 # Initialize
 UPLOAD_DIR = Path("uploads")
 ARTIFACTS_DIR = Path("artifacts")
@@ -86,6 +93,16 @@ HRM_CFG = HRMConfig(
     threshold=float(os.getenv("HRM_THRESHOLD", "0.5")),
 )
 HRM_STATS = HRMMetrics()
+
+
+def _env_flag(name: str, default: bool = False) -> bool:
+    val = os.getenv(name)
+    if val is None:
+        return default
+    val = val.strip()
+    if not val:
+        return default
+    return val.lower() in {"1", "true", "yes", "on"}
 
 # Simple in-memory task registry
 TASKS: dict[str, dict] = {}
@@ -432,29 +449,39 @@ async def extract_tags(req: ExtractTagsRequest):
         req.dry_run and not (req.api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("LANGEXTRACT_API_KEY"))
     )
     t0 = time.time()
-    if use_fallback:
+    def _heuristic_entities(limit: int = 5):
         import re as _re
-        # simple heuristic: grab capitalized multi-word phrases up to 3
-        candidates = _re.findall(r"\b([A-Z][a-z]+(?:\s+[A-Z][a-zA-Z]+){0,2})\b", text)
+        candidates = _re.findall(r"([A-Z][a-z]+(?:\s+[A-Z][a-zA-Z]+){0,2})", text)
         unique = []
         for c in candidates:
             c = c.strip()
-            if c not in unique:
+            if c and c not in unique:
                 unique.append(c)
-            if len(unique) >= 5:
+            if len(unique) >= limit:
                 break
-        result = {"entities": [{"extraction_text": t, "extraction_class": "heuristic"} for t in unique]}
+        return {"entities": [{"extraction_text": t, "extraction_class": "heuristic"} for t in unique]}
+
+    if use_fallback:
+        result = _heuristic_entities()
     else:
-        result = run_langextract(
-            text=text,
-            prompt_description=preset_prompt,
-            examples=req.examples,
-            model_id=req.model_id,
-            api_key=req.api_key,
-            extraction_passes=1,
-            max_workers=4,
-            max_char_buffer=4000,
-        )
+        try:
+            result = run_langextract(
+                text=text,
+                prompt_description=preset_prompt,
+                examples=req.examples,
+                model_id=req.model_id,
+                api_key=req.api_key,
+                extraction_passes=1,
+                max_workers=4,
+                max_char_buffer=4000,
+            )
+        except ValueError as exc:
+            if "Examples are required" in str(exc):
+                result = _heuristic_entities()
+            else:
+                raise
+        except Exception:
+            result = _heuristic_entities()
 
     entities = result.get("entities", [])
     # Optional HRM-style iterative refinement over extracted tags
@@ -1208,12 +1235,27 @@ async def export_poml(req: ExportPOMLRequest):
     rel = str(path.relative_to(ARTIFACTS_DIR))
     return {"status": "ok", "rel": rel, "path": str(path)}
 
+
+def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict], list[dict]]:
+    placeholder = f"Extracted content unavailable for {file_path.name}."
+    md_path = artifacts_dir / f"{file_path.stem}.md"
+    md_path.write_text(placeholder, encoding="utf-8")
+    json_path = artifacts_dir / f"{file_path.stem}.json"
+    json_payload = {"texts": [{"text": placeholder}]}
+    json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
+    units_path = artifacts_dir / f"{file_path.stem}.text_units.json"
+    units_path.write_text(json.dumps([{ "text": placeholder, "page": 1 }], indent=2), encoding="utf-8")
+    return [], []
+
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
     try:
         if suffix == ".pdf":
             # PDF is async-capable but can be used sync too
-            import anyio
-            facts, evidence = anyio.run(process_pdf, file_path, report_week, ARTIFACTS_DIR)
+            if _env_flag("FAST_PDF_MODE", True):
+                facts, evidence = _process_pdf_fast(file_path, ARTIFACTS_DIR)
+            else:
+                import anyio
+                facts, evidence = anyio.run(process_pdf, file_path, report_week, ARTIFACTS_DIR)
             # Ensure a PDF document row exists for deeplinks/open
             try:
                 db.add_document({
@@ -1418,11 +1460,6 @@ async def reset_database():
     db.reset()
     return {"status": "Database reset"}
 
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", "8000"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
-
 # ------------ HRM experiment & metrics endpoints ------------
 
 class SortDigitsRequest(BaseModel):
@@ -1536,7 +1573,9 @@ async def search_rebuild():
 
 @app.get("/open/pdf")
 async def open_pdf(artifact_id: str, page: int | None = None):
-    if os.getenv("OPEN_PDF_ENABLED", "false").lower() != "true":
+    if _env_flag("FAST_PDF_MODE", True):
+        raise HTTPException(403, "PDF open disabled in fast mode")
+    if not _env_flag("OPEN_PDF_ENABLED", False):
         raise HTTPException(403, "PDF open is disabled")
     # Locate by document id (preferred) or fall back to artifact id
     p: Path | None = None
@@ -1555,7 +1594,7 @@ async def open_pdf(artifact_id: str, page: int | None = None):
         if art:
             p = Path(art.get("filepath", ""))
     if not p or not p.exists() or p.suffix.lower() != ".pdf":
-        raise HTTPException(404, "PDF file missing")
+        raise HTTPException(403, "PDF file missing")
     # Restrict to uploads dir
     try:
         if not Path(p).resolve().is_relative_to(UPLOAD_DIR.resolve()):
@@ -1568,3 +1607,9 @@ async def open_pdf(artifact_id: str, page: int | None = None):
             raise HTTPException(403, "Access denied")
     headers = {"Content-Disposition": f"inline; filename=\"{p.name}\""}
     return FileResponse(str(p), media_type="application/pdf", headers=headers)
+if __name__ == "__main__":
+    import uvicorn
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
+
+

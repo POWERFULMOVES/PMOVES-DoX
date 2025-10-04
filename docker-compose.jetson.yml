@@ -1,16 +1,8 @@
 services:
-  ollama:
-    image: ollama/ollama:latest
-    profiles: ["ollama"]
-    volumes:
-      - ollama:/root/.ollama
-    restart: unless-stopped
-
   backend:
     build:
       context: ./backend
-      dockerfile: Dockerfile.gpu
-    container_name: pmoves-dox-backend
+      dockerfile: Dockerfile.jetson
     environment:
       - FRONTEND_ORIGIN=http://localhost:3000
       - PORT=8000
@@ -24,6 +16,9 @@ services:
       - XML_XPATH_MAP=${XML_XPATH_MAP:-}
       - XML_XPATH_MAP_FILE=${XML_XPATH_MAP_FILE:-}
       - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-false}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    runtime: nvidia
     ports:
       - "8000:8000"
     volumes:
@@ -31,27 +26,12 @@ services:
       - ./backend/artifacts:/app/artifacts
       - ./samples:/app/samples
       - ./watch:/app/watch
-      - hf-cache:/root/.cache/huggingface
-    deploy:
-      resources:
-        reservations:
-          devices:
-            - driver: nvidia
-              count: all
-              capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "wget", "-qO", "-", "http://localhost:8000/"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
     restart: unless-stopped
-    # No hard dependency on ollama; backend works without it
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
-    container_name: pmoves-dox-frontend
     environment:
       - NEXT_PUBLIC_API_BASE=http://localhost:8000
       - PORT=3000
@@ -61,11 +41,23 @@ services:
       - backend
     restart: unless-stopped
 
+  # Optional: internal Ollama (ARM64). GPU off by default on Nano unless you enable
+  # CUDA build for llama.cpp; many models are too heavy for 4GB.
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    volumes:
+      - ollama:/root/.ollama
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    runtime: nvidia
+    restart: unless-stopped
+
   datavzrd:
     build:
       context: ./tools/datavzrd
       dockerfile: Dockerfile
-    container_name: datavzrd
     profiles: ["tools"]
     environment:
       - VIZ_FILE=
@@ -81,7 +73,6 @@ services:
     build:
       context: ./tools/schemavzrd
       dockerfile: Dockerfile
-    container_name: schemavzrd
     profiles: ["tools"]
     environment:
       - DB_URL=${DB_URL:-}
@@ -96,5 +87,4 @@ networks:
   default:
     name: pmoves-dox-net
 volumes:
-  hf-cache:
   ollama:

@@ -199,6 +199,54 @@ Troubleshooting:
 - Make sure the NVIDIA drivers and Container Toolkit are installed. Run `nvidia-smi` on the host, and `docker run --gpus all nvidia/cuda:12.1.1-runtime-ubuntu22.04 nvidia-smi` to confirm GPU is available in containers.
 - If the container cannot access the GPU, ensure Docker Desktop settings have GPU support enabled and the NVIDIA toolkit is installed.
 
+### Jetson (JetPack / L4T)
+
+Jetson Nano (JetPack 4.x, L4T r32.7.1)
+
+```bash
+# On the Jetson device (ARM64)
+cd PMOVES_DoX
+cp .env.example .env
+
+# Start backend + frontend (CPU/GPU via L4T runtime)
+docker compose -f docker-compose.jetson.yml up -d --build
+
+# Optionally include internal Ollama and tools (resource-heavy on Nano)
+docker compose -f docker-compose.jetson.yml --profile ollama --profile tools up -d --build
+```
+
+Notes
+- Backend base: `nvcr.io/nvidia/l4t-ml:r32.7.1-py3` (includes CUDA/cuDNN, JetPack 4.x).
+- The backend image does not pin `torch`; it uses the version provided by the base image.
+- Ollama on Jetson is ARM64 but large models may exceed Nano’s 4GB; prefer small models.
+- Ensure the NVIDIA Container Runtime is active; if `runtime: nvidia` fails, install the NVIDIA Container Toolkit for L4T.
+
+Jetson Orin Nano (latest JetPack 5/6, L4T r35/r36)
+
+Use the Orin-specific compose + Dockerfile that default to an L4T ML base for r36.3.0. You can override the exact base tag via a build arg.
+
+```bash
+# On the Orin Nano (ARM64)
+cd PMOVES_DoX
+cp .env.example .env
+
+# Start backend + frontend with Orin/L4T base (defaults to r36.3.0)
+docker compose -f docker-compose.jetson-orin.yml up -d --build
+
+# If your JetPack uses a different L4T ML tag, override BASE_IMAGE:
+docker compose -f docker-compose.jetson-orin.yml build \
+  --build-arg BASE_IMAGE=nvcr.io/nvidia/l4t-ml:r35.4.1-py3 backend
+docker compose -f docker-compose.jetson-orin.yml up -d
+
+# Optional: internal Ollama and tools (ensure you have enough RAM/VRAM)
+docker compose -f docker-compose.jetson-orin.yml --profile ollama --profile tools up -d --build
+```
+
+Notes
+- Backend base defaults to `nvcr.io/nvidia/l4t-ml:r36.3.0-py3` (JetPack 6 / L4T r36). Adjust to your installed JetPack.
+- PyTorch/CUDA come from the base image; we do not install torch in the Dockerfile.
+- On Orin Nano, use small/quantized models for Ollama to fit memory.
+
 ## Usage
 
 1. **Upload Documents**: Drag and drop or select PDF, CSV, or XLSX files

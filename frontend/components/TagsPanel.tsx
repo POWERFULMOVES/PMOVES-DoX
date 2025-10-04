@@ -15,6 +15,10 @@ export default function TagsPanel() {
   const [hasPreset, setHasPreset] = useState(false);
   const [presetExamples, setPresetExamples] = useState<any[] | null>(null);
   const [author, setAuthor] = useState('');
+  const [includePoml, setIncludePoml] = useState<boolean>(false);
+  const [manglePath, setManglePath] = useState<string>('');
+  const [mangleExec, setMangleExec] = useState<boolean>(false);
+  const [mangleQuery, setMangleQuery] = useState<string>('normalized_tag(T)');
   const [showHistory, setShowHistory] = useState(false);
   const [historyItems, setHistoryItems] = useState<any[]>([]);
   const [selectedHistory, setSelectedHistory] = useState<any | null>(null);
@@ -81,10 +85,14 @@ export default function TagsPanel() {
   const extractTags = async () => {
     if (!docId) return;
     try {
-      const body: any = { document_id: docId, use_hrm: getHRMEnabled() };
+      const body: any = { document_id: docId, use_hrm: getHRMEnabled(), include_poml: includePoml };
       if (hasPreset && presetPrompt.trim()) body.prompt = presetPrompt;
       if (hasPreset && presetExamples) body.examples = presetExamples;
       if (useOllama) body.model_id = 'ollama:gemma3';
+      try { const pv = (document.getElementById('pomlVariant') as HTMLSelectElement)?.value; if (pv) body.poml_variant = pv; } catch {}
+      if (manglePath.trim()) body.mangle_file = manglePath.trim();
+      if (mangleExec) body.mangle_exec = true;
+      if (mangleQuery.trim()) body.mangle_query = mangleQuery.trim();
       const res = await fetch(`${API}/extract/tags`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (res.ok) { const data = await res.json(); load(); if (data?.hrm?.steps!=null) { const n=Number(data.hrm.steps); setLastHrmSteps(n); try{ localStorage.setItem('lms_hrm_last_steps', String(n)); }catch{} push(`Tags extracted (HRM steps: ${n})`, 'success'); } else { setLastHrmSteps(null); try{ localStorage.removeItem('lms_hrm_last_steps'); }catch{} push('Tags extracted', 'success'); } }
       else { push('Extract tags failed', 'error'); }
@@ -97,10 +105,14 @@ export default function TagsPanel() {
     if (!docId) return;
     setDryRunLoading(true);
     try {
-      const body: any = { document_id: docId, dry_run: true, use_hrm: getHRMEnabled() };
+      const body: any = { document_id: docId, dry_run: true, use_hrm: getHRMEnabled(), include_poml: includePoml };
       if (hasPreset && presetPrompt.trim()) body.prompt = presetPrompt;
       if (hasPreset && presetExamples) body.examples = presetExamples;
       if (useOllama) body.model_id = 'ollama:gemma3';
+      try { const pv = (document.getElementById('pomlVariant') as HTMLSelectElement)?.value; if (pv) body.poml_variant = pv; } catch {}
+      if (manglePath.trim()) body.mangle_file = manglePath.trim();
+      if (mangleExec) body.mangle_exec = true;
+      if (mangleQuery.trim()) body.mangle_query = mangleQuery.trim();
       const res = await fetch(`${API}/extract/tags`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       if (res.ok) { const data = await res.json(); const list = (data?.tags || []).join(', '); const base = list ? `Preview: ${list}` : 'No tags found'; const hasSteps = (data?.hrm?.steps!=null); if (hasSteps) { const n=Number(data.hrm.steps); setLastHrmSteps(n); try{ localStorage.setItem('lms_hrm_last_steps', String(n)); }catch{} } const msg = hasSteps ? `${base} (HRM steps: ${data.hrm.steps})` : base; push(msg, list ? 'info' : 'error'); } else { push('Preview failed', 'error'); }
     } catch { push('Preview error', 'error'); }
@@ -223,6 +235,10 @@ export default function TagsPanel() {
               <option value="catalog">Catalog</option>
             </select>
             <button onClick={async ()=>{ if(!docId) return; try{ const variant = (document.getElementById('pomlVariant') as HTMLSelectElement)?.value || 'generic'; const r=await fetch(`${API}/export/poml`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ document_id: docId, variant })}); if(!r.ok) throw new Error('export failed'); const data=await r.json(); if (data && data.rel){ const rel = String(data.rel); const url = `${API}/download?rel=${encodeURIComponent(rel)}`; window.open(url, '_blank'); try{ localStorage.setItem('last_poml_rel', rel);}catch{} } push('POML exported', 'success'); } catch { push('POML export failed', 'error'); } }} className="bg-purple-600 text-white rounded px-3 py-1">Export POML</button>
+            <label className="text-xs text-gray-700 flex items-center gap-1"><input type="checkbox" checked={includePoml} onChange={e=>setIncludePoml(e.target.checked)} /> Include POML in prompt</label>
+            <input className="border rounded px-2 py-1 text-xs" placeholder="mangle file (optional)" value={manglePath} onChange={e=>setManglePath(e.target.value)} />
+            <label className="text-xs text-gray-700 flex items-center gap-1"><input type="checkbox" checked={mangleExec} onChange={e=>setMangleExec(e.target.checked)} /> Execute Mangle</label>
+            <input className="border rounded px-2 py-1 text-xs" placeholder="mangle query (e.g., normalized_tag(T))" value={mangleQuery} onChange={e=>setMangleQuery(e.target.value)} />
           <input className="border rounded px-2 py-1 ml-auto" placeholder="author (optional)" value={author} onChange={e=>{ setAuthor(e.target.value); setAuthorDefault(e.target.value); }} />
           </div>
         </div>

@@ -26,18 +26,21 @@ async def process_pdf(
     # Configure Docling pipeline
     vlm_repo = os.getenv("DOCLING_VLM_REPO")
     use_vlm = bool(vlm_repo)
+    ocr_enabled = os.getenv("PDF_OCR_ENABLED", "false").lower() == "true"
+    picture_enabled = os.getenv("PDF_PICTURE_DESCRIPTION", "false").lower() == "true" and bool(vlm_repo)
     if use_vlm:
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_table_structure = True
-        pipeline_options.do_ocr = True
-        pipeline_options.do_picture_description = True
-        pipeline_options.picture_description_options = PictureDescriptionVlmOptions(
-            repo_id=vlm_repo
-        )
+        pipeline_options.do_ocr = ocr_enabled
+        pipeline_options.do_picture_description = picture_enabled
+        if picture_enabled:
+            pipeline_options.picture_description_options = PictureDescriptionVlmOptions(
+                repo_id=vlm_repo
+            )
     else:
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_table_structure = True
-        pipeline_options.do_ocr = True
+        pipeline_options.do_ocr = ocr_enabled
     
     # Initialize converter with Granite backend
     converter = DocumentConverter(
