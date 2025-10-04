@@ -7,5 +7,8 @@
     "smoke:gpu": "node tools/run-smoke.js gpu",
     "smoke:ui": "node tools/run-ui-smoke.js",
     "smoke:ui:gpu": "node tools/run-ui-smoke.js gpu"
+  },
+  "dependencies": {
+    "supabase": "^2.48.3"
   }
 }

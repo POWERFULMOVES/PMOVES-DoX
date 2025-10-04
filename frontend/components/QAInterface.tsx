@@ -40,27 +40,30 @@ export default function QAInterface() {
     <div className="bg-white p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Ask Questions</h2>
       
-      <div className="space-y-4">
-        <div>
+      <div className="space-y-3">
+        <div className="flex flex-col sm:flex-row gap-2">
           <input
             type="text"
-            placeholder="e.g., what is the total ROAS?"
+            placeholder="e.g., What is PMOVES?"
             value={question}
             onChange={(e) => setQuestion(e.target.value)}
-            onKeyPress={(e) => e.key === 'Enter' && handleAsk()}
-            className="w-full px-4 py-2 border rounded"
+            onKeyDown={(e) => { if (e.key === 'Enter') handleAsk(); }}
+            className="flex-1 px-4 py-2 border rounded"
           />
-      </div>
+          <button
+            onClick={handleAsk}
+            disabled={loading || !question.trim()}
+            className="sm:w-auto w-full bg-green-600 text-white px-4 py-2 rounded hover:bg-green-700 disabled:bg-gray-300"
+          >
+            {loading ? 'Thinking...' : 'Ask'}
+          </button>
+        </div>
+        <div className="text-[12px] text-gray-600">
+          Try: "What is PMOVES?", "Summarize API endpoints for Loan Servicing", or "Explain error CODE-123 from LMS logs".
+        </div>
         {hrmOn && (
           <div className="text-[10px] text-gray-600 -mt-2 mb-1">HRM: Mmax {hrmMmax}, Mmin {hrmMmin}</div>
         )}
-      <button
-        onClick={handleAsk}
-        disabled={loading || !question.trim()}
-        className="w-full bg-green-600 text-white py-2 rounded hover:bg-green-700 disabled:bg-gray-300"
-      >
-          {loading ? 'Thinking...' : 'Ask'}
-        </button>
       </div>
       
       {answer && (

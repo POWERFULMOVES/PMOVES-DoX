@@ -30,6 +30,10 @@
   - CHR parameter UI in UI; DB indexes for logs/apis/tags; Alembic auto‑run (guarded)
   - CI: GitHub Actions for smoke (backend + UI) on PRs/merge to main
   - PDF deep-links: ensure per-sentence page mapping in CHR when `units_mode='sentences'` (fallback to nearest preceding unit page)
+- P1.5
+  - LangExtract auto‑examples: when none are provided, backend supplies curated LMS few‑shot examples and a default prompt. Toggle via env if needed.
+  - Prompt augmentation: optionally embed POML snippets and run prompt through a local `mangle` file before calling LangExtract.
+  - Multi‑process ingest: on PDF ingest, spawn CHR and Auto‑Tag jobs (Docling→CHR→LangExtract) to compute structure and initial tags with page‑mapped citations.
 - P2
   - datavzrd theme/pinned dashboards; nightly GPU smoke; Copilot actions
 
@@ -57,6 +61,8 @@
   - FAISS index build/update; `/search` endpoint; UI bar and results list
 - Tags
   - LMS prompt presets; examples; dry‑run/apply; review UI
+  - Auto‑examples pipeline (fallback few‑shot from presets; derive examples from existing Tags when available)
+  - POML‑aware prompts and `mangle` pre‑processing (backend flags)
 - APIs/Logs UI
   - Endpoint modal; logs filters/export; drill‑downs
 - Viz
@@ -99,6 +105,45 @@
 - Docs & Colab
   - Link and ship `docs/Understanding the HRM Model_ A Simple Guide.md` and `docs/hrm_transformer_sidecar_colab.py` under an Experiments section in README.
   - Brief how-to for enabling HRM in backend and UI, with screenshots.
+
+## PMOVES Agent Persona & Orchestration
+- Persona: “PMOVES Analyst” — expert LMS documentation/logs/API analyst that chains project tools.
+- Tooling flow (baseline):
+  - Search vector index → open hits (PDF page, API row, log record)
+  - Tag extraction via LangExtract (uses curated few‑shot automatically if none given)
+  - Prompt builder can inject POML context and pass through a `mangle` transform
+  - CHR structuring → optional datavzrd dashboards
+  - Export POML for downstream copilots
+  - Auto‑ingest pipeline (PDF): Docling parses → CHR clusters with Range/Partition entropy tracking → auto‑tags from content → map tags back to Docling page spans.
+- Acceptance:
+  - If user asks general questions (e.g., “What is PMOVES?”), the agent provides domain‑aware guidance and suggests relevant tools/views.
+  - Tag extraction succeeds out‑of‑the‑box with fallback few‑shot; users can later supply custom examples.
+
+## Configuration Flags (new)
+- `TAGS_PROMPT`: default prompt for LangExtract fallback.
+- `LANGEXTRACT_PROVIDER`: `ollama` or default remote provider. If `ollama`, `OLLAMA_BASE_URL` is honored.
+- `POML_IN_PROMPT` (optional UI wiring): include POML snippet into prompts for tag extraction.
+  - API accepts per‑request flags: `include_poml`, `poml_variant`.
+- `MANGLE_FILE` (optional): path to a local `.mangle` file used to transform prompts. API accepts per‑request `mangle_file`.
+- Ingest pipeline (PDF):
+  - `MULTI_PROCESS_INGEST` (default true)
+  - `CHR_ON_INGEST` (default true), `CHR_K`, `CHR_ITERS`, `CHR_BINS`, `CHR_BETA`, `CHR_UNITS_MODE`, `CHR_INCLUDE_TABLES`
+  - `AUTOTAG_ON_INGEST` (default true), `AUTOTAG_INCLUDE_POML` (default true), `AUTOTAG_POML_VARIANT`
+  - `AUTOTAG_USE_HRM` (default false) — apply HRM refinement to extracted tags during auto‑tag; steps recorded in HRM metrics
+  - `AUTOTAG_MANGLE_FILE`, `AUTOTAG_MANGLE_EXEC` (false), `AUTOTAG_MANGLE_QUERY`
+
+## Mangle (Google) Integration
+- Reference: https://github.com/google/mangle and https://mangle.readthedocs.io/
+- Mode A — Inline (shipped): backend will inline a `.mg` program into the prompt as guidance under a fenced block labeled “MANGLE RULES”. This steers the LLM to obey normalization/constraints.
+- Mode B — Execute (shipped): when the `mg` interpreter is available, backend can run a `.mg` ruleset against an auto‑generated EDB of extracted tags and replace tags with `normalized_tag/1` results.
+  - API flags: `mangle_exec=true`, `mangle_file=path`, optional `mangle_query` (default `normalized_tag(T)`).
+  - EDB facts provided: `tag_raw("<tag>").`
+  - Sample rules: docs/samples/mangle/normalized_tags.mg
+  - Fallbacks: if mg is missing or query returns no results, original tags are used.
+- Install mg:
+  - `go install github.com/google/mangle/cmd/mg@latest`
+  - Verify: `mg --help`
+  - Examples: https://github.com/google/mangle?tab=readme-ov-file#examples
 
 ### Acceptance (HRM)
 - With HRM+halting enabled on toy tasks, accuracy improves vs. no-halting baseline and average steps < `Mmax`.
