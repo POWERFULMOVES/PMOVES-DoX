@@ -1,0 +1,35 @@
+services:
+  supabase-db:
+    image: supabase/postgres:15.14.1.013
+    container_name: supabase-db
+    environment:
+      POSTGRES_PASSWORD: supabase
+      POSTGRES_DB: supabase
+      POSTGRES_USER: postgres
+    ports:
+      - "65432:5432"
+    volumes:
+      - ./supabase/init:/docker-entrypoint-initdb.d:ro
+    restart: unless-stopped
+
+  supabase-rest:
+    image: postgrest/postgrest:v11.1.0
+    container_name: supabase-rest
+    depends_on:
+      - supabase-db
+    environment:
+      PGRST_DB_URI: postgres://postgres:supabase@supabase-db:5432/supabase
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_DB_SCHEMA: public
+      PGRST_DB_USE_LEGACY_GUCS: "false"
+      PGRST_JWT_SECRET: base64:c3VwYWJhc2VfZGV2X3NlY3JldA==
+      PGRST_OPENAPI_SERVER_PROXY_URI: http://localhost:54321
+      PGRST_SERVER_HOST: 0.0.0.0
+      PGRST_SERVER_PORT: 54321
+    ports:
+      - "65421:54321"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: supabase-local-net
