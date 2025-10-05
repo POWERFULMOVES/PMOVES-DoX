@@ -22,7 +22,7 @@ from app.ingestion.xlsx_processor import process_xlsx
 from app.ingestion.xml_ingestion import process_xml
 from app.ingestion.openapi_ingestion import process_openapi
 from app.ingestion.postman_ingestion import process_postman
-from app.database import ExtendedDatabase
+from app.database_factory import init_database
 from app.qa_engine import QAEngine
 from app.extraction.langextract_adapter import run_langextract, write_visualization
 from app.chr_pipeline import run_chr, pca_plot
@@ -82,7 +82,7 @@ ARTIFACTS_DIR = Path("artifacts")
 UPLOAD_DIR.mkdir(exist_ok=True)
 ARTIFACTS_DIR.mkdir(exist_ok=True)
 
-db = ExtendedDatabase()
+db, DB_BACKEND_META = init_database()
 qa_engine = QAEngine(db)
 search_index = SearchIndex(db)
 # HRM config/metrics (optional features)
@@ -238,6 +238,7 @@ async def config():
     offline = bool(os.getenv("TRANSFORMERS_OFFLINE") or os.getenv("HF_HUB_OFFLINE"))
     return {
         "vlm_repo": os.getenv("DOCLING_VLM_REPO"),
+        "database": DB_BACKEND_META,
         "hf_auth": bool(os.getenv("HUGGINGFACE_HUB_TOKEN")),
         "frontend_origin": frontend_origin,
         "gpu": gpu,
@@ -660,21 +661,70 @@ async def extract_langextract(req: LangExtractRequest):
 # ---------------- Vector Search ----------------
 class SearchRequest(BaseModel):
     q: str
-    k: int = 10
+    k: int | None = 10
+    types: list[str] | None = None  # subset of ['pdf','api','log','tag']
 
 
 @app.post("/search")
 async def search(req: SearchRequest):
     t0 = time.time()
-    hits = search_index.search(req.q, k=req.k)
-    elapsed_ms = int((time.time() - t0) * 1000)
+    types = {t.lower() for t in (req.types or []) if t}
+
+    results_payload: list[dict] = []
+    if (req.q or "").strip() == "__ui_test__":
+        # Keep parity with UI smoke path while supporting type filters
+        results_payload = [{
+            "score": 1.0,
+            "text": "UI Test Result",
+            "meta": {"type": "api", "deeplink": {"panel": "apis"}},
+        }]
+        if types and "api" not in types:
+            results_payload = []
+    else:
+        hits = search_index.search(req.q or "", k=req.k or 10)
+        for hit in hits:
+            meta = dict(hit.meta or {})
+            entry_type = (meta.get("type") or "").lower()
+            if types and entry_type not in types:
+                continue
+
+            if entry_type == "pdf":
+                deeplink = {
+                    "panel": "workspace",
+                    "artifact_id": meta.get("artifact_id"),
+                    "chunk": meta.get("chunk"),
+                }
+                page = meta.get("page")
+                if page is not None:
+                    deeplink["page"] = page
+            elif entry_type == "api":
+                deeplink = {"panel": "apis", "api_id": meta.get("id")}
+            elif entry_type == "log":
+                deeplink = {
+                    "panel": "logs",
+                    "document_id": meta.get("document_id"),
+                    "code": meta.get("code"),
+                }
+            elif entry_type == "tag":
+                deeplink = {
+                    "panel": "tags",
+                    "document_id": meta.get("document_id"),
+                    "q": meta.get("tag") or meta.get("text"),
+                }
+            else:
+                deeplink = {}
+
+            results_payload.append({
+                "score": hit.score,
+                "text": hit.text,
+                "meta": {**meta, "deeplink": deeplink},
+            })
+
+    elapsed_ms = max(0, int((time.time() - t0) * 1000))
     return {
         "took_ms": elapsed_ms,
-        "count": len(hits),
-        "results": [
-            {"score": h.score, "text": h.text, "meta": h.meta}
-            for h in hits
-        ],
+        "count": len(results_payload),
+        "results": results_payload,
     }
 
 
@@ -1523,54 +1573,6 @@ def metrics_prometheus():
         f"pmoves_hrm_avg_latency_ms {snap['avg_latency_ms']}",
     ]
     return ("\n".join(lines) + "\n", 200, {"Content-Type": "text/plain; version=0.0.4"})
-# ---------------- Search endpoints ----------------
-
-class SearchRequest(BaseModel):
-    q: str
-    k: int | None = 10
-    types: list[str] | None = None  # subset of ['pdf','api','log','tag']
-
-
-@app.post("/search")
-async def search(req: SearchRequest):
-    # UI smoke test shortcut
-    if (req.q or "").strip() == "__ui_test__":
-        return {"results": [{
-            "score": 1.0,
-            "text": "UI Test Result",
-            "meta": {"type": "api", "deeplink": {"panel": "apis"}}
-        }]}
-    results = search_index.search(req.q or "", k=req.k or 10)
-    types = set([t.lower() for t in (req.types or [])])
-    out = []
-    for r in results:
-        m = r.meta or {}
-        t = (m.get("type") or "").lower()
-        if types and t not in types:
-            continue
-        # Construct deep-link info for the frontend
-        deeplink: dict = {}
-        if t == "pdf":
-            deeplink = {"panel": "workspace", "artifact_id": m.get("artifact_id"), "chunk": m.get("chunk"), **({"page": m.get("page")} if m.get("page") is not None else {})}
-        elif t == "api":
-            deeplink = {"panel": "apis", "api_id": m.get("id")}
-        elif t == "log":
-            deeplink = {"panel": "logs", "document_id": m.get("document_id"), "code": m.get("code")}
-        elif t == "tag":
-            deeplink = {"panel": "tags", "document_id": m.get("document_id"), "q": m.get("tag") or m.get("text")}
-        out.append({
-            "score": r.score,
-            "text": r.text,
-            "meta": {**m, "deeplink": deeplink}
-        })
-    return {"results": out}
-
-
-@app.post("/search/rebuild")
-async def search_rebuild():
-    return search_index.rebuild()
-
-
 @app.get("/open/pdf")
 async def open_pdf(artifact_id: str, page: int | None = None):
     if _env_flag("FAST_PDF_MODE", True):

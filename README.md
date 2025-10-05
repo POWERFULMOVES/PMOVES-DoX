@@ -50,6 +50,54 @@ Then:
 - Try Global Search; explore Logs/APIs/Tags
 - Tags → Load LMS Preset → Preview/Extract → Export POML (pick variant)
 
+### Optional: Supabase Backend
+
+1. **Start Supabase locally**
+   ```bash
+   supabase start
+   ```
+   - The Supabase CLI (install via `npm i -g supabase` or the Windows installer) spins up Postgres, PostgREST, and storage using Docker.
+   - CLI output (or `.supabase/.env`) contains `API_URL`, `SERVICE_ROLE_KEY`, and `ANON_KEY` that the backend/backfill script will read automatically.
+   - If you prefer a custom setup, fall back to `docker compose -f docker-compose.supabase.yml up -d`.
+2. Seed Supabase from your existing SQLite data:
+   ```bash
+   python tools/backfill_supabase.py --from-sqlite backend/db.sqlite3 --reset
+   ```
+3. Point the backend at Supabase (choose one):
+   - **Supabase CLI** (recommended)
+     ```bash
+     export DB_BACKEND=supabase
+     set -a && source .supabase/.env && set +a   # bash/zsh
+     ```
+     PowerShell:
+     ```powershell
+     foreach ($line in Get-Content .supabase/.env) {
+       if (-not $line.Contains('=')) { continue }
+       $name,$value = $line -split '=',2
+       Set-Item Env:$name $value
+     }
+     ```
+   - **Manual compose fallback**
+     ```bash
+     export DB_BACKEND=supabase
+     export SUPABASE_URL=http://127.0.0.1:55425
+     export SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJyb2xlIjoic2VydmljZV9yb2xlIiwiaXNzIjoic3VwYWJhc2UiLCJpYXQiOjAsImV4cCI6MjUzNDAyMzAwNzk5fQ.HPvdDMnzeFHOYHVnKEwec71btVPz2lZ5xgiSSAQgGOU
+     export SUPABASE_ANON_KEY=anon
+     ```
+4. Optional: keep SQLite + Supabase in sync during migration with `SUPABASE_DUAL_WRITE=true`.
+5. When finished, stop the local stack:
+   ```bash
+   supabase stop
+   ```
+
+> The Supabase schema lives under `backend/migrations/supabase/001_init.sql`. Apply it (or run `supabase db push`) before switching a hosted environment.
+
+### GPU Controls
+
+- `SEARCH_DEVICE` – preferred device for SentenceTransformers (auto-detects CUDA when present).
+- `DOCLING_DEVICE` / `DOCLING_NUM_THREADS` – Docling accelerator preference and CPU thread cap.
+- Hardware preference order follows Windows → WSL → Linux (Docker). Set the env vars in your `.env`/compose overrides to pin behaviour across hardware (RTX 50-series, Jetson Orin, mobile edge).
+
 Local-first models
 - Ollama (optional): docker compose up ollama (GPU compose) and toggle “Use Ollama” in Tags.
 - Offline HF: set TRANSFORMERS_OFFLINE/HF_HUB_OFFLINE to prefer cached models.

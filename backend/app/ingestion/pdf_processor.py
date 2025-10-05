@@ -9,9 +9,44 @@ from docling.document_converter import DocumentConverter, PdfFormatOption
 from docling.datamodel.base_models import InputFormat
 from docling.datamodel.pipeline_options import (
     PdfPipelineOptions,
-    VlmPipelineOptions,
     PictureDescriptionVlmOptions,
 )
+try:
+    from docling.datamodel.accelerator_options import AcceleratorOptions
+except ImportError:  # pragma: no cover
+    AcceleratorOptions = None  # type: ignore
+
+def _torch_cuda_available() -> bool:
+    try:
+        import torch  # type: ignore
+        return hasattr(torch, "cuda") and torch.cuda.is_available()
+    except Exception:
+        return False
+
+
+def _build_accelerator_options() -> AcceleratorOptions | None:
+    if AcceleratorOptions is None:
+        return None
+
+    desired = (os.getenv("DOCLING_DEVICE") or "").strip().lower()
+    if not desired or desired == "auto":
+        desired = "cuda" if _torch_cuda_available() else "cpu"
+    elif desired.startswith("cuda") and not _torch_cuda_available():
+        desired = "cpu"
+
+    threads_env = os.getenv("DOCLING_NUM_THREADS")
+    num_threads = None
+    if threads_env:
+        try:
+            num_threads = max(1, int(threads_env))
+        except ValueError:
+            num_threads = None
+
+    try:
+        return AcceleratorOptions(device=desired, num_threads=num_threads)
+    except Exception:  # pragma: no cover
+        return None
+
 
 async def process_pdf(
     file_path: Path, 
@@ -28,6 +63,8 @@ async def process_pdf(
     use_vlm = bool(vlm_repo)
     ocr_enabled = os.getenv("PDF_OCR_ENABLED", "false").lower() == "true"
     picture_enabled = os.getenv("PDF_PICTURE_DESCRIPTION", "false").lower() == "true" and bool(vlm_repo)
+    accelerator_options = _build_accelerator_options()
+
     if use_vlm:
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_table_structure = True
@@ -41,14 +78,17 @@ async def process_pdf(
         pipeline_options = PdfPipelineOptions()
         pipeline_options.do_table_structure = True
         pipeline_options.do_ocr = ocr_enabled
-    
+
+    if accelerator_options and hasattr(pipeline_options, "accelerator_options"):
+        pipeline_options.accelerator_options = accelerator_options
+
     # Initialize converter with Granite backend
     converter = DocumentConverter(
         format_options={
             InputFormat.PDF: PdfFormatOption(pipeline_options=pipeline_options)
         }
     )
-    
+
     # Convert PDF
     result = converter.convert(str(file_path))
     doc = result.document

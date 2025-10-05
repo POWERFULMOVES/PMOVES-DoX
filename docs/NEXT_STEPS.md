@@ -19,6 +19,14 @@
 - CI workflows set `OPEN_PDF_ENABLED=true` across CPU/GPU/UI jobs so smoke tests can validate PDF open links.
 - Minor UI polish: added the small page badge next to the result type label.
 
+### Recent Updates (2025-10-04)
+- Unified the FastAPI `/search` route so timing/count telemetry is retained alongside type-filtering and deeplink enrichment.
+- Added backend unit coverage for `/search` filter edge cases, PDF text-units fallbacks, and `/open/pdf` error handling; see `backend/tests/test_search_routes.py`.
+- Introduced GPU-aware toggles (`SEARCH_DEVICE`, `DOCLING_DEVICE`, `DOCLING_NUM_THREADS`) so SentenceTransformers and Docling can target the RTX 4090 or fall back gracefully.
+- CUDA detection now prioritizes RTX/Jetson GPUs (with CPU fallback) and matches the Windows > WSL > Linux docker stack guidance.
+- Draft Supabase migration playbook captured in [`docs/SUPABASE_MIGRATION.md`](SUPABASE_MIGRATION.md).
+- Supabase backfill CLI added at 	ools/backfill_supabase.py; run supabase start then python tools/backfill_supabase.py --from-sqlite backend/db.sqlite3 --reset (script reads .supabase/.env automatically).
+
 ## Priorities (Weeks 3–4)
 - P0
   - DONE: FAISS vector search + `/search` + Global search bar (header)
@@ -159,8 +167,8 @@
   - Ensure `OPEN_PDF_ENABLED` present (DONE)
 
 - Tests
-  - /search filters + deeplink construction edge cases (invalid/empty type lists) - owner: __, due: 2025-10-06
-  - PDF page mapping fallbacks (missing or mismatched `text_units.json`) - owner: __, due: 2025-10-06
+  - /search filters + deeplink construction edge cases (invalid/empty type lists) - owner: __, due: 2025-10-06 (DONE 2025-10-04)
+  - PDF page mapping fallbacks (missing or mismatched `text_units.json`) - owner: __, due: 2025-10-06 (DONE 2025-10-04)
   - `/open/pdf` toggle + error paths (disabled, missing artifact, non-PDF) - owner: __, due: 2025-10-07
 
 - HRM sidecar experiment wired to backend `/experiments/hrm/*` - owner: __, due: 2025-10-09

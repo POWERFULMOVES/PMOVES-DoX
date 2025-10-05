@@ -48,3 +48,11 @@ yarn-error.log*
 .coverage
 htmlcov/
 .pytest_cache/
+# Local env
+backend/.venv/
+backend/db.sqlite3
+supabase/
+watch/
+uploads/
+.db.sqlite3
+.supabase/

@@ -3,6 +3,7 @@ from __future__ import annotations
 import os
 import json
 import uuid
+import logging
 from dataclasses import dataclass
 from typing import Any, Dict, List, Tuple, Optional
 from pathlib import Path
@@ -32,6 +33,9 @@ class SearchResult:
     meta: Dict[str, Any]
 
 
+LOGGER = logging.getLogger(__name__)
+
+
 class SearchIndex:
     """Lightweight vector index across PDFs (markdown), APIs, logs, and tags.
 
@@ -42,15 +46,28 @@ class SearchIndex:
     def __init__(self, db):
         self.db = db
         self.model_name = os.getenv("SEARCH_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+        self.device = self._resolve_device()
         self.model: Optional[SentenceTransformer] = None
         self.faiss_index = None
         self.ids: List[str] = []
         self.payloads: List[Chunk] = []
         self._loaded = False
 
+    def _resolve_device(self) -> str:
+        requested = os.getenv("SEARCH_DEVICE")
+        if requested:
+            return requested
+        try:
+            import torch  # type: ignore
+            if hasattr(torch, "cuda") and torch.cuda.is_available():
+                return "cuda"
+        except Exception:
+            pass
+        return "cpu"
+
     def _load_model(self):
         if self.model is None:
-            self.model = SentenceTransformer(self.model_name)
+            self.model = SentenceTransformer(self.model_name, device=self.device)
 
     def _gather_chunks(self) -> List[Chunk]:
         chunks: List[Chunk] = []
@@ -171,8 +188,37 @@ class SearchIndex:
             # fallback uses numpy arrays
             self.faiss_index = emb
 
+        self._sync_remote_embeddings(chunks, emb)
+
         self._loaded = True
         return {"items": len(chunks), "backend": "faiss" if faiss is not None else "numpy"}
+
+    def _sync_remote_embeddings(self, chunks: List[Chunk], embeddings: np.ndarray) -> None:
+        store = getattr(self.db, "store_search_chunks", None)
+        if not callable(store):
+            return
+        reset = getattr(self.db, "reset_search_chunks", None)
+        try:
+            if callable(reset):
+                reset()
+            vectors = embeddings.tolist()
+            records: List[Dict[str, Any]] = []
+            for chunk, vector in zip(chunks, vectors):
+                meta = chunk.get("meta") or {}
+                records.append(
+                    {
+                        "id": chunk.get("id"),
+                        "document_id": meta.get("artifact_id") or meta.get("document_id"),
+                        "source_type": meta.get("type"),
+                        "chunk_index": meta.get("chunk"),
+                        "text": chunk.get("text"),
+                        "meta": meta,
+                        "embedding": vector,
+                    }
+                )
+            store(records)
+        except Exception as exc:  # pragma: no cover - remote sync should not break local search
+            LOGGER.warning("Failed to sync search embeddings to remote store: %s", exc)
 
     def search(self, query: str, k: int = 10) -> List[SearchResult]:
         if not self._loaded:

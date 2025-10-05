@@ -142,6 +142,13 @@ class Database:
             s.commit()
 
 
+    def reset_search_chunks(self) -> None:
+        """No-op for SQLite backend; Supabase variant overrides."""
+        return None
+
+    def store_search_chunks(self, chunks: List[Dict]) -> None:
+        return None
+
 # -------- Extended schema for LMS_DOCS --------
 
 class Document(SQLModel, table=True):
