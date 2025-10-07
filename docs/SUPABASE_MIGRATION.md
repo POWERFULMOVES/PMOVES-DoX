@@ -1,7 +1,7 @@
 # Supabase Migration Plan
 
 ## Overview
-Migrate PMOVES_DoX backend persistence from the local SQLite layer (`ExtendedDatabase`) to Supabase (managed Postgres + `pgvector`) while keeping feature parity for ingestion, tagging, search, and HRM metrics. The migration must preserve existing APIs and enable advanced LangExtract/Docling workflows across heterogeneous hardware (RTX 50-series, Jetson Orin, mobile edge devices) by delegating storage and vector math to Supabase where possible.
+Migrate PMOVES-DoX backend persistence from the local SQLite layer (`ExtendedDatabase`) to Supabase (managed Postgres + `pgvector`) while keeping feature parity for ingestion, tagging, search, and HRM metrics. The migration must preserve existing APIs and enable advanced LangExtract/Docling workflows across heterogeneous hardware (RTX 50-series, Jetson Orin, mobile edge devices) by delegating storage and vector math to Supabase where possible.
 
 ## Environment & Tooling
 - **Credentials**: define `SUPABASE_URL`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY` as env vars (service key stored outside git; use local `.env` only).

@@ -1,6 +1,6 @@
-# AGENTS.md — Agent Working Agreement (PMOVES_DoX)
+# AGENTS.md — Agent Working Agreement (PMOVES-DoX)
 
-This file defines how agents should work within this repository. Its scope covers the entire `PMOVES_DoX/` directory tree.
+This file defines how agents should work within this repository. Its scope covers the entire `PMOVES-DoX/` directory tree.
 
 ## Mission
 Build and operate a documentation + troubleshooting workbench focused on LMS docs (PDF), XML logs, and API collections (OpenAPI/Postman). Core features:
@@ -9,7 +9,7 @@ Build and operate a documentation + troubleshooting workbench focused on LMS doc
 - Search and visualize with datavzrd dashboards; schema docs with schemavzrd
 
 ## Environment Expectations (Codex CLI)
-- Filesystem: full write access within this repo; ok to create/modify files under `PMOVES_DoX/`
+- Filesystem: full write access within this repo; ok to create/modify files under `PMOVES-DoX/`
 - Network: enabled (to build images, pull models, fetch dependencies)
 - Approvals: prefer `on-failure` or `never` for smooth iteration
 - GPU: available on machines running the GPU compose profile (NVIDIA Container Toolkit required)

@@ -1,4 +1,4 @@
-# PMOVES_DoX
+# PMOVES-DoX
 
 The ultimate document structured data extraction and analysis tool. Extract, analyze, transform, and visualize data from PDFs, XML logs, CSV/XLSX, and OpenAPI/Postman collections. Local‑first with Hugging Face + Ollama; ships as standalone, Docker, and MS Teams Copilot/MCP‑friendly.
 
@@ -7,7 +7,7 @@ The ultimate document structured data extraction and analysis tool. Extract, ana
 Option A - Docker (CPU, default)
 
 ```bash
-cd PMOVES_DoX
+cd PMOVES-DoX
 cp .env.example .env  # first time only
 docker compose -f docker-compose.cpu.yml up --build -d
 ```
@@ -15,7 +15,7 @@ docker compose -f docker-compose.cpu.yml up --build -d
 Option B — GPU + Tools (internal Ollama, no host port conflicts)
 
 ```bash
-cd PMOVES_DoX
+cd PMOVES-DoX
 cp .env.example .env  # first time only
 # Start full stack with GPU backend + internal Ollama + tools (datavzrd/schemavzrd)
 docker compose --compatibility --profile ollama --profile tools up --build -d
@@ -30,7 +30,7 @@ Option C — Local dev
 
 1) Backend
 ```bash
-cd PMOVES_DoX/backend
+cd PMOVES-DoX/backend
 python -m venv venv && . venv/bin/activate  # Windows: .\venv\Scripts\Activate.ps1
 pip install -r requirements.txt
 uvicorn app.main:app --host 0.0.0.0 --port 8000
@@ -38,7 +38,7 @@ uvicorn app.main:app --host 0.0.0.0 --port 8000
 
 2) Frontend
 ```bash
-cd PMOVES_DoX/frontend
+cd PMOVES-DoX/frontend
 npm i
 npm run dev
 ```
@@ -143,7 +143,7 @@ OpenAPI/XML enrichments
 
 ```powershell
 # Navigate to backend directory
-cd PMOVES_DoX/backend
+cd PMOVES-DoX/backend
 
 # Copy env template (optional)
 copy .env.example .env
@@ -172,7 +172,7 @@ Backend will run on `http://localhost:8000`
 
 ```powershell
 # Navigate to frontend directory
-cd PMOVES_DoX/frontend
+cd PMOVES-DoX/frontend
 
 # Copy env template (optional)
 copy .env.local.example .env.local
@@ -191,7 +191,7 @@ Frontend will run on `http://localhost:3000`
 Prereqs: Docker Desktop installed and running.
 
 ```powershell
-cd PMOVES_DoX
+cd PMOVES-DoX
 # Optional (recommended on Docker Desktop):
 docker compose --compatibility up --build
 ```
@@ -202,7 +202,7 @@ docker compose --compatibility up --build
  - schemavzrd schema docs (if DB_URL is set): http://localhost:5174
 
 Data folders `backend/uploads` and `backend/artifacts` are volume-mounted.
-There is also a watch folder: `PMOVES_DoX/watch` mounted to `/app/watch` in the backend.
+There is also a watch folder: `PMOVES-DoX/watch` mounted to `/app/watch` in the backend.
 
 PDF OCR support in container: the backend image installs `poppler-utils`, `tesseract-ocr`, and `tesseract-ocr-eng` to support Docling’s PDF parsing and OCR.
 
@@ -237,7 +237,7 @@ $env:DOCLING_VLM_REPO = 'ibm-granite/granite-docling-258M'
 2) Start (GPU is default in docker-compose.yml):
 
 ```
-cd PMOVES_DoX
+cd PMOVES-DoX
 docker compose --compatibility --profile ollama --profile tools up --build -d
 ```
 
@@ -253,7 +253,7 @@ Jetson Nano (JetPack 4.x, L4T r32.7.1)
 
 ```bash
 # On the Jetson device (ARM64)
-cd PMOVES_DoX
+cd PMOVES-DoX
 cp .env.example .env
 
 # Start backend + frontend (CPU/GPU via L4T runtime)
@@ -275,7 +275,7 @@ Use the Orin-specific compose + Dockerfile that default to an L4T ML base for r3
 
 ```bash
 # On the Orin Nano (ARM64)
-cd PMOVES_DoX
+cd PMOVES-DoX
 cp .env.example .env
 
 # Start backend + frontend with Orin/L4T base (defaults to r36.3.0)
@@ -303,12 +303,12 @@ Notes
 4. **View Citations**: See exactly where each fact came from with page numbers and coordinates
 
 ### Sample files
-- CSV: `PMOVES_DoX/samples/sample.csv`
-- PDF: `PMOVES_DoX/samples/sample.pdf` (downloaded by `setup.ps1`; or use any PDF you have)
+- CSV: `PMOVES-DoX/samples/sample.csv`
+- PDF: `PMOVES-DoX/samples/sample.pdf` (downloaded by `setup.ps1`; or use any PDF you have)
 
 ### Watch Folder
 
-Drop `.pdf`, `.csv`, `.xlsx`, or `.xls` files into `PMOVES_DoX/watch` and the backend will auto-ingest them. Behavior is controlled by env vars (see `backend/.env.example`):
+Drop `.pdf`, `.csv`, `.xlsx`, or `.xls` files into `PMOVES-DoX/watch` and the backend will auto-ingest them. Behavior is controlled by env vars (see `backend/.env.example`):
 
 - `WATCH_ENABLED` (default `true`)
 - `WATCH_DIR` (default `/app/watch` in the container)
@@ -365,7 +365,7 @@ Notes:
 ## Project Structure
 
 ```
-PMOVES_DoX/
+PMOVES-DoX/
 ├── backend/
 │   ├── app/
 │   │   ├── main.py              # FastAPI application
@@ -397,7 +397,7 @@ See `ADVANCED_FEATURES_PLAN.md` for roadmap of advanced PDF processing features.
 One-command smoke via npm (uses Python + Docker Compose under the hood):
 
 ```bash
-cd PMOVES_DoX
+cd PMOVES-DoX
 npm run smoke         # CPU compose (default)
 npm run smoke:gpu     # GPU compose (internal Ollama)
 ```
@@ -405,7 +405,7 @@ npm run smoke:gpu     # GPU compose (internal Ollama)
 UI smoke with Playwright (brings up frontend + backend, runs headless tests):
 
 ```bash
-cd PMOVES_DoX
+cd PMOVES-DoX
 npm run smoke:ui       # CPU compose
 npm run smoke:ui:gpu   # GPU compose
 ```
@@ -413,13 +413,13 @@ npm run smoke:ui:gpu   # GPU compose
 Run the Python smoke directly against a running backend:
 
 ```bash
-cd PMOVES_DoX
+cd PMOVES-DoX
 API_BASE=http://localhost:8000 python smoke/smoke_backend.py
 ```
 
 ## MCP Usage (starter)
 
-An MCP manifest is provided for PMOVES_DoX tools (search, extract_tags, export_poml):
+An MCP manifest is provided for PMOVES-DoX tools (search, extract_tags, export_poml):
 
 - Path: `backend/mcp/manifest.json`
 - Tools:
@@ -488,7 +488,7 @@ Copilot Studio / POML
 Option A — use Docker from the script (recommended):
 
 ```powershell
-cd PMOVES_DoX
+cd PMOVES-DoX
 $env:SMOKE_COMPOSE = 'docker-compose.cpu.yml'    # or 'docker-compose.yml' for GPU
 python -m venv venv; ./venv/Scripts/Activate.ps1
 pip install -r smoke/requirements.txt requests
@@ -498,7 +498,7 @@ python smoke/run_smoke_docker.py
 Option B — run against an already running backend:
 
 ```powershell
-cd PMOVES_DoX
+cd PMOVES-DoX
 python -m venv venv; ./venv/Scripts/Activate.ps1
 pip install -r smoke/requirements.txt
 $env:API_BASE = 'http://localhost:8000'
@@ -553,7 +553,7 @@ To include https://github.com/google/mangle in your workflow, run it alongside t
 go install github.com/google/mangle/cmd/mangle@latest
 
 # Transform a CSV and drop into watch folder for auto-ingest
-mangle run your.mangle -i path\to\input.csv -o PMOVES_DoX\watch\transformed.csv
+mangle run your.mangle -i path\to\input.csv -o PMOVES-DoX\watch\transformed.csv
 ```
 
 You can also add a custom container for mangle later if you prefer containerized transforms.
@@ -563,7 +563,7 @@ You can also add a custom container for mangle later if you prefer containerized
 SQLite is used by default (`db.sqlite3`). Alembic scaffolding is included:
 
 ```powershell
-cd PMOVES_DoX/backend
+cd PMOVES-DoX/backend
 alembic upgrade head           # apply migrations (none initially)
 alembic revision --autogenerate -m "init"  # create a new migration from current SQLModel metadata
 alembic upgrade head

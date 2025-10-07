@@ -23,15 +23,15 @@ def build_poml(
     # Role + system guidance
     if variant == "troubleshoot":
         lines.append("  <role>You are a pragmatic SRE for an LMS platform. Diagnose succinctly with evidence.</role>")
-        lines.append("  <system-msg>PMOVES_DoX troubleshooting mode: prioritize error codes, components, timestamps, and likely root causes.</system-msg>")
+        lines.append("  <system-msg>PMOVES-DoX troubleshooting mode: prioritize error codes, components, timestamps, and likely root causes.</system-msg>")
         lines.append(f"  <task>Identify causes and fixes related to: {title}. Use logs, APIs, and tags to justify answers.</task>")
     elif variant == "catalog":
         lines.append("  <role>You are a precise technical writer. Generate concise catalogs from source artifacts.</role>")
-        lines.append("  <system-msg>PMOVES_DoX catalog mode: summarize APIs, key tags, and references for quick discovery.</system-msg>")
+        lines.append("  <system-msg>PMOVES-DoX catalog mode: summarize APIs, key tags, and references for quick discovery.</system-msg>")
         lines.append(f"  <task>Produce a compact catalog for: {title}. Include endpoint summaries and notable tags.</task>")
     else:
         lines.append("  <role>You are a precise analyst. Prefer terse answers with citations.</role>")
-        lines.append("  <system-msg>PMOVES_DoX: document analysis and structured extraction for LMS/enterprise artifacts.</system-msg>")
+        lines.append("  <system-msg>PMOVES-DoX: document analysis and structured extraction for LMS/enterprise artifacts.</system-msg>")
         lines.append(f"  <task>Answer questions about: {title}. Use provided APIs, tags, logs, and tables as sources.</task>")
 
     # Optional resources: document (markdown) and CHR table

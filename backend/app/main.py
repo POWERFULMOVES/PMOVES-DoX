@@ -48,7 +48,7 @@ hf_token = (
 if hf_token and not os.getenv("HUGGINGFACE_HUB_TOKEN"):
     os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
 
-app = FastAPI(title="PMOVES_DoX API")
+app = FastAPI(title="PMOVES-DoX API")
 
 # Optionally run Alembic migrations on startup
 if os.getenv("AUTO_MIGRATE", "false").lower() == "true":
@@ -208,7 +208,7 @@ async def _startup_watch():
 
 @app.get("/")
 async def root():
-    return {"message": "PMOVES_DoX API", "status": "running"}
+    return {"message": "PMOVES-DoX API", "status": "running"}
 
 @app.get("/config")
 async def config():
