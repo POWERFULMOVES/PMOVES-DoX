@@ -2,7 +2,7 @@ import { test, expect } from '@playwright/test';
 
 test('loads header and basic tabs', async ({ page }) => {
   await page.goto('/');
-  await expect(page.locator('text=PMOVES_DoX')).toBeVisible();
+  await expect(page.locator('text=PMOVES-DoX')).toBeVisible();
   // search is present
   const search = page.getByPlaceholder('Search docs, APIs, logs, tags…');
   await expect(search).toBeVisible();

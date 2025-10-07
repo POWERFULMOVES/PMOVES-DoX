@@ -1,7 +1,7 @@
 # Project Structure Overview
 
 ```
-PMOVES_DoX/
+PMOVES-DoX/
 ├── README.md                           # Main documentation
 ├── ADVANCED_FEATURES_PLAN.md          # Roadmap for advanced features
 ├── setup.ps1                          # Windows setup script

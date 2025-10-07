@@ -1,4 +1,4 @@
-# Next Steps Plan (PMOVES_DoX)
+# Next Steps Plan (PMOVES-DoX)
 
 ## Goals
 - Ingest + structure LMS Admin Guides (PDF), XML logs, and API collections
@@ -98,7 +98,7 @@
 - API detail modal; Logs time filters + CSV export (DONE)
 - CHR controls + richer PCA; datavzrd themes/spells
 - DB indexes; Alembic auto‑run; nightly GPU smoke
-- Docs walkthroughs + screencasts (update with PMOVES_DoX branding)
+- Docs walkthroughs + screencasts (update with PMOVES-DoX branding)
 
 ## HRM/Reasoning Enhancements
 - Sidecar HRM for iterative refinement

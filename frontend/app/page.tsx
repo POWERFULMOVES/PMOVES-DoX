@@ -84,7 +84,9 @@ export default function Home() {
             Processing PDFs in background: {queuedCount} file(s)…
           </div>
         )}
-        <p className="text-gray-600 mb-4">Upload LMS docs (PDF), XML logs, and API collections; structure, tag, search, and visualize.</p>
+        <h1 className="text-3xl font-semibold text-gray-900 mb-2">PMOVES-DoX</h1>
+        <p className="text-gray-600 mb-3">The ultimate document structured data extraction and analysis tool.</p>
+        <p className="text-gray-500 mb-6">Extract, analyze, transform, and visualize data from PDFs, XML logs, CSV/XLSX, and OpenAPI/Postman collections. Local-first with Hugging Face + Ollama; ships as standalone, Docker, and MS Teams Copilot/MCP-friendly.</p>
 
         <div className="mb-6 flex gap-2">
           {(['workspace','logs','apis','tags','artifacts'] as const).map(t => (

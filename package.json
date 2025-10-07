@@ -1,6 +1,7 @@
 {
-  "name": "lms-analyst-repo",
+  "name": "pmoves-dox-monorepo",
   "private": true,
+  "description": "PMOVES-DoX monorepo scripts and smoke test runners",
   "scripts": {
     "smoke": "node tools/run-smoke.js",
     "smoke:cpu": "node tools/run-smoke.js cpu",

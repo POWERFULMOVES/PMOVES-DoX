@@ -6,8 +6,8 @@ import { ToastProvider, ToastViewport } from '@/components/Toast'
 const inter = Inter({ subsets: ['latin'] })
 
 export const metadata: Metadata = {
-  title: 'PMOVES_DoX',
-  description: 'Ultimate document structured data extraction, analysis, transform and visualization',
+  title: 'PMOVES-DoX',
+  description: 'The ultimate document structured data extraction and analysis tool for PDFs, XML logs, CSV/XLSX, and OpenAPI/Postman collections.',
 }
 
 export default function RootLayout({

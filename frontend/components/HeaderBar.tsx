@@ -68,7 +68,7 @@ export default function HeaderBar() {
   return (
     <div className="sticky top-0 z-30 bg-white/90 backdrop-blur border-b">
       <div className="max-w-7xl mx-auto flex items-center gap-3 p-3">
-        <div className="font-semibold text-lg flex items-center gap-2">PMOVES_DoX {hrm && (<span title="HRM Sidecar enabled" className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">HRM</span>)}
+        <div className="font-semibold text-lg flex items-center gap-2">PMOVES-DoX {hrm && (<span title="HRM Sidecar enabled" className="text-[10px] px-2 py-0.5 rounded-full bg-purple-100 text-purple-700 border border-purple-200">HRM</span>)}
           {deeplinkInfo && (
             <>
               <span className="ml-2 text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200" title="Last deeplink target">{deeplinkInfo}</span>

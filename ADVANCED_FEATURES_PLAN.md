@@ -754,7 +754,7 @@ class CitationHighlighter:
 from celery import Celery
 import asyncio
 
-celery_app = Celery('meeting_analyst', broker='redis://localhost:6379')
+celery_app = Celery('pmoves_dox', broker='redis://localhost:6379')
 
 @celery_app.task
 def process_document_async(file_path: str, report_week: str):

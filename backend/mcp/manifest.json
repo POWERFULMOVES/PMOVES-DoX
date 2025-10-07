@@ -1,6 +1,6 @@
 {
   "schema_version": "1.0",
-  "name_for_human": "PMOVES_DoX",
+  "name_for_human": "PMOVES-DoX",
   "name_for_model": "pmoves_dox",
   "description_for_model": "Document ingestion, vector search, tag extraction, and POML export tools.",
   "capabilities": {

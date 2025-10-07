@@ -1,6 +1,7 @@
 {
-  "name": "meeting-analyst-frontend",
+  "name": "pmoves-dox-frontend",
   "version": "0.1.0",
+  "description": "PMOVES-DoX frontend for document data extraction and analysis",
   "private": true,
   "scripts": {
     "dev": "next dev",
