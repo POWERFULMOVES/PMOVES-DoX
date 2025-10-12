@@ -452,7 +452,7 @@ async def extract_tags(req: ExtractTagsRequest):
     t0 = time.time()
     def _heuristic_entities(limit: int = 5):
         import re as _re
-        candidates = _re.findall(r"([A-Z][a-z]+(?:\s+[A-Z][a-zA-Z]+){0,2})", text)
+        candidates = _re.findall(r"([A-Z][a-z]+(?:\s+[A-Z][a-zA-Z]+){0,2})", text)
         unique = []
         for c in candidates:
             c = c.strip()
