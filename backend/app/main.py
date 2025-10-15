@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 import os
 from pathlib import Path
 import shutil
-from typing import List, Dict
+from typing import List, Dict, Optional
 import uuid
 from dotenv import load_dotenv
 import time
@@ -13,6 +13,7 @@ from docx import Document
 import subprocess
 import tempfile
 import threading
+import re
 from pydantic import BaseModel
 from app.hrm import HRMConfig, HRMMetrics, refine_sort_digits
 
@@ -404,6 +405,26 @@ class ExtractTagsRequest(BaseModel):
     examples: list[dict] | None = None
     dry_run: bool = False
     use_hrm: bool = False
+    include_poml: bool = False
+    poml_variant: str | None = None
+    mangle_exec: bool = False
+    mangle_file: str | None = None
+    mangle_query: str | None = None
+
+
+class AutoTagRequest(BaseModel):
+    async_run: bool | None = None
+    include_poml: bool | None = None
+    use_hrm: bool | None = None
+    model_id: str | None = None
+    api_key: str | None = None
+    prompt: str | None = None
+    examples: list[dict] | None = None
+    dry_run: bool | None = None
+    mangle_exec: bool | None = None
+    mangle_file: str | None = None
+    mangle_query: str | None = None
+    poml_variant: str | None = None
 
 
 def _compose_text_for_document(doc: Dict) -> str:
@@ -431,9 +452,146 @@ def _compose_text_for_document(doc: Dict) -> str:
         return ""
 
 
+def _load_document(document_id: str) -> Optional[Dict]:
+    try:
+        return next((d for d in db.list_documents() if d.get("id") == document_id), None)
+    except Exception:
+        return None
+
+
+def _build_poml_context(document_id: str, variant: Optional[str] = None) -> Optional[str]:
+    doc = _load_document(document_id)
+    if not doc:
+        return None
+    try:
+        apis = [a for a in db.list_apis(tag=None, method=None, path_like=None) if a.get("document_id") == document_id]
+    except Exception:
+        apis = []
+    try:
+        tags = db.list_tags(document_id=document_id, q=None)
+    except Exception:
+        tags = []
+    try:
+        logs = [
+            l for l in db.list_logs(level=None, code=None, q=None, ts_from=None, ts_to=None)
+            if l.get("document_id") == document_id
+        ]
+    except Exception:
+        logs = []
+    md_path: Optional[Path] = None
+    chr_csv: Optional[Path] = None
+    try:
+        src = Path(doc.get("path", ""))
+        stem = src.stem
+        cand_md = ARTIFACTS_DIR / f"{stem}.md"
+        if cand_md.exists():
+            md_path = cand_md
+        cand_chr = ARTIFACTS_DIR / "chr" / f"{stem}_chr.csv"
+        if cand_chr.exists():
+            chr_csv = cand_chr
+    except Exception:
+        md_path = None
+        chr_csv = None
+    try:
+        poml_variant = variant or os.getenv("AUTOTAG_POML_VARIANT") or "generic"
+        poml = build_poml(doc, apis, tags, logs, md_path, chr_csv, poml_variant)
+        # Avoid overwhelming prompts with massive payloads
+        return poml[:4000]
+    except Exception:
+        return None
+
+
+def _resolve_mangle_file(path_hint: Optional[str]) -> Optional[Path]:
+    candidate = path_hint or os.getenv("AUTOTAG_MANGLE_FILE") or os.getenv("MANGLE_FILE")
+    if not candidate:
+        return None
+    try:
+        p = Path(candidate).expanduser()
+        if p.exists():
+            return p
+    except Exception:
+        return None
+    return None
+
+
+def _load_mangle_rules(path: Optional[Path]) -> Optional[str]:
+    if not path:
+        return None
+    try:
+        return path.read_text(encoding="utf-8")
+    except Exception:
+        return None
+
+
+def _apply_mangle(tags: List[str], rules_path: Path, query: Optional[str]) -> Optional[List[str]]:
+    if not shutil.which("mg"):
+        return None
+    if not tags:
+        return None
+    program = rules_path
+    if not program.exists():
+        return None
+    q = query or os.getenv("AUTOTAG_MANGLE_QUERY") or "normalized_tag(T)"
+    tmp_path: Optional[Path] = None
+    try:
+        with tempfile.NamedTemporaryFile("w", suffix=".edb", delete=False, encoding="utf-8") as tmp:
+            tmp_path = Path(tmp.name)
+            for tag in tags:
+                safe = tag.replace("\"", "\\\"")
+                tmp.write(f'tag_raw("{safe}").\n')
+        proc = subprocess.run(
+            ["mg", "--ruleset", str(program), "--edb", str(tmp_path), "--query", q],
+            check=False,
+            capture_output=True,
+            text=True,
+        )
+        if proc.returncode != 0:
+            return None
+        output = (proc.stdout or "").strip()
+        if not output:
+            return None
+        matches = re.findall(r'"([^"\\]+)"', output)
+        if matches:
+            cleaned = [m.strip() for m in matches if m.strip()]
+            if cleaned:
+                return cleaned
+        lines = [line.strip() for line in output.splitlines() if line.strip()]
+        return lines or None
+    except Exception:
+        return None
+    finally:
+        if tmp_path and tmp_path.exists():
+            try:
+                tmp_path.unlink()
+            except Exception:
+                pass
+
+
+def _resolve_document_for_artifact(artifact_id: str) -> tuple[Dict, Dict]:
+    art = next((a for a in db.get_artifacts() if a.get("id") == artifact_id), None)
+    if not art:
+        raise HTTPException(404, "Artifact not found")
+    doc = _load_document(artifact_id)
+    if doc:
+        return art, doc
+    art_path = art.get("filepath")
+    if art_path:
+        try:
+            art_abs = Path(art_path).resolve()
+        except Exception:
+            art_abs = None
+        if art_abs is not None:
+            for cand in db.list_documents():
+                try:
+                    cand_path = Path(cand.get("path", "")).resolve()
+                except Exception:
+                    continue
+                if cand_path == art_abs:
+                    return art, cand
+    raise HTTPException(404, "No document associated with artifact")
 @app.post("/extract/tags")
 async def extract_tags(req: ExtractTagsRequest):
-    doc = next((d for d in db.list_documents() if d.get("id") == req.document_id), None)
+    doc = _load_document(req.document_id)
     if not doc:
         raise HTTPException(404, "Document not found")
 
@@ -445,6 +603,15 @@ async def extract_tags(req: ExtractTagsRequest):
         "Extract application or system tags relevant to loan management systems (LMS). "
         "Return concise tags as exact spans from text. Examples: 'Loan Origination', 'Underwriting', 'Servicing', 'LoanService'."
     ))
+    poml_text: Optional[str] = None
+    if req.include_poml:
+        poml_text = _build_poml_context(req.document_id, req.poml_variant)
+        if poml_text:
+            preset_prompt += "\n\nPOML CONTEXT:\n```\n" + poml_text + "\n```"
+    mangle_path = _resolve_mangle_file(req.mangle_file)
+    mangle_rules = _load_mangle_rules(mangle_path)
+    if mangle_rules:
+        preset_prompt += "\n\nMANGLE RULES:\n```\n" + mangle_rules + "\n```"
     # If dry_run and no API key/model configured, use a heuristic fallback to avoid external calls during smoke.
     use_fallback = (
         req.dry_run and not (req.api_key or os.getenv("GOOGLE_API_KEY") or os.getenv("OPENAI_API_KEY") or os.getenv("LANGEXTRACT_API_KEY"))
@@ -508,18 +675,29 @@ async def extract_tags(req: ExtractTagsRequest):
         entities = [{"extraction_text": t, "extraction_class": "hrm-refined"} for t in tags]
         dt = (time.time() - t0) * 1000.0
         HRM_STATS.record(steps=steps, latency_ms=dt, payload={"mode": "extract_tags", "doc": req.document_id})
-    saved = 0
-    extracted: List[str] = []
+    tags_for_persistence: List[tuple[str, str]] = []
     for e in entities:
         tag_text = e.get("extraction_text") or e.get("text")
         if not tag_text:
             continue
         tag_text = str(tag_text).strip()
+        if not tag_text:
+            continue
+        source_ptr = str(e.get("extraction_class") or "langextract")
+        tags_for_persistence.append((tag_text, source_ptr))
+
+    if mangle_path and req.mangle_exec:
+        mangled = _apply_mangle([t for t, _ in tags_for_persistence], mangle_path, req.mangle_query)
+        if mangled:
+            tags_for_persistence = [(t, "mangle") for t in mangled]
+
+    saved = 0
+    extracted: List[str] = []
+    for tag_text, source_ptr in tags_for_persistence:
         extracted.append(tag_text)
         if req.dry_run:
             continue
         if not db.has_tag(req.document_id, tag_text):
-            source_ptr = e.get("extraction_class") or "langextract"
             if source_ptr == "hrm-refined" and (HRM_ENABLED and req.use_hrm):
                 try:
                     s_val = int(steps) if isinstance(steps, int) else None
@@ -533,12 +711,64 @@ async def extract_tags(req: ExtractTagsRequest):
                 "tag": tag_text,
                 "score": None,
                 "source_ptr": source_ptr,
+                "hrm_steps": steps if (HRM_ENABLED and req.use_hrm) else None,
             })
             saved += 1
     resp = {"status": "ok", "document_id": req.document_id, "tags_saved": saved, "tags": extracted}
     if HRM_ENABLED and req.use_hrm:
         resp["hrm"] = {"enabled": True, "steps": steps}
     return resp
+
+
+@app.post("/autotag/{artifact_id}")
+async def auto_tag_artifact(artifact_id: str, req: AutoTagRequest):
+    artifact, document = _resolve_document_for_artifact(artifact_id)
+    include_poml = req.include_poml if req.include_poml is not None else _env_flag("AUTOTAG_INCLUDE_POML", _env_flag("POML_IN_PROMPT", False))
+    use_hrm_flag = req.use_hrm if req.use_hrm is not None else (_env_flag("AUTOTAG_USE_HRM", False) and HRM_ENABLED)
+    model_id = req.model_id
+    api_key = req.api_key
+    prompt = req.prompt
+    examples = req.examples
+    dry_run = bool(req.dry_run)
+    mangle_exec = req.mangle_exec if req.mangle_exec is not None else _env_flag("AUTOTAG_MANGLE_EXEC", False)
+    mangle_file = req.mangle_file or os.getenv("AUTOTAG_MANGLE_FILE") or os.getenv("MANGLE_FILE")
+    mangle_query = req.mangle_query or os.getenv("AUTOTAG_MANGLE_QUERY")
+    poml_variant = req.poml_variant or os.getenv("AUTOTAG_POML_VARIANT")
+
+    tag_request = ExtractTagsRequest(
+        document_id=document.get("id"),
+        model_id=model_id,
+        api_key=api_key,
+        prompt=prompt,
+        examples=examples,
+        dry_run=dry_run,
+        use_hrm=bool(use_hrm_flag),
+        include_poml=bool(include_poml),
+        poml_variant=poml_variant,
+        mangle_exec=bool(mangle_exec),
+        mangle_file=mangle_file,
+        mangle_query=mangle_query,
+    )
+
+    result = await extract_tags(tag_request)
+
+    try:
+        total_tags = len(db.list_tags(document_id=document.get("id"), q=None))
+    except Exception:
+        total_tags = 0
+
+    response = {
+        "status": result.get("status", "ok"),
+        "artifact_id": artifact.get("id"),
+        "document_id": document.get("id"),
+        "tags_saved": result.get("tags_saved", 0),
+        "tags_extracted": len(result.get("tags", [])),
+        "tags_total": total_tags,
+        "async_requested": bool(req.async_run),
+    }
+    if "hrm" in result:
+        response["hrm"] = result["hrm"]
+    return response
 
 
 @app.get("/tags/presets")

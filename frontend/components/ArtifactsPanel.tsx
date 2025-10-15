@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { useToast } from '@/components/Toast';
 
 export default function ArtifactsPanel() {
   const [artifacts, setArtifacts] = useState<any[]>([]);
@@ -8,6 +9,7 @@ export default function ArtifactsPanel() {
   const [detail, setDetail] = useState<any | null>(null);
   const [opts, setOpts] = useState<Record<string, any>>({});
   const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+  const { push } = useToast();
 
   const load = async () => {
     const r = await fetch(`${API}/artifacts`);
@@ -55,10 +57,31 @@ export default function ArtifactsPanel() {
       if (o.mangleQuery) body.mangle_query = String(o.mangleQuery);
       if (o.pomlVariant) body.poml_variant = String(o.pomlVariant);
       const r = await fetch(`${API}/autotag/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
-      if (!r.ok) { alert('Auto‑Tag failed'); return; }
-      // Give the background job a moment and then refresh
-      setTimeout(load, 1500);
-    } finally { setBusy(null); }
+      const contentType = r.headers.get('content-type') || '';
+      const payload = contentType.includes('application/json') ? await r.json() : await r.text();
+      if (!r.ok) {
+        const detail = typeof payload === 'string' ? payload : (payload?.detail || '');
+        const msg = detail ? `Auto‑Tag failed: ${detail}` : 'Auto‑Tag failed';
+        push(msg, 'error');
+        return;
+      }
+      const data = (typeof payload === 'string') ? {} : payload;
+      const saved = Number(data?.tags_saved ?? 0);
+      const total = Number.isFinite(Number(data?.tags_total)) ? Number(data.tags_total) : undefined;
+      const extracted = Number(data?.tags_extracted ?? data?.tags?.length ?? 0);
+      const parts: string[] = [`${saved} new`];
+      if (typeof total === 'number' && !Number.isNaN(total)) parts.push(`${total} total`);
+      else if (!Number.isNaN(extracted)) parts.push(`${extracted} extracted`);
+      push(`Auto‑Tag complete (${parts.join(', ')})`, 'success');
+      await load();
+      if (detail?.artifact?.id === id) {
+        await openDetail(id);
+      }
+    } catch {
+      push('Auto‑Tag error', 'error');
+    } finally {
+      setBusy(null);
+    }
   };
 
   const openDetail = async (id: string) => {
