@@ -32,6 +32,7 @@ class Fact(SQLModel, table=True):
     report_week: Optional[str] = None
     entity: Optional[str] = None
     metrics_json: str
+    evidence_id: Optional[str] = None
 
 
 class Database:
@@ -42,6 +43,15 @@ class Database:
         self.db_url = f"sqlite:///{db_path}"
         self.engine = create_engine(self.db_url, echo=False)
         SQLModel.metadata.create_all(self.engine)
+        self._ensure_fact_evidence_column()
+
+    def _ensure_fact_evidence_column(self) -> None:
+        """Ensure the fact table has the evidence_id column for backward compatibility."""
+        with self.engine.connect() as conn:
+            columns = conn.exec_driver_sql("PRAGMA table_info(fact)").fetchall()
+            column_names = {row[1] for row in columns}
+            if "evidence_id" not in column_names:
+                conn.exec_driver_sql("ALTER TABLE fact ADD COLUMN evidence_id TEXT")
 
     def add_artifact(self, artifact: Dict) -> str:
         with Session(self.engine) as s:
@@ -58,6 +68,7 @@ class Database:
             report_week=fact.get("report_week"),
             entity=fact.get("entity"),
             metrics_json=metrics_json,
+            evidence_id=fact.get("evidence_id"),
         )
         with Session(self.engine) as s:
             s.add(row)
@@ -92,6 +103,7 @@ class Database:
                     "report_week": f.report_week,
                     "entity": f.entity,
                     "metrics": json.loads(f.metrics_json or "{}"),
+                    "evidence_id": f.evidence_id,
                 }
             )
         return out
