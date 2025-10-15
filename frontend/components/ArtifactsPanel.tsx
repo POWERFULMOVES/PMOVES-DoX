@@ -1,5 +1,6 @@
 'use client';
 
+import { Fragment, useEffect, useState } from 'react';
 import { useEffect, useState } from 'react';
 import { useToast } from '@/components/Toast';
 
@@ -99,56 +100,61 @@ export default function ArtifactsPanel() {
             <tr className="bg-gray-50"><th className="px-2 py-1">id</th><th className="px-2 py-1">filename</th><th className="px-2 py-1">type</th><th className="px-2 py-1">status</th><th className="px-2 py-1">actions</th></tr>
           </thead>
           <tbody>
-            {artifacts.map((a:any)=> (
-              <tr key={a.id} className="border-t">
-                <td className="px-2 py-1">{a.id}</td>
-                <td className="px-2 py-1">{a.filename}</td>
-                <td className="px-2 py-1">{a.filetype}</td>
-                <td className="px-2 py-1">
-                  <div className="flex items-center gap-2 flex-wrap">
-                    {typeof a.tags_count === 'number' && (
-                      <span className={`text-[10px] px-2 py-0.5 rounded-full border ${a.tags_count>0?'bg-emerald-100 text-emerald-700 border-emerald-200':'bg-gray-100 text-gray-700 border-gray-200'}`}>
-                        Auto‑Tag {a.tags_count>0?`done (${a.tags_count})`:'pending'}
-                      </span>
-                    )}
-                    {a.chr_ready && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">CHR ready</span>
-                    )}
-                    {a.status && (
-                      <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{a.status}</span>
-                    )}
-                  </div>
-                </td>
-                <td className="px-2 py-1 space-x-2">
-                  <button onClick={()=>structure(a.id)} disabled={busy===a.id} className="bg-indigo-600 text-white rounded px-2 py-0.5">CHR</button>
-                  <button onClick={()=>convert(a.id,'txt')} disabled={busy===a.id+'txt'} className="bg-gray-700 text-white rounded px-2 py-0.5">TXT</button>
-                  <button onClick={()=>convert(a.id,'docx')} disabled={busy===a.id+'docx'} className="bg-gray-700 text-white rounded px-2 py-0.5">DOCX</button>
-                  <button onClick={()=>chrViz(a.id)} disabled={busy===a.id+'viz'} className="bg-green-600 text-white rounded px-2 py-0.5">CHR Viz</button>
-                  <button onClick={()=>autoTag(a.id)} disabled={busy===a.id+'autotag'} className="bg-emerald-600 text-white rounded px-2 py-0.5">Auto‑Tag</button>
-                  <button onClick={()=>setOpts(prev=>({ ...prev, [a.id]: { open: !prev?.[a.id]?.open, includePoml: prev?.[a.id]?.includePoml ?? true, useHrm: prev?.[a.id]?.useHrm ?? false, mangleExec: prev?.[a.id]?.mangleExec ?? false, mangleFile: prev?.[a.id]?.mangleFile ?? '', mangleQuery: prev?.[a.id]?.mangleQuery ?? 'normalized_tag(T)', pomlVariant: prev?.[a.id]?.pomlVariant ?? 'generic' } }))} className="bg-white text-gray-700 border rounded px-2 py-0.5">Options</button>
-                  <button onClick={()=>openDetail(a.id)} className="bg-white text-blue-700 border border-blue-600 rounded px-2 py-0.5">Details</button>
-                </td>
-              </tr>
-              {opts?.[a.id]?.open && (
-                <tr className="bg-gray-50">
-                  <td colSpan={5} className="px-2 py-2">
-                    <div className="flex flex-wrap items-center gap-2 text-xs">
-                      <label className="flex items-center gap-1"><input type="checkbox" checked={!!opts[a.id].includePoml} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], includePoml: e.target.checked } }))} /> Include POML</label>
-                      <label className="flex items-center gap-1"><input type="checkbox" checked={!!opts[a.id].useHrm} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], useHrm: e.target.checked } }))} /> Use HRM</label>
-                      <select value={opts[a.id].pomlVariant} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], pomlVariant: e.target.value } }))} className="border rounded px-2 py-0.5">
-                        <option value="generic">Generic</option>
-                        <option value="troubleshoot">Troubleshoot</option>
-                        <option value="catalog">Catalog</option>
-                      </select>
-                      <label className="flex items-center gap-1"><input type="checkbox" checked={!!opts[a.id].mangleExec} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], mangleExec: e.target.checked } }))} /> Execute Mangle</label>
-                      <input value={opts[a.id].mangleFile} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], mangleFile: e.target.value } }))} placeholder="mangle .mg file" className="border rounded px-2 py-0.5" />
-                      <input value={opts[a.id].mangleQuery} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], mangleQuery: e.target.value } }))} placeholder="mangle query" className="border rounded px-2 py-0.5" />
-                      <button onClick={()=>autoTag(a.id)} className="ml-auto bg-emerald-600 text-white rounded px-2 py-0.5">Run Auto‑Tag</button>
-                    </div>
-                  </td>
-                </tr>
-              )}
-            ))}
+            {artifacts.map((a:any)=> {
+              const open = !!opts?.[a.id]?.open;
+              return (
+                <Fragment key={a.id}>
+                  <tr className="border-t">
+                    <td className="px-2 py-1">{a.id}</td>
+                    <td className="px-2 py-1">{a.filename}</td>
+                    <td className="px-2 py-1">{a.filetype}</td>
+                    <td className="px-2 py-1">
+                      <div className="flex items-center gap-2 flex-wrap">
+                        {typeof a.tags_count === 'number' && (
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${a.tags_count>0?'bg-emerald-100 text-emerald-700 border-emerald-200':'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                            Auto‑Tag {a.tags_count>0?`done (${a.tags_count})`:'pending'}
+                          </span>
+                        )}
+                        {a.chr_ready && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-indigo-100 text-indigo-700 border border-indigo-200">CHR ready</span>
+                        )}
+                        {a.status && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{a.status}</span>
+                        )}
+                      </div>
+                    </td>
+                    <td className="px-2 py-1 space-x-2">
+                      <button onClick={()=>structure(a.id)} disabled={busy===a.id} className="bg-indigo-600 text-white rounded px-2 py-0.5">CHR</button>
+                      <button onClick={()=>convert(a.id,'txt')} disabled={busy===a.id+'txt'} className="bg-gray-700 text-white rounded px-2 py-0.5">TXT</button>
+                      <button onClick={()=>convert(a.id,'docx')} disabled={busy===a.id+'docx'} className="bg-gray-700 text-white rounded px-2 py-0.5">DOCX</button>
+                      <button onClick={()=>chrViz(a.id)} disabled={busy===a.id+'viz'} className="bg-green-600 text-white rounded px-2 py-0.5">CHR Viz</button>
+                      <button onClick={()=>autoTag(a.id)} disabled={busy===a.id+'autotag'} className="bg-emerald-600 text-white rounded px-2 py-0.5">Auto‑Tag</button>
+                      <button onClick={()=>setOpts(prev=>({ ...prev, [a.id]: { open: !prev?.[a.id]?.open, includePoml: prev?.[a.id]?.includePoml ?? true, useHrm: prev?.[a.id]?.useHrm ?? false, mangleExec: prev?.[a.id]?.mangleExec ?? false, mangleFile: prev?.[a.id]?.mangleFile ?? '', mangleQuery: prev?.[a.id]?.mangleQuery ?? 'normalized_tag(T)', pomlVariant: prev?.[a.id]?.pomlVariant ?? 'generic' } }))} className="bg-white text-gray-700 border rounded px-2 py-0.5">Options</button>
+                      <button onClick={()=>openDetail(a.id)} className="bg-white text-blue-700 border border-blue-600 rounded px-2 py-0.5">Details</button>
+                    </td>
+                  </tr>
+                  {open && (
+                    <tr className="bg-gray-50">
+                      <td colSpan={5} className="px-2 py-2">
+                        <div className="flex flex-wrap items-center gap-2 text-xs">
+                          <label className="flex items-center gap-1"><input type="checkbox" checked={!!opts[a.id].includePoml} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], includePoml: e.target.checked } }))} /> Include POML</label>
+                          <label className="flex items-center gap-1"><input type="checkbox" checked={!!opts[a.id].useHrm} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], useHrm: e.target.checked } }))} /> Use HRM</label>
+                          <select value={opts[a.id].pomlVariant} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], pomlVariant: e.target.value } }))} className="border rounded px-2 py-0.5">
+                            <option value="generic">Generic</option>
+                            <option value="troubleshoot">Troubleshoot</option>
+                            <option value="catalog">Catalog</option>
+                          </select>
+                          <label className="flex items-center gap-1"><input type="checkbox" checked={!!opts[a.id].mangleExec} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], mangleExec: e.target.checked } }))} /> Execute Mangle</label>
+                          <input value={opts[a.id].mangleFile} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], mangleFile: e.target.value } }))} placeholder="mangle .mg file" className="border rounded px-2 py-0.5" />
+                          <input value={opts[a.id].mangleQuery} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], mangleQuery: e.target.value } }))} placeholder="mangle query" className="border rounded px-2 py-0.5" />
+                          <button onClick={()=>autoTag(a.id)} className="ml-auto bg-emerald-600 text-white rounded px-2 py-0.5">Run Auto‑Tag</button>
+                        </div>
+                      </td>
+                    </tr>
+                  )}
+                </Fragment>
+              );
+            })}
           </tbody>
         </table>
       </div>

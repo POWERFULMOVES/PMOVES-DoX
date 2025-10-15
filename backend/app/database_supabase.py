@@ -229,12 +229,15 @@ class SupabaseDatabase:
         q: Optional[str] = None,
         ts_from: Optional[str] = None,
         ts_to: Optional[str] = None,
+        document_id: Optional[str] = None,
     ) -> List[Dict]:
         query = self._table("log_entries").select("*")
         if level:
             query = query.eq("level", level)
         if code:
             query = query.eq("code", code)
+        if document_id:
+            query = query.eq("document_id", document_id)
         rows = self._run(query, operation="list_logs")
 
         def _matches(row: Dict) -> bool:

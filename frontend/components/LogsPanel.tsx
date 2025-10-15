@@ -11,6 +11,7 @@ export default function LogsPanel() {
   const [q, setQ] = useState('');
   const [tsFrom, setTsFrom] = useState('');
   const [tsTo, setTsTo] = useState('');
+  const [documentId, setDocumentId] = useState('');
   const [logs, setLogs] = useState<any[]>([]);
   const [loading, setLoading] = useState(false);
   const [building, setBuilding] = useState(false);
@@ -26,6 +27,7 @@ export default function LogsPanel() {
       if (q) params.set('q', q);
       if (tsFrom) params.set('ts_from', tsFrom);
       if (tsTo) params.set('ts_to', tsTo);
+      if (documentId) params.set('document_id', documentId);
       const r = await fetch(`${API}/logs?${params.toString()}`);
       if (!r.ok) return;
       const data = await r.json();
@@ -43,7 +45,7 @@ export default function LogsPanel() {
       const dl = ev?.detail || {};
       if (String(dl.panel||'').toLowerCase() !== 'logs') return;
       if (dl.code) setCode(String(dl.code));
-      if (dl.document_id) setQ((prev)=>prev);
+      if (dl.document_id) setDocumentId(String(dl.document_id));
       setTimeout(load, 0);
     }
     if (typeof window !== 'undefined') window.addEventListener('global-deeplink' as any, onDeeplink as any);
@@ -83,9 +85,24 @@ export default function LogsPanel() {
           if (q) params.set('q', q);
           if (tsFrom) params.set('ts_from', tsFrom);
           if (tsTo) params.set('ts_to', tsTo);
+          if (documentId) params.set('document_id', documentId);
           window.open(`${API}/logs/export?${params.toString()}`, '_blank');
         }} className="bg-gray-700 text-white rounded px-3 py-1">Export CSV</button>
       </div>
+      {documentId && (
+        <div className="mb-3 text-sm flex flex-wrap items-center gap-2">
+          <span className="bg-blue-100 text-blue-800 px-2 py-1 rounded">Filtered to document <code>{documentId}</code></span>
+          <button
+            onClick={() => {
+              setDocumentId('');
+              setTimeout(load, 0);
+            }}
+            className="text-blue-700 underline"
+          >
+            Clear document filter
+          </button>
+        </div>
+      )}
       {loading ? <div>Loading…</div> : (
         <div className="max-h-80 overflow-auto border rounded">
           <table className="min-w-full text-left text-xs">
