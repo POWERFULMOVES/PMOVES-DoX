@@ -334,8 +334,10 @@ async def ingest_postman(file: UploadFile = File(...)):
 # ---------- queries: logs / apis / tags ----------
 @app.get("/logs")
 async def get_logs(level: str | None = None, code: str | None = None, q: str | None = None,
-                   ts_from: str | None = None, ts_to: str | None = None):
-    items = db.list_logs(level=level, code=code, q=q, ts_from=ts_from, ts_to=ts_to)
+                   ts_from: str | None = None, ts_to: str | None = None,
+                   document_id: str | None = None):
+    items = db.list_logs(level=level, code=code, q=q, ts_from=ts_from, ts_to=ts_to,
+                         document_id=document_id)
     return {"logs": items}
 
 

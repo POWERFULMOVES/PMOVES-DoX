@@ -33,7 +33,7 @@ class DummyDB:
     def list_apis(self, tag=None, method=None, path_like=None):
         return []
 
-    def list_logs(self, level=None, code=None, q=None, ts_from=None, ts_to=None):
+    def list_logs(self, level=None, code=None, q=None, ts_from=None, ts_to=None, document_id=None):
         return []
 
     def list_tags(self, document_id=None, q=None):

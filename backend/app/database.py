@@ -260,13 +260,16 @@ class ExtendedDatabase(Database):
             s.commit()
 
     def list_logs(self, level: str | None = None, code: str | None = None, q: str | None = None,
-                  ts_from: str | None = None, ts_to: str | None = None) -> List[Dict]:
+                  ts_from: str | None = None, ts_to: str | None = None,
+                  document_id: str | None = None) -> List[Dict]:
         with Session(self.engine) as s:
             stmt = select(LogEntry)
             if level:
                 stmt = stmt.where(LogEntry.level == level)
             if code:
                 stmt = stmt.where(LogEntry.code == code)
+            if document_id:
+                stmt = stmt.where(LogEntry.document_id == document_id)
             rows = s.exec(stmt).all()
         out = []
         # parse time bounds once

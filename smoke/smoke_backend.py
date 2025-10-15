@@ -178,21 +178,36 @@ def main():
 
     # 8) ingest xml/openapi/postman
     try:
-      with open(ROOT/"samples"/"sample.xml", "rb") as f:
-        ix = r.post(f"{API}/ingest/xml", files={"file": ("sample.xml", f, "text/xml")}, timeout=30)
-      ix.raise_for_status()
-      with open(ROOT/"samples"/"sample_openapi.json", "rb") as f:
-        ioa = r.post(f"{API}/ingest/openapi", files={"file": ("sample_openapi.json", f, "application/json")}, timeout=30)
-      ioa.raise_for_status()
-      with open(ROOT/"samples"/"sample_postman.json", "rb") as f:
-        ipm = r.post(f"{API}/ingest/postman", files={"file": ("sample_postman.json", f, "application/json")}, timeout=30)
-      ipm.raise_for_status()
-      # query logs/apis
-      ql = r.get(f"{API}/logs?level=ERROR", timeout=10); ql.raise_for_status()
-      qa = r.get(f"{API}/apis?method=GET", timeout=10); qa.raise_for_status()
-      ok("ingest xml/openapi/postman and query logs/apis")
+        with open(ROOT/"samples"/"sample.xml", "rb") as f:
+            ix = r.post(f"{API}/ingest/xml", files={"file": ("sample.xml", f, "text/xml")}, timeout=30)
+        ix.raise_for_status()
+        ix_data = ix.json()
+        xml_document_id = ix_data.get("document_id")
+        if not xml_document_id:
+            fail("ingest xml missing document_id")
+        with open(ROOT/"samples"/"sample_openapi.json", "rb") as f:
+            ioa = r.post(f"{API}/ingest/openapi", files={"file": ("sample_openapi.json", f, "application/json")}, timeout=30)
+        ioa.raise_for_status()
+        with open(ROOT/"samples"/"sample_postman.json", "rb") as f:
+            ipm = r.post(f"{API}/ingest/postman", files={"file": ("sample_postman.json", f, "application/json")}, timeout=30)
+        ipm.raise_for_status()
+        # query logs/apis
+        ql = r.get(f"{API}/logs?level=ERROR", timeout=10)
+        ql.raise_for_status()
+        ql_doc = r.get(f"{API}/logs", params={"document_id": xml_document_id}, timeout=10)
+        ql_doc.raise_for_status()
+        logs_filtered = ql_doc.json().get("logs", [])
+        if not logs_filtered:
+            fail("document-filtered logs returned no rows")
+        if any(log.get("document_id") != xml_document_id for log in logs_filtered):
+            fail("document-filtered logs include mismatched document_id")
+        if "E1001" not in {log.get("code") for log in logs_filtered}:
+            fail("document-filtered logs missing expected code")
+        qa = r.get(f"{API}/apis?method=GET", timeout=10)
+        qa.raise_for_status()
+        ok("ingest xml/openapi/postman and query logs/apis")
     except Exception as e:
-      fail(f"ingest/query error: {e}")
+        fail(f"ingest/query error: {e}")
 
     # 9) datavzrd logs viz
     try:
