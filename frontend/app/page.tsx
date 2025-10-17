@@ -11,6 +11,9 @@ import TagsPanel from '@/components/TagsPanel';
 import ArtifactsPanel from '@/components/ArtifactsPanel';
 import { useToast } from '@/components/Toast';
 import HeaderBar from '@/components/HeaderBar';
+import EntitiesPanel from '@/components/EntitiesPanel';
+import StructurePanel from '@/components/StructurePanel';
+import MetricHitsPanel from '@/components/MetricHitsPanel';
 
 export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -103,6 +106,11 @@ export default function Home() {
             <div className="grid grid-cols-1 lg:grid-cols-2 gap-8 mb-8">
               <FactsViewer key={refreshKey} />
               <CHRPanel />
+            </div>
+            <div className="grid grid-cols-1 lg:grid-cols-3 gap-8 mb-8">
+              <EntitiesPanel refreshKey={refreshKey} />
+              <StructurePanel refreshKey={refreshKey} />
+              <MetricHitsPanel refreshKey={refreshKey} />
             </div>
           </>
         )}

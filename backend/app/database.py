@@ -4,7 +4,7 @@ import uuid
 from typing import List, Dict, Optional
 from pathlib import Path
 
-from sqlmodel import SQLModel, Field, create_engine, Session, select
+from sqlmodel import SQLModel, Field, create_engine, Session, select, delete
 
 
 class Artifact(SQLModel, table=True):
@@ -151,6 +151,9 @@ class Database:
             s.exec("DELETE FROM evidence")
             s.exec("DELETE FROM fact")
             s.exec("DELETE FROM artifact")
+            s.exec(delete(DocumentEntity))
+            s.exec(delete(DocumentMetricHit))
+            s.exec(delete(DocumentStructureRow))
             s.commit()
 
 
@@ -198,6 +201,40 @@ class APIEndpoint(SQLModel, table=True):
     tags_json: str | None = None
     params_json: str | None = None
     responses_json: str | None = None
+
+
+class DocumentEntity(SQLModel, table=True):
+    __tablename__ = "document_entities"
+
+    id: str = Field(primary_key=True)
+    document_id: str
+    label: str
+    text: str
+    start_char: int | None = None
+    end_char: int | None = None
+    page: int | None = None
+    context: str | None = None
+    source_index: int | None = None
+
+
+class DocumentStructureRow(SQLModel, table=True):
+    __tablename__ = "document_structure"
+
+    document_id: str = Field(primary_key=True)
+    hierarchy_json: str | None = None
+
+
+class DocumentMetricHit(SQLModel, table=True):
+    __tablename__ = "document_metric_hits"
+
+    id: str = Field(primary_key=True)
+    document_id: str
+    type: str
+    value: str | None = None
+    context: str | None = None
+    position: int | None = None
+    page: int | None = None
+    source_index: int | None = None
 
 
 class LogEntry(SQLModel, table=True):
@@ -270,6 +307,104 @@ class ExtendedDatabase(Database):
         with Session(self.engine) as s:
             s.add(TagRow(**tag))
             s.commit()
+
+    def store_entities(self, document_id: str, entities: List[Dict]) -> None:
+        with Session(self.engine) as s:
+            s.exec(delete(DocumentEntity).where(DocumentEntity.document_id == document_id))
+            for entity in entities:
+                row = DocumentEntity(
+                    id=str(entity.get("id") or uuid.uuid4()),
+                    document_id=document_id,
+                    label=str(entity.get("label") or ""),
+                    text=str(entity.get("text") or ""),
+                    start_char=entity.get("start_char"),
+                    end_char=entity.get("end_char"),
+                    page=entity.get("page"),
+                    context=entity.get("context"),
+                    source_index=entity.get("source_index"),
+                )
+                s.add(row)
+            s.commit()
+
+    def store_structure(self, document_id: str, structure: Dict | None) -> None:
+        with Session(self.engine) as s:
+            s.exec(delete(DocumentStructureRow).where(DocumentStructureRow.document_id == document_id))
+            if structure is not None:
+                payload = DocumentStructureRow(
+                    document_id=document_id,
+                    hierarchy_json=json.dumps(structure, ensure_ascii=False),
+                )
+                s.add(payload)
+            s.commit()
+
+    def store_metric_hits(self, document_id: str, metrics: List[Dict]) -> None:
+        with Session(self.engine) as s:
+            s.exec(delete(DocumentMetricHit).where(DocumentMetricHit.document_id == document_id))
+            for metric in metrics:
+                row = DocumentMetricHit(
+                    id=str(metric.get("id") or uuid.uuid4()),
+                    document_id=document_id,
+                    type=str(metric.get("type") or ""),
+                    value=metric.get("value"),
+                    context=metric.get("context"),
+                    position=metric.get("position"),
+                    page=metric.get("page"),
+                    source_index=metric.get("source_index"),
+                )
+                s.add(row)
+            s.commit()
+
+    def list_entities(self, document_id: str | None = None, label: str | None = None) -> List[Dict]:
+        with Session(self.engine) as s:
+            stmt = select(DocumentEntity)
+            if document_id:
+                stmt = stmt.where(DocumentEntity.document_id == document_id)
+            if label:
+                stmt = stmt.where(DocumentEntity.label == label)
+            rows = s.exec(stmt).all()
+        return [
+            {
+                "id": r.id,
+                "document_id": r.document_id,
+                "label": r.label,
+                "text": r.text,
+                "start_char": r.start_char,
+                "end_char": r.end_char,
+                "page": r.page,
+                "context": r.context,
+                "source_index": r.source_index,
+            }
+            for r in rows
+        ]
+
+    def get_structure(self, document_id: str) -> Optional[Dict]:
+        with Session(self.engine) as s:
+            row = s.get(DocumentStructureRow, document_id)
+        if not row or not row.hierarchy_json:
+            return None
+        return json.loads(row.hierarchy_json)
+
+    def list_metric_hits(self, document_id: str | None = None, metric_type: str | None = None) -> List[Dict]:
+        with Session(self.engine) as s:
+            stmt = select(DocumentMetricHit)
+            if document_id:
+                stmt = stmt.where(DocumentMetricHit.document_id == document_id)
+            if metric_type:
+                stmt = stmt.where(DocumentMetricHit.type == metric_type)
+            rows = s.exec(stmt).all()
+        return [
+            {
+                "id": r.id,
+                "document_id": r.document_id,
+                "type": r.type,
+                "value": r.value,
+                "context": r.context,
+                "position": r.position,
+                "page": r.page,
+                "source_index": r.source_index,
+            }
+            for r in rows
+        ]
 
     def list_logs(self, level: str | None = None, code: str | None = None, q: str | None = None,
                   ts_from: str | None = None, ts_to: str | None = None,

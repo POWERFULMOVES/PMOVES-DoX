@@ -148,6 +148,75 @@ class SupabaseDatabase:
         self._run(self._table("tag_prompts").insert(payload), operation="save_tag_prompt")
         return prompt_id
 
+    def store_entities(self, document_id: str, entities: List[Dict]) -> None:
+        self._run(
+            self._table("document_entities").delete().eq("document_id", document_id),
+            operation="clear_entities",
+        )
+        if not entities:
+            return
+        rows = []
+        for entity in entities:
+            rows.append(
+                {
+                    "id": entity.get("id") or str(uuid.uuid4()),
+                    "document_id": document_id,
+                    "label": entity.get("label"),
+                    "text": entity.get("text"),
+                    "start_char": entity.get("start_char"),
+                    "end_char": entity.get("end_char"),
+                    "page": entity.get("page"),
+                    "context": entity.get("context"),
+                    "source_index": entity.get("source_index"),
+                }
+            )
+        self._run(
+            self._table("document_entities").insert(rows),
+            operation="store_entities",
+        )
+
+    def store_structure(self, document_id: str, structure: Optional[Dict]) -> None:
+        if structure is None:
+            self._run(
+                self._table("document_structure").delete().eq("document_id", document_id),
+                operation="clear_structure",
+            )
+            return
+        payload = {
+            "document_id": document_id,
+            "hierarchy": structure,
+        }
+        self._run(
+            self._table("document_structure").upsert(payload, on_conflict="document_id"),
+            operation="store_structure",
+        )
+
+    def store_metric_hits(self, document_id: str, metrics: List[Dict]) -> None:
+        self._run(
+            self._table("document_metric_hits").delete().eq("document_id", document_id),
+            operation="clear_metric_hits",
+        )
+        if not metrics:
+            return
+        rows = []
+        for metric in metrics:
+            rows.append(
+                {
+                    "id": metric.get("id") or str(uuid.uuid4()),
+                    "document_id": document_id,
+                    "type": metric.get("type"),
+                    "value": metric.get("value"),
+                    "context": metric.get("context"),
+                    "position": metric.get("position"),
+                    "page": metric.get("page"),
+                    "source_index": metric.get("source_index"),
+                }
+            )
+        self._run(
+            self._table("document_metric_hits").insert(rows),
+            operation="store_metric_hits",
+        )
+
     # ------------------------------------------------------------------- queries
     def get_facts(self, report_week: Optional[str] = None) -> List[Dict]:
         query = self._table("facts").select("*")
@@ -175,6 +244,40 @@ class SupabaseDatabase:
 
     def get_artifacts(self) -> List[Dict]:
         return self._run(self._table("artifacts").select("*"), operation="get_artifacts")
+
+    def list_entities(self, document_id: Optional[str] = None, label: Optional[str] = None) -> List[Dict]:
+        query = self._table("document_entities").select("*")
+        if document_id:
+            query = query.eq("document_id", document_id)
+        if label:
+            query = query.eq("label", label)
+        return self._run(query, operation="list_entities")
+
+    def get_structure(self, document_id: str) -> Optional[Dict]:
+        rows = self._run(
+            self._table("document_structure").select("*").eq("document_id", document_id),
+            operation="get_structure",
+        )
+        if not rows:
+            return None
+        row = rows[0]
+        hierarchy = row.get("hierarchy") or row.get("hierarchy_json")
+        if isinstance(hierarchy, str):
+            try:
+                return json.loads(hierarchy)
+            except Exception:
+                return None
+        if isinstance(hierarchy, dict):
+            return hierarchy
+        return None
+
+    def list_metric_hits(self, document_id: Optional[str] = None, metric_type: Optional[str] = None) -> List[Dict]:
+        query = self._table("document_metric_hits").select("*")
+        if document_id:
+            query = query.eq("document_id", document_id)
+        if metric_type:
+            query = query.eq("type", metric_type)
+        return self._run(query, operation="list_metric_hits")
 
     def reset_search_chunks(self) -> None:
         try:

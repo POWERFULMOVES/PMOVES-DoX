@@ -23,6 +23,9 @@ WRITE_METHODS = {
     "reset",
     "reset_search_chunks",
     "store_search_chunks",
+    "store_entities",
+    "store_structure",
+    "store_metric_hits",
 }
 
 
