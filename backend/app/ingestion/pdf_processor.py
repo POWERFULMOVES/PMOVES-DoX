@@ -11,6 +11,11 @@ from docling.datamodel.pipeline_options import (
     PdfPipelineOptions,
     PictureDescriptionVlmOptions,
 )
+from app.analysis import (
+    BusinessMetricExtractor,
+    DocumentStructureProcessor,
+    NERProcessor,
+)
 try:
     from docling.datamodel.accelerator_options import AcceleratorOptions
 except ImportError:  # pragma: no cover
@@ -48,6 +53,9 @@ def _build_accelerator_options() -> AcceleratorOptions | None:
         return None
 
 
+NER_PROCESSOR = NERProcessor()
+STRUCTURE_PROCESSOR = DocumentStructureProcessor()
+METRIC_EXTRACTOR = BusinessMetricExtractor()
 from .advanced_table_processor import AdvancedTableProcessor
 from .chart_processor import ChartProcessor
 from .formula_processor import FormulaProcessor
@@ -56,6 +64,9 @@ from .formula_processor import FormulaProcessor
 async def process_pdf(
     file_path: Path,
     report_week: str,
+    artifacts_dir: Path,
+    artifact_id: str | None = None,
+) -> Tuple[List[Dict], List[Dict], Dict[str, Any]]:
     artifacts_dir: Path
 ) -> Tuple[List[Dict], List[Dict]]:
     """
@@ -137,6 +148,12 @@ async def process_pdf(
     # Extract facts from tables and text
     facts = []
     evidence = []
+    analysis_results: Dict[str, Any] = {
+        "entities": [],
+        "structure": None,
+        "metric_hits": [],
+    }
+    analysis_results["document_reference"] = artifact_id or file_path.name
     
     # Process tables (multi-page aware)
     merged_tables = table_processor.detect_spanning_tables(doc)
@@ -266,6 +283,55 @@ async def process_pdf(
         evidence.append(
             {
                 "id": evidence_id,
+
+                "locator": f"{file_path.name}#figure{fig_idx}",
+                "preview": desc[:500],
+                "content_type": "figure",
+                "coordinates": bbox,
+                "vlm": bool(vlm_repo),
+            })
+    
+    # Advanced text analysis (NER + structure + contextual metrics)
+    text_elements = [
+        item
+        for item in getattr(doc, "texts", []) or []
+        if (getattr(item, "text", "") or "").strip()
+    ]
+
+    try:
+        analysis_results["structure"] = STRUCTURE_PROCESSOR.build_hierarchy(doc)
+    except Exception:  # pragma: no cover - structure is best-effort
+        analysis_results["structure"] = None
+
+    try:
+        analysis_results["entities"] = NER_PROCESSOR.extract_entities(text_elements)
+    except Exception:  # pragma: no cover - spaCy optional
+        analysis_results["entities"] = []
+
+    metric_hits: list[dict[str, Any]] = []
+    for idx, item in enumerate(text_elements):
+        hits = METRIC_EXTRACTOR.extract_metrics(getattr(item, "text", ""))
+        if not hits:
+            continue
+        page = None
+        try:
+            provenance = getattr(item, "prov", None)
+            if provenance:
+                page = getattr(provenance[0], "page", None)
+        except Exception:
+            page = None
+        for hit in hits:
+            metric_hits.append(
+                {
+                    **hit,
+                    "page": page,
+                    "source_index": idx,
+                }
+            )
+    analysis_results["metric_hits"] = metric_hits
+
+    return facts, evidence, analysis_results
+
                 "locator": f"{file_path.name}#formula{formula_idx}",
                 "preview": (preview or "").strip()[:500],
                 "content_type": "formula",
@@ -294,6 +360,7 @@ async def process_pdf(
             )
 
     return facts, evidence
+
 
 
 def extract_metrics_from_table(df: pd.DataFrame) -> Dict[str, float]:

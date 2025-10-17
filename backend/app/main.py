@@ -318,6 +318,33 @@ async def list_documents(type: str | None = None):
     return {"documents": items}
 
 
+@app.get("/analysis/entities")
+async def get_analysis_entities(document_id: str | None = None, label: str | None = None):
+    try:
+        items = db.list_entities(document_id=document_id, label=label)
+    except AttributeError:
+        items = []
+    return {"entities": items}
+
+
+@app.get("/analysis/structure")
+async def get_analysis_structure(document_id: str):
+    try:
+        structure = db.get_structure(document_id)
+    except AttributeError:
+        structure = None
+    return {"document_id": document_id, "structure": structure}
+
+
+@app.get("/analysis/metrics")
+async def get_analysis_metrics(document_id: str | None = None, metric_type: str | None = None):
+    try:
+        items = db.list_metric_hits(document_id=document_id, metric_type=metric_type)
+    except AttributeError:
+        items = []
+    return {"metric_hits": items}
+
+
 # ---------- ingestion: XML / OpenAPI / Postman ----------
 @app.post("/ingest/xml")
 async def ingest_xml(file: UploadFile = File(...)):
@@ -1541,7 +1568,7 @@ async def export_poml(req: ExportPOMLRequest):
     return {"status": "ok", "rel": rel, "path": str(path)}
 
 
-def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict], list[dict]]:
+def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict], list[dict], dict]:
     placeholder = f"Extracted content unavailable for {file_path.name}."
     md_path = artifacts_dir / f"{file_path.stem}.md"
     md_path.write_text(placeholder, encoding="utf-8")
@@ -1550,17 +1577,20 @@ def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict],
     json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
     units_path = artifacts_dir / f"{file_path.stem}.text_units.json"
     units_path.write_text(json.dumps([{ "text": placeholder, "page": 1 }], indent=2), encoding="utf-8")
-    return [], []
+    return [], [], {"entities": [], "structure": None, "metric_hits": []}
 
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
     try:
+        analysis_payload: dict | None = None
         if suffix == ".pdf":
             # PDF is async-capable but can be used sync too
             if _env_flag("FAST_PDF_MODE", True):
-                facts, evidence = _process_pdf_fast(file_path, ARTIFACTS_DIR)
+                facts, evidence, analysis_payload = _process_pdf_fast(file_path, ARTIFACTS_DIR)
             else:
                 import anyio
-                facts, evidence = anyio.run(process_pdf, file_path, report_week, ARTIFACTS_DIR)
+                facts, evidence, analysis_payload = anyio.run(
+                    process_pdf, file_path, report_week, ARTIFACTS_DIR, artifact_id
+                )
             # Ensure a PDF document row exists for deeplinks/open
             try:
                 db.add_document({
@@ -1585,6 +1615,68 @@ def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suff
         for ev in evidence:
             ev["artifact_id"] = artifact_id
             db.add_evidence(ev)
+
+        if analysis_payload and suffix == ".pdf":
+            try:
+                entities_raw = analysis_payload.get("entities") or []
+                entities_prepared: list[dict] = []
+                for idx, ent in enumerate(entities_raw):
+                    seed = "|".join(
+                        [
+                            artifact_id,
+                            "entity",
+                            str(idx),
+                            str(ent.get("label", "")),
+                            str(ent.get("text", "")),
+                            str(ent.get("start_char", "")),
+                        ]
+                    )
+                    ent_id = str(uuid.uuid5(uuid.NAMESPACE_URL, seed))
+                    entities_prepared.append(
+                        {
+                            "id": ent_id,
+                            "document_id": artifact_id,
+                            **ent,
+                        }
+                    )
+                db.store_entities(artifact_id, entities_prepared)
+            except Exception:
+                pass
+
+            try:
+                structure = analysis_payload.get("structure")
+                if structure:
+                    db.store_structure(artifact_id, structure)
+                else:
+                    db.store_structure(artifact_id, None)
+            except Exception:
+                pass
+
+            try:
+                metric_hits_raw = analysis_payload.get("metric_hits") or []
+                metric_prepared: list[dict] = []
+                for idx, hit in enumerate(metric_hits_raw):
+                    seed = "|".join(
+                        [
+                            artifact_id,
+                            "metric",
+                            str(idx),
+                            str(hit.get("type", "")),
+                            str(hit.get("value", "")),
+                            str(hit.get("position", "")),
+                        ]
+                    )
+                    metric_id = str(uuid.uuid5(uuid.NAMESPACE_URL, seed))
+                    metric_prepared.append(
+                        {
+                            "id": metric_id,
+                            "document_id": artifact_id,
+                            **hit,
+                        }
+                    )
+                db.store_metric_hits(artifact_id, metric_prepared)
+            except Exception:
+                pass
 
         if task_id:
             TASKS[task_id].update({

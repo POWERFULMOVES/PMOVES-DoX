@@ -112,6 +112,15 @@ Local-first models
 - Tag extraction via LangExtract with LMS presets, dry‑run, and governance (save/history/restore)
 - CHR structuring + datavzrd dashboards (overview + details)
 - Q&A with citations over extracted facts
+- Advanced PDF analysis: Named entity recognition, heading hierarchy detection, and contextual metric extraction surfaced via `/analysis/*` APIs
+
+### Advanced Analysis Endpoints
+
+- `GET /analysis/entities` &mdash; Named entities detected from Docling text blocks (requires a spaCy English model such as `en_core_web_sm`).
+- `GET /analysis/structure` &mdash; Hierarchical section map derived from Docling heading annotations.
+- `GET /analysis/metrics` &mdash; Regex-driven business metric hits with the surrounding context window.
+
+> Install spaCy locally with `pip install spacy` and download the lightweight English model via `python -m spacy download en_core_web_sm` to enable deterministic NER results. The backend degrades gracefully when the model is unavailable.
 
 ### Advanced PDF ingestion (Granite Docling)
 
