@@ -4,6 +4,7 @@ import uuid
 from typing import List, Dict, Optional
 from pathlib import Path
 
+from sqlalchemy import text
 from sqlmodel import SQLModel, Field, create_engine, Session, select
 
 
@@ -148,9 +149,9 @@ class Database:
 
     def reset(self):
         with Session(self.engine) as s:
-            s.exec("DELETE FROM evidence")
-            s.exec("DELETE FROM fact")
-            s.exec("DELETE FROM artifact")
+            s.exec(text("DELETE FROM evidence"))
+            s.exec(text("DELETE FROM fact"))
+            s.exec(text("DELETE FROM artifact"))
             s.commit()
 
 

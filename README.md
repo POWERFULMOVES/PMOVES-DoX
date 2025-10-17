@@ -112,6 +112,14 @@ Local-first models
 - Tag extraction via LangExtract with LMS presets, dry‑run, and governance (save/history/restore)
 - CHR structuring + datavzrd dashboards (overview + details)
 - Q&A with citations over extracted facts
+- Financial statement detection with merged-header normalization and confidence scoring
+
+### Financial Statement Analysis
+
+- Enable `PDF_FINANCIAL_ANALYSIS=true` (default) to run Docling tables through the new complex table processor.
+- API: `GET /analysis/financials` returns detected statements, summaries, and table snippets for dashboards.
+- Frontend: the Facts viewer now highlights parsed income statements, balance sheets, and cash-flow excerpts with confidence badges.
+- Samples: see `samples/financials/financial_statements.pdf` for the curated test fixture used in automated checks.
 
 OpenAPI/XML enrichments
 - OpenAPI: path-level parameters are merged into each operation; effective security is normalized and surfaced under `responses.x_security.schemes`.
