@@ -1,7 +1,6 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
-import { useEffect, useState } from 'react';
 import { useToast } from '@/components/Toast';
 
 export default function ArtifactsPanel() {
@@ -121,6 +120,18 @@ export default function ArtifactsPanel() {
                         {a.status && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{a.status}</span>
                         )}
+                        {typeof a.media_transcripts === 'number' && a.media_transcripts > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">Transcripts {a.media_transcripts}</span>
+                        )}
+                        {typeof a.media_metadata === 'number' && a.media_metadata > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700 border border-cyan-200">Media meta {a.media_metadata}</span>
+                        )}
+                        {typeof a.web_pages === 'number' && a.web_pages > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">Web {a.web_pages}</span>
+                        )}
+                        {typeof a.image_ocr === 'number' && a.image_ocr > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">OCR {a.image_ocr}</span>
+                        )}
                       </div>
                     </td>
                     <td className="px-2 py-1 space-x-2">
@@ -197,6 +208,41 @@ export default function ArtifactsPanel() {
                       ))}
                     </tbody>
                   </table>
+                </div>
+              </div>
+              <div>
+                <div className="font-medium mb-1">Transcripts</div>
+                <div className="border rounded max-h-60 overflow-auto space-y-2 p-2">
+                  {(detail.evidence||[])
+                    .filter((e:any)=> (e.content_type||'').includes('transcript'))
+                    .map((e:any,i:number)=>(
+                      <div key={i} className="text-xs border-b pb-1 last:border-b-0">
+                        <div className="font-semibold">{e.locator}</div>
+                        <div className="text-gray-600 whitespace-pre-wrap">{e.full_data?.text || e.preview}</div>
+                        {e.full_data?.metadata && (
+                          <div className="text-[10px] text-gray-500 mt-1">{JSON.stringify(e.full_data.metadata)}</div>
+                        )}
+                      </div>
+                    ))}
+                  {(detail.evidence||[]).filter((e:any)=> (e.content_type||'').includes('transcript')).length===0 && (
+                    <div className="text-xs text-gray-500">No transcripts yet.</div>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="font-medium mb-1">Media Metadata</div>
+                <div className="border rounded max-h-60 overflow-auto space-y-2 p-2">
+                  {(detail.evidence||[])
+                    .filter((e:any)=> e.content_type==='media_metadata' || e.content_type==='web_page')
+                    .map((e:any,i:number)=>(
+                      <div key={i} className="text-xs border-b pb-1 last:border-b-0">
+                        <div className="font-semibold">{e.content_type} – {e.locator}</div>
+                        <div className="text-gray-600 whitespace-pre-wrap">{e.preview}</div>
+                      </div>
+                    ))}
+                  {(detail.evidence||[]).filter((e:any)=> e.content_type==='media_metadata' || e.content_type==='web_page').length===0 && (
+                    <div className="text-xs text-gray-500">No additional metadata captured.</div>
+                  )}
                 </div>
               </div>
             </div>

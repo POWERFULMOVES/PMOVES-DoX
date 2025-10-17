@@ -12,6 +12,7 @@ interface FileUploadProps {
 export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   const [files, setFiles] = useState<FileList | null>(null);
   const [reportWeek, setReportWeek] = useState('');
+  const [webUrls, setWebUrls] = useState('');
   const [asyncPdf, setAsyncPdf] = useState(true);
   const [uploading, setUploading] = useState(false);
   const [results, setResults] = useState<any[]>([]);
@@ -39,14 +40,22 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
   };
 
   const handleUpload = async () => {
-    if (!files || files.length === 0) return;
+    if ((!files || files.length === 0) && !webUrls.trim()) return;
 
     setUploading(true);
     const formData = new FormData();
 
-    Array.from(files).forEach(file => {
-      formData.append('files', file);
-    });
+    if (files) {
+      Array.from(files).forEach(file => {
+        formData.append('files', file);
+      });
+    }
+
+    webUrls
+      .split(/\n|,/)
+      .map(url => url.trim())
+      .filter(url => url.length > 0)
+      .forEach(url => formData.append('web_urls', url));
 
     try {
       const response = await axios.post(
@@ -66,6 +75,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
         onUploadComplete();
       }
       setFiles(null);
+      setWebUrls('');
     } catch (error) {
       console.error('Upload failed:', error);
       push('Upload failed. See console for details.', 'error');
@@ -112,15 +122,27 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
 
         <div>
           <label className="block text-sm font-medium mb-2">
-            Select Files (PDF, CSV, XLSX)
+            Select Files (PDF, CSV, XLSX, audio/video, images)
           </label>
           <input
             type="file"
             multiple
-            accept=".pdf,.csv,.xlsx,.xls"
+            accept=".pdf,.csv,.xlsx,.xls,.mp3,.wav,.m4a,.mp4,.mov,.png,.jpg,.jpeg"
             onChange={(e) => setFiles(e.target.files)}
             className="w-full px-4 py-2 border rounded"
           />
+        </div>
+
+        <div>
+          <label className="block text-sm font-medium mb-2">Web URLs (one per line)</label>
+          <textarea
+            rows={3}
+            value={webUrls}
+            onChange={(e) => setWebUrls(e.target.value)}
+            placeholder="https://example.com/docs"
+            className="w-full px-4 py-2 border rounded"
+          />
+          <p className="text-xs text-gray-500 mt-1">Supports http/https addresses. Pages are rendered with a headless fetch and cleaned to Markdown text.</p>
         </div>
 
         <div className="flex items-center gap-2">
@@ -130,7 +152,7 @@ export default function FileUpload({ onUploadComplete }: FileUploadProps) {
 
         <button
           onClick={handleUpload}
-          disabled={uploading || !files}
+          disabled={uploading || ((!files || files.length === 0) && !webUrls.trim())}
           className="w-full bg-blue-600 text-white py-2 rounded hover:bg-blue-700 disabled:bg-gray-300"
         >
           {uploading ? 'Uploading...' : 'Upload & Process'}
