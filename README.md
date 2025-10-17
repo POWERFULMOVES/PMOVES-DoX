@@ -120,6 +120,31 @@ Local-first models
 - API: `GET /analysis/financials` returns detected statements, summaries, and table snippets for dashboards.
 - Frontend: the Facts viewer now highlights parsed income statements, balance sheets, and cash-flow excerpts with confidence badges.
 - Samples: see `samples/financials/financial_statements.pdf` for the curated test fixture used in automated checks.
+- Advanced PDF analysis: Named entity recognition, heading hierarchy detection, and contextual metric extraction surfaced via `/analysis/*` APIs
+
+### Advanced Analysis Endpoints
+
+- `GET /analysis/entities` &mdash; Named entities detected from Docling text blocks (requires a spaCy English model such as `en_core_web_sm`).
+- `GET /analysis/structure` &mdash; Hierarchical section map derived from Docling heading annotations.
+- `GET /analysis/metrics` &mdash; Regex-driven business metric hits with the surrounding context window.
+
+> Install spaCy locally with `pip install spacy` and download the lightweight English model via `python -m spacy download en_core_web_sm` to enable deterministic NER results. The backend degrades gracefully when the model is unavailable.
+
+### Advanced PDF ingestion (Granite Docling)
+
+- Multi-page tables are merged automatically. Table evidence includes every contributing page and is summarised in `/artifacts` via `table_evidence` counts.
+- Chart and figure captures are saved to `artifacts/charts/` with optional OCR summaries (requires `pytesseract`). Facts expose chart metadata so downstream automation can reason about figure types.
+- Formula detection surfaces both block equations and inline expressions with captured LaTeX/text. Each formula becomes dedicated evidence so `/facts` can cite them.
+
+Enable the vision/VLM extensions by setting the following environment variables before starting the backend:
+
+```bash
+export DOCLING_VLM_REPO=ibm-granite/granite-docling-258m-demo  # or your preferred Granite VLM repo
+export PDF_OCR_ENABLED=true            # run OCR on scanned pages when needed
+export PDF_PICTURE_DESCRIPTION=true    # attach VLM captions to figures/charts
+```
+
+Artifacts land under `artifacts/` alongside the Markdown/JSON exports. Chart PNGs are stored in `artifacts/charts/`, merged table payloads in the evidence `full_data` field, and formulas are persisted as evidence with `content_type="formula"`.
 
 OpenAPI/XML enrichments
 - OpenAPI: path-level parameters are merged into each operation; effective security is normalized and surfaced under `responses.x_security.schemes`.
