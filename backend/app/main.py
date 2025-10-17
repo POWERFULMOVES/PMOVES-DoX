@@ -327,6 +327,85 @@ async def get_analysis_entities(document_id: str | None = None, label: str | Non
     return {"entities": items}
 
 
+@app.get("/analysis/artifacts/{artifact_id}")
+async def get_artifact_analysis(artifact_id: str):
+    arts = db.get_artifacts()
+    art = next((a for a in arts if a.get("id") == artifact_id), None)
+    if not art:
+        raise HTTPException(404, "Artifact not found")
+
+    evidence = [e for e in db.get_all_evidence() if e.get("artifact_id") == artifact_id]
+
+    tables: list[dict] = []
+    charts: list[dict] = []
+    formulas: list[dict] = []
+
+    for ev in evidence:
+        ctype = (ev.get("content_type") or "").lower()
+        base = {
+            "id": ev.get("id"),
+            "locator": ev.get("locator"),
+            "preview": ev.get("preview"),
+            "coordinates": ev.get("coordinates"),
+        }
+        full = ev.get("full_data") or {}
+
+        if ctype == "table":
+            rows = list(full.get("rows") or [])
+            tables.append(
+                {
+                    **base,
+                    "pages": full.get("pages", []),
+                    "merged": full.get("merged", False),
+                    "header_detected": full.get("header_detected", False),
+                    "columns": full.get("columns", []),
+                    "row_count": len(rows),
+                    "rows": rows[:20],
+                }
+            )
+        elif ctype == "chart":
+            charts.append(
+                {
+                    **base,
+                    "id": full.get("id") or base.get("id"),
+                    "page": full.get("page"),
+                    "bbox": full.get("bbox"),
+                    "image_path": full.get("image_path"),
+                    "caption": full.get("caption"),
+                    "type": full.get("type"),
+                    "extracted_text": full.get("extracted_text"),
+                    "vlm_enabled": full.get("vlm_enabled"),
+                }
+            )
+        elif ctype == "formula":
+            formulas.append({**base, **full})
+
+    try:
+        entities = db.list_entities(document_id=artifact_id)
+    except AttributeError:
+        entities = []
+
+    try:
+        structure = db.get_structure(artifact_id)
+    except AttributeError:
+        structure = None
+
+    try:
+        metric_hits = db.list_metric_hits(document_id=artifact_id)
+    except AttributeError:
+        metric_hits = []
+
+    return {
+        "artifact": art,
+        "tables": tables,
+        "charts": charts,
+        "formulas": formulas,
+        "entities": entities,
+        "structure": structure,
+        "metric_hits": metric_hits,
+    }
+
+
 @app.get("/analysis/structure")
 async def get_analysis_structure(document_id: str):
     try:
@@ -1576,8 +1655,18 @@ def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict],
     json_payload = {"texts": [{"text": placeholder}]}
     json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
     units_path = artifacts_dir / f"{file_path.stem}.text_units.json"
-    units_path.write_text(json.dumps([{ "text": placeholder, "page": 1 }], indent=2), encoding="utf-8")
-    return [], [], {"entities": [], "structure": None, "metric_hits": []}
+    units_path.write_text(
+        json.dumps([{ "text": placeholder, "page": 1 }], indent=2),
+        encoding="utf-8",
+    )
+    return [], [], {
+        "entities": [],
+        "structure": None,
+        "metric_hits": [],
+        "tables": [],
+        "charts": [],
+        "formulas": [],
+    }
 
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
     try:
