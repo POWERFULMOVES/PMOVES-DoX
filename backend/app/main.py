@@ -4,7 +4,7 @@ from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 import os
 from pathlib import Path
 import shutil
-from typing import List, Dict, Optional
+from typing import List, Dict, Optional, Any
 import uuid
 from dotenv import load_dotenv
 import time
@@ -1814,6 +1814,49 @@ async def get_facts(report_week: str = None):
     """Get all facts, optionally filtered by report week"""
     facts = db.get_facts(report_week)
     return {"facts": facts}
+
+
+@app.get("/analysis/financials")
+async def get_financial_statements(artifact_id: str | None = None):
+    """Return detected financial statements from processed tables."""
+    statements: List[Dict[str, Any]] = []
+    for ev in db.get_all_evidence():
+        if artifact_id and ev.get("artifact_id") != artifact_id:
+            continue
+        if ev.get("content_type") not in {"financial_table", "table"}:
+            continue
+        full_data = ev.get("full_data") or {}
+        if not isinstance(full_data, dict):
+            continue
+        statement = full_data.get("statement") or {}
+        if not isinstance(statement, dict):
+            continue
+        stmt_type = statement.get("type")
+        if stmt_type in (None, "", "unknown"):
+            continue
+        statements.append(
+            {
+                "evidence_id": ev.get("id"),
+                "artifact_id": ev.get("artifact_id"),
+                "locator": ev.get("locator"),
+                "statement_type": stmt_type,
+                "confidence": statement.get("confidence"),
+                "summary": statement.get("summary") or {},
+                "columns": full_data.get("columns", []),
+                "rows": full_data.get("rows", []),
+                "header_info": full_data.get("header_info"),
+            }
+        )
+
+    statements.sort(
+        key=lambda item: (
+            item.get("artifact_id") or "",
+            item.get("statement_type") or "",
+            item.get("locator") or "",
+        )
+    )
+    return {"statements": statements}
+
 
 @app.get("/evidence/{evidence_id}")
 async def get_evidence(evidence_id: str):

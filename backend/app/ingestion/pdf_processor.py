@@ -21,6 +21,9 @@ try:
 except ImportError:  # pragma: no cover
     AcceleratorOptions = None  # type: ignore
 
+from app.analysis.financial_statement_detector import FinancialStatementDetector
+from app.ingestion.complex_table_processor import ComplexTableProcessor
+
 def _torch_cuda_available() -> bool:
     try:
         import torch  # type: ignore
@@ -155,6 +158,73 @@ async def process_pdf(
     }
     analysis_results["document_reference"] = artifact_id or file_path.name
     
+    table_normalizer = ComplexTableProcessor()
+    statement_detector = FinancialStatementDetector()
+    enable_financials = os.getenv("PDF_FINANCIAL_ANALYSIS", "true").strip().lower() != "false"
+
+    # Process tables
+    for table_idx, table in enumerate(doc.tables):
+        evidence_id = str(uuid.uuid4())
+
+        # Convert table to pandas DataFrame for analysis
+        normalized_df, header_info = table_normalizer.normalize_table(table)
+        df = normalized_df
+
+        table_analysis = {
+            "type": "unknown",
+            "confidence": 0.0,
+            "summary": {},
+        }
+        if enable_financials and not df.empty:
+            table_analysis = statement_detector.analyze_table(df, header_info)
+
+        # Extract metrics from table
+        metrics = extract_metrics_from_table(df)
+        if table_analysis.get("summary"):
+            for key, value in table_analysis["summary"].items():
+                if value is not None:
+                    metrics.setdefault(key, value)
+
+        should_persist = bool(metrics) or (
+            table_analysis.get("type") not in (None, "", "unknown")
+        )
+
+        if should_persist:
+            # Get table location
+            bbox = None
+            if hasattr(table, 'prov') and table.prov:
+                bbox = {
+                    'page': table.prov[0].page if table.prov else None,
+                    'bbox': table.prov[0].bbox.as_tuple() if hasattr(table.prov[0], 'bbox') else None
+                }
+            
+            preview_df = df.head(5)
+            preview_str = preview_df.to_string(index=False)
+            if table_analysis.get("type") and table_analysis["type"] != "unknown":
+                preview_str = (
+                    f"{table_analysis['type'].replace('_', ' ').title()}"
+                    f" (confidence {table_analysis['confidence']:.2f})\n"
+                    f"{preview_str}"
+                )
+
+            content_type = "financial_table" if table_analysis.get("type") not in (None, "", "unknown") else "table"
+            serialized_rows = _dataframe_to_records(df)
+            evidence.append({
+                "id": evidence_id,
+                "locator": f"{file_path.name}#table{table_idx}",
+                "preview": preview_str,
+                "content_type": content_type,
+                "coordinates": bbox,
+                "full_data": {
+                    "columns": [str(col) for col in df.columns],
+                    "rows": serialized_rows,
+                    "header_info": header_info,
+                    "statement": table_analysis,
+                },
+            })
+
+            if metrics:
+                facts.append({
     # Process tables (multi-page aware)
     merged_tables = table_processor.detect_spanning_tables(doc)
     for table_idx, table_entry in enumerate(merged_tables):
@@ -430,3 +500,33 @@ def extract_metrics_from_text(text: str) -> Dict[str, float]:
                 pass
     
     return metrics
+
+
+def _dataframe_to_records(df: pd.DataFrame) -> List[Dict[str, Any]]:
+    records: List[Dict[str, Any]] = []
+    if df.empty:
+        return records
+    for row in df.to_dict("records"):
+        safe_row: Dict[str, Any] = {}
+        for key, value in row.items():
+            safe_row[str(key)] = _json_safe_value(value)
+        records.append(safe_row)
+    return records
+
+
+def _json_safe_value(value: Any) -> Any:
+    if value is None:
+        return None
+    try:
+        if pd.isna(value):
+            return None
+    except Exception:
+        pass
+    if hasattr(value, "item"):
+        try:
+            return value.item()
+        except Exception:
+            pass
+    if isinstance(value, pd.Timestamp):
+        return value.isoformat()
+    return value
