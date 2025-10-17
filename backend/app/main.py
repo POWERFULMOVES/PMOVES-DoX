@@ -277,7 +277,30 @@ async def health():
 
 @app.get("/artifacts")
 async def list_artifacts():
-    return {"artifacts": db.get_artifacts()}
+    artifacts = db.get_artifacts()
+    evidence = db.get_all_evidence()
+    summary: dict[str, dict[str, int]] = {}
+    for ev in evidence:
+        art_id = ev.get("artifact_id")
+        if not art_id:
+            continue
+        bucket = summary.setdefault(
+            art_id,
+            {"table_evidence": 0, "chart_evidence": 0, "formula_evidence": 0},
+        )
+        ctype = (ev.get("content_type") or "").lower()
+        if ctype == "table":
+            bucket["table_evidence"] += 1
+        elif ctype == "chart":
+            bucket["chart_evidence"] += 1
+        elif ctype == "formula":
+            bucket["formula_evidence"] += 1
+
+    enriched = []
+    for art in artifacts:
+        counts = summary.get(art.get("id"), {"table_evidence": 0, "chart_evidence": 0, "formula_evidence": 0})
+        enriched.append({**art, **counts})
+    return {"artifacts": enriched}
 
 @app.get("/artifacts/{artifact_id}")
 async def artifact_detail(artifact_id: str):

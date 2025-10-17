@@ -56,6 +56,9 @@ def _build_accelerator_options() -> AcceleratorOptions | None:
 NER_PROCESSOR = NERProcessor()
 STRUCTURE_PROCESSOR = DocumentStructureProcessor()
 METRIC_EXTRACTOR = BusinessMetricExtractor()
+from .advanced_table_processor import AdvancedTableProcessor
+from .chart_processor import ChartProcessor
+from .formula_processor import FormulaProcessor
 
 
 async def process_pdf(
@@ -64,6 +67,8 @@ async def process_pdf(
     artifacts_dir: Path,
     artifact_id: str | None = None,
 ) -> Tuple[List[Dict], List[Dict], Dict[str, Any]]:
+    artifacts_dir: Path
+) -> Tuple[List[Dict], List[Dict]]:
     """
     Process PDF using Docling with IBM Granite model
     Returns (facts, evidence)
@@ -103,6 +108,10 @@ async def process_pdf(
     # Convert PDF
     result = converter.convert(str(file_path))
     doc = result.document
+
+    table_processor = AdvancedTableProcessor()
+    chart_processor = ChartProcessor(enable_ocr=ocr_enabled)
+    formula_processor = FormulaProcessor()
     
     # Export to structured formats
     markdown_path = artifacts_dir / f"{file_path.stem}.md"
@@ -146,41 +155,46 @@ async def process_pdf(
     }
     analysis_results["document_reference"] = artifact_id or file_path.name
     
-    # Process tables
-    for table_idx, table in enumerate(doc.tables):
+    # Process tables (multi-page aware)
+    merged_tables = table_processor.detect_spanning_tables(doc)
+    for table_idx, table_entry in enumerate(merged_tables):
+        df = table_entry.get("dataframe")
+        if df is None or df.empty:
+            continue
+
         evidence_id = str(uuid.uuid4())
-        
-        # Convert table to pandas DataFrame for analysis
-        df = table.export_to_dataframe()
-        
-        # Extract metrics from table
         metrics = extract_metrics_from_table(df)
-        
-        if metrics:
-            # Get table location
-            bbox = None
-            if hasattr(table, 'prov') and table.prov:
-                bbox = {
-                    'page': table.prov[0].page if table.prov else None,
-                    'bbox': table.prov[0].bbox.as_tuple() if hasattr(table.prov[0], 'bbox') else None
-                }
-            
-            evidence.append({
+
+        coordinates = table_entry.get("segments") or []
+        preview = df.head(5).to_string(index=False)
+        full_payload: Dict[str, Any] = {
+            "rows": df.to_dict("records"),
+            "pages": table_entry.get("pages", []),
+            "merged": table_entry.get("merged", False),
+            "header_detected": table_entry.get("header_detected", False),
+        }
+
+        evidence.append(
+            {
                 "id": evidence_id,
                 "locator": f"{file_path.name}#table{table_idx}",
-                "preview": df.head(5).to_string(),
+                "preview": preview,
                 "content_type": "table",
-                "coordinates": bbox,
-                "full_data": df.to_dict('records')
-            })
-            
-            facts.append({
-                "id": str(uuid.uuid4()),
-                "report_week": report_week,
-                "entity": None,
-                "metrics": metrics,
-                "evidence_id": evidence_id
-            })
+                "coordinates": coordinates,
+                "full_data": full_payload,
+            }
+        )
+
+        if metrics:
+            facts.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "report_week": report_week,
+                    "entity": None,
+                    "metrics": metrics,
+                    "evidence_id": evidence_id,
+                }
+            )
     
     # Process text sections for key metrics
     for section_idx, item in enumerate(doc.texts):
@@ -215,34 +229,61 @@ async def process_pdf(
             })
     
     # Process charts/figures if available (surface VLM descriptions when present)
-    if hasattr(doc, 'pictures'):
-        vlm_repo = os.getenv("DOCLING_VLM_REPO")
-        for fig_idx, figure in enumerate(doc.pictures):
-            evidence_id = str(uuid.uuid4())
+    vlm_enabled = bool(os.getenv("DOCLING_VLM_REPO"))
+    chart_results = await chart_processor.process_charts(doc, artifacts_dir, file_path.stem)
+    for chart_idx, chart in enumerate(chart_results):
+        evidence_id = str(uuid.uuid4())
+        preview = chart.get("caption") or chart.get("extracted_text") or f"Chart {chart_idx}"
+        coordinates = None
+        if chart.get("page") is not None or chart.get("bbox") is not None:
+            coordinates = {"page": chart.get("page"), "bbox": chart.get("bbox")}
 
-            bbox = None
-            if hasattr(figure, 'prov') and figure.prov:
-                bbox = {
-                    'page': getattr(figure.prov[0], 'page', None) if figure.prov else None,
-                    'bbox': figure.prov[0].bbox.as_tuple() if hasattr(figure.prov[0], 'bbox') else None
-                }
-
-            # Try to extract any available description text from the figure
-            desc = None
-            for attr in ("description", "alt_text", "caption", "text", "summary"):
-                if hasattr(figure, attr):
-                    val = getattr(figure, attr)
-                    try:
-                        desc = (val or "").strip()
-                    except Exception:
-                        desc = None
-                    if desc:
-                        break
-            if not desc:
-                desc = f"Figure {fig_idx}"
-
-            evidence.append({
+        chart_payload = {**chart, "vlm_enabled": vlm_enabled}
+        evidence.append(
+            {
                 "id": evidence_id,
+                "locator": f"{file_path.name}#chart{chart_idx}",
+                "preview": (preview or "").strip()[:500],
+                "content_type": "chart",
+                "coordinates": coordinates,
+                "full_data": chart_payload,
+            }
+        )
+
+        metrics_payload = {
+            key: value
+            for key, value in {
+                "chart_id": chart.get("id"),
+                "chart_type": chart.get("type"),
+                "chart_caption": chart.get("caption"),
+                "chart_text": chart.get("extracted_text"),
+            }.items()
+            if value
+            }
+        if metrics_payload:
+            facts.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "report_week": report_week,
+                    "entity": "chart",
+                    "metrics": metrics_payload,
+                    "evidence_id": evidence_id,
+                }
+            )
+
+    # Formulas / equations
+    formulas = formula_processor.extract_formulas(doc)
+    for formula_idx, formula in enumerate(formulas):
+        evidence_id = str(uuid.uuid4())
+        preview = formula.get("latex") or formula.get("content") or f"Formula {formula_idx}"
+        coordinates = None
+        if formula.get("page") is not None or formula.get("bbox") is not None:
+            coordinates = {"page": formula.get("page"), "bbox": formula.get("bbox")}
+
+        evidence.append(
+            {
+                "id": evidence_id,
+
                 "locator": f"{file_path.name}#figure{fig_idx}",
                 "preview": desc[:500],
                 "content_type": "figure",
@@ -290,6 +331,36 @@ async def process_pdf(
     analysis_results["metric_hits"] = metric_hits
 
     return facts, evidence, analysis_results
+
+                "locator": f"{file_path.name}#formula{formula_idx}",
+                "preview": (preview or "").strip()[:500],
+                "content_type": "formula",
+                "coordinates": coordinates,
+                "full_data": formula,
+            }
+        )
+
+        metrics_payload = {
+            key: value
+            for key, value in {
+                "formula": formula.get("latex") or formula.get("content"),
+                "kind": formula.get("kind"),
+            }.items()
+            if value
+        }
+        if metrics_payload:
+            facts.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "report_week": report_week,
+                    "entity": "formula",
+                    "metrics": metrics_payload,
+                    "evidence_id": evidence_id,
+                }
+            )
+
+    return facts, evidence
+
 
 
 def extract_metrics_from_table(df: pd.DataFrame) -> Dict[str, float]:

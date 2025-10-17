@@ -53,6 +53,9 @@ def main():
         if not arts:
             fail("no artifacts returned")
         artifact_id = arts[-1]["id"]
+        for field in ("table_evidence", "chart_evidence", "formula_evidence"):
+            if field not in arts[-1]:
+                fail(f"artifact summary missing {field}")
         ok(f"/artifacts -> {artifact_id}")
     except Exception as e:
         fail(f"/artifacts error: {e}")
