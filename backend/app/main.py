@@ -2095,10 +2095,6 @@ async def open_pdf(artifact_id: str, page: int | None = None):
             raise HTTPException(403, "Access denied")
     headers = {"Content-Disposition": f"inline; filename=\"{p.name}\""}
     return FileResponse(str(p), media_type="application/pdf", headers=headers)
-if __name__ == "__main__":
-    import uvicorn
-    port = int(os.getenv("PORT", "8000"))
-    uvicorn.run(app, host="0.0.0.0", port=port)
 
 
 WebUrlForm = Annotated[List[str] | None, Form(default=None)]
@@ -2208,5 +2204,12 @@ async def upload_files(
             results.append({"filename": url, "status": "error", "error": str(exc)})
 
     return {"results": results}
+
+
+if __name__ == "__main__":
+    import uvicorn
+
+    port = int(os.getenv("PORT", "8000"))
+    uvicorn.run(app, host="0.0.0.0", port=port)
 
 
