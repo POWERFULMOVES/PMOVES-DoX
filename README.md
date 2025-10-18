@@ -50,6 +50,36 @@ Then:
 - Try Global Search; explore Logs/APIs/Tags
 - Tags → Load LMS Preset → Preview/Extract → Export POML (pick variant)
 
+### Command Line Interface (CLI)
+
+Use the bundled Typer CLI to drive ingestion and backend workflows without opening the UI.
+
+- **Zero-install:** `uvx --from . pmoves-cli --help`
+- **Existing venv:** `pip install -e .` (installs the CLI entry point `pmoves-cli`)
+
+Common commands:
+
+```bash
+# Ingest artifacts
+pmoves-cli --base-url http://localhost:8000 ingest pdf ./samples/sample.pdf --sync-pdf
+pmoves-cli --base-url http://localhost:8000 ingest log ./samples/sample.xml
+pmoves-cli --base-url http://localhost:8000 ingest api ./samples/sample_openapi.json
+
+# Search + export
+pmoves-cli --base-url http://localhost:8000 search "Loan onboarding" --json
+pmoves-cli --base-url http://localhost:8000 export-tags <document-id> -o tags.json
+pmoves-cli --base-url http://localhost:8000 download artifacts/<file>.json ./out.json
+```
+
+Running the CLI against the in-repo backend (no server process) is also supported. The CLI boots the FastAPI application in-process via ASGI, making it ideal for CI smoke checks or quick experiments:
+
+```bash
+uvx --from . pmoves-cli --local-app ingest log ./samples/sample.xml
+uvx --from . pmoves-cli --local-app search "__ui_test__" --json
+```
+
+> Set `DB_PATH`, `FAST_PDF_MODE=true`, and related environment variables before invoking `--local-app` if you want the CLI to persist data to a custom location.
+
 ### Optional: Supabase Backend
 
 1. **Start Supabase locally**
