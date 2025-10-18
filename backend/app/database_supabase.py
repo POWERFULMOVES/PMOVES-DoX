@@ -175,6 +175,56 @@ class SupabaseDatabase:
             operation="store_entities",
         )
 
+    def store_summary(self, summary: Dict) -> str:
+        payload = {
+            "id": summary.get("id") or str(uuid.uuid4()),
+            "scope": summary.get("scope", "workspace"),
+            "scope_key": summary.get("scope_key", summary.get("scope", "workspace")),
+            "style": summary.get("style", "bullet"),
+            "provider": summary.get("provider"),
+            "prompt": summary.get("prompt"),
+            "summary_text": summary.get("summary_text", ""),
+            "artifact_ids": summary.get("artifact_ids", []),
+            "evidence_ids": summary.get("evidence_ids", []),
+            "created_at": summary.get("created_at") or self._now_iso(),
+        }
+        self._run(
+            self._table("summaries").upsert(payload, on_conflict="id"),
+            operation="store_summary",
+        )
+        return payload["id"]
+
+    def get_summary(self, scope_key: str, style: str) -> Optional[Dict]:
+        rows = self._run(
+            self._table("summaries")
+            .select("*")
+            .eq("scope_key", scope_key)
+            .eq("style", style)
+            .order("created_at", desc=True)
+            .limit(1),
+            operation="get_summary",
+        )
+        if not rows:
+            return None
+        return self._coerce_summary(rows[0])
+
+    def list_summaries(
+        self,
+        *,
+        scope: Optional[str] = None,
+        style: Optional[str] = None,
+    ) -> List[Dict]:
+        query = self._table("summaries").select("*")
+        if scope:
+            query = query.eq("scope", scope)
+        if style:
+            query = query.eq("style", style)
+        rows = self._run(
+            query.order("created_at", desc=True),
+            operation="list_summaries",
+        )
+        return [self._coerce_summary(row) for row in rows]
+
     def store_structure(self, document_id: str, structure: Optional[Dict]) -> None:
         if structure is None:
             self._run(
@@ -452,8 +502,35 @@ class SupabaseDatabase:
             "documents",
             "artifacts",
             "tag_prompts",
+            "summaries",
         ):
             try:
                 self._run(self._table(table).delete().neq("id", None), operation=f"reset_{table}")
             except Exception as exc:  # pragma: no cover - avoid hard failure during cleanup
                 LOGGER.warning("Supabase reset skipped for %s: %s", table, exc)
+
+    def _coerce_summary(self, row: Dict[str, Any]) -> Dict[str, Any]:
+        artifact_ids = row.get("artifact_ids")
+        if isinstance(artifact_ids, str):
+            try:
+                artifact_ids = json.loads(artifact_ids)
+            except Exception:
+                artifact_ids = [artifact_ids]
+        evidence_ids = row.get("evidence_ids")
+        if isinstance(evidence_ids, str):
+            try:
+                evidence_ids = json.loads(evidence_ids)
+            except Exception:
+                evidence_ids = [evidence_ids]
+        return {
+            "id": row.get("id"),
+            "scope": row.get("scope"),
+            "scope_key": row.get("scope_key"),
+            "style": row.get("style"),
+            "provider": row.get("provider"),
+            "prompt": row.get("prompt"),
+            "summary_text": row.get("summary_text", ""),
+            "artifact_ids": artifact_ids or [],
+            "evidence_ids": evidence_ids or [],
+            "created_at": row.get("created_at", self._now_iso()),
+        }

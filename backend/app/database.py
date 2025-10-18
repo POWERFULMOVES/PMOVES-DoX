@@ -1,6 +1,8 @@
 import os
 import json
 import uuid
+from datetime import datetime
+from typing import List, Dict, Optional
 from typing import Any, List, Dict, Optional
 from pathlib import Path
 
@@ -35,6 +37,21 @@ class Fact(SQLModel, table=True):
     entity: Optional[str] = None
     metrics_json: str
     evidence_id: Optional[str] = None
+
+
+class SummaryRow(SQLModel, table=True):
+    __tablename__ = "summaries"
+
+    id: str = Field(primary_key=True)
+    scope: str
+    scope_key: str
+    style: str
+    provider: Optional[str] = None
+    prompt: Optional[str] = None
+    summary_text: str
+    artifact_ids_json: Optional[str] = None
+    evidence_ids_json: Optional[str] = None
+    created_at: str
 
 
 class Database:
@@ -128,6 +145,80 @@ class Database:
             s.add(row)
             s.commit()
 
+    def store_summary(self, summary: Dict) -> str:
+        payload = SummaryRow(
+            id=summary.get("id", str(uuid.uuid4())),
+            scope=summary.get("scope", "workspace"),
+            scope_key=summary.get("scope_key", summary.get("scope", "workspace")),
+            style=summary.get("style", "bullet"),
+            provider=summary.get("provider"),
+            prompt=summary.get("prompt"),
+            summary_text=summary.get("summary_text", ""),
+            artifact_ids_json=json.dumps(summary.get("artifact_ids", []), ensure_ascii=False),
+            evidence_ids_json=json.dumps(summary.get("evidence_ids", []), ensure_ascii=False),
+            created_at=summary.get("created_at")
+            or datetime.utcnow().isoformat(timespec="seconds") + "Z",
+        )
+        with Session(self.engine) as s:
+            existing = s.get(SummaryRow, payload.id)
+            if existing:
+                existing.scope = payload.scope
+                existing.scope_key = payload.scope_key
+                existing.style = payload.style
+                existing.provider = payload.provider
+                existing.prompt = payload.prompt
+                existing.summary_text = payload.summary_text
+                existing.artifact_ids_json = payload.artifact_ids_json
+                existing.evidence_ids_json = payload.evidence_ids_json
+                existing.created_at = payload.created_at
+            else:
+                s.add(payload)
+            s.commit()
+        return payload.id
+
+    def get_summary(self, scope_key: str, style: str) -> Optional[Dict]:
+        with Session(self.engine) as s:
+            stmt = (
+                select(SummaryRow)
+                .where(SummaryRow.scope_key == scope_key)
+                .where(SummaryRow.style == style)
+                .order_by(SummaryRow.created_at.desc())
+            )
+            row = s.exec(stmt).first()
+        if not row:
+            return None
+        return self._summary_to_dict(row)
+
+    def list_summaries(
+        self,
+        *,
+        scope: Optional[str] = None,
+        style: Optional[str] = None,
+    ) -> List[Dict]:
+        with Session(self.engine) as s:
+            stmt = select(SummaryRow)
+            if scope:
+                stmt = stmt.where(SummaryRow.scope == scope)
+            if style:
+                stmt = stmt.where(SummaryRow.style == style)
+            stmt = stmt.order_by(SummaryRow.created_at.desc())
+            rows = s.exec(stmt).all()
+        return [self._summary_to_dict(r) for r in rows]
+
+    def _summary_to_dict(self, row: SummaryRow) -> Dict:
+        return {
+            "id": row.id,
+            "scope": row.scope,
+            "scope_key": row.scope_key,
+            "style": row.style,
+            "provider": row.provider,
+            "prompt": row.prompt,
+            "summary_text": row.summary_text,
+            "artifact_ids": json.loads(row.artifact_ids_json or "[]"),
+            "evidence_ids": json.loads(row.evidence_ids_json or "[]"),
+            "created_at": row.created_at,
+        }
+
     def get_facts(self, report_week: Optional[str] = None) -> List[Dict]:
         with Session(self.engine) as s:
             if report_week:
@@ -200,6 +291,7 @@ class Database:
 
     def reset(self):
         with Session(self.engine) as s:
+            s.exec(delete(SummaryRow))
             s.exec("DELETE FROM evidence")
             s.exec("DELETE FROM fact")
             s.exec("DELETE FROM artifact")

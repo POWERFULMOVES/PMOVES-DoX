@@ -122,6 +122,35 @@ def main():
     except Exception as e:
         fail(f"/facts error: {e}")
 
+    # Summaries (workspace + artifact)
+    try:
+        for style in ("bullet", "executive", "action_items"):
+            payload = {"style": style, "scope": "workspace"}
+            resp = r.post(f"{API}/summaries/generate", json=payload, timeout=20)
+            resp.raise_for_status()
+            body = resp.json()
+            if body.get("style") != style or not body.get("summary"):
+                fail(f"workspace summary missing fields for style {style}")
+        ok("/summaries/generate workspace styles")
+    except Exception as e:
+        fail(f"workspace summaries error: {e}")
+
+    try:
+        payload = {"style": "bullet", "scope": "artifact", "artifact_ids": [artifact_id]}
+        resp = r.post(f"{API}/summaries/generate", json=payload, timeout=20)
+        resp.raise_for_status()
+        data = resp.json()
+        if not isinstance(data.get("scope", {}).get("artifact_ids"), list):
+            fail("artifact summary missing scope artifact_ids")
+        hist = r.get(f"{API}/summaries", params={"scope": "artifact", "style": "bullet"}, timeout=10)
+        hist.raise_for_status()
+        history = hist.json().get("summaries", [])
+        if not isinstance(history, list) or len(history) == 0:
+            fail("artifact summary history empty")
+        ok("/summaries artifact generate + list")
+    except Exception as e:
+        fail(f"artifact summaries error: {e}")
+
     # 3b) upload a tiny PDF (for /open/pdf and PDF paths) and run CHR(sentences)
     #    Create a minimal valid PDF from base64 inline to avoid extra deps
     try:
