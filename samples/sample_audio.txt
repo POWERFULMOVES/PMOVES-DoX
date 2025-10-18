@@ -1,0 +1,1 @@
+This is a sample audio clip containing a simple tone.
