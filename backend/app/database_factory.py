@@ -26,6 +26,7 @@ WRITE_METHODS = {
     "store_entities",
     "store_structure",
     "store_metric_hits",
+    "store_summary",
 }
 
 
