@@ -15,6 +15,7 @@ import EntitiesPanel from '@/components/EntitiesPanel';
 import StructurePanel from '@/components/StructurePanel';
 import MetricHitsPanel from '@/components/MetricHitsPanel';
 import SummariesPanel from '@/components/SummariesPanel';
+import MediaArtifactsPanel from '@/components/MediaArtifactsPanel';
 
 export default function Home() {
   const [refreshKey, setRefreshKey] = useState(0);
@@ -115,6 +116,7 @@ export default function Home() {
             </div>
             <div className="grid grid-cols-1 gap-8 mb-8">
               <SummariesPanel />
+              <MediaArtifactsPanel />
             </div>
           </>
         )}

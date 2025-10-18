@@ -1,10 +1,12 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 import os
 from pathlib import Path
 import shutil
 from typing import List, Dict, Optional, Any, Literal
+from typing import List, Dict, Optional, Annotated
+from typing import List, Dict, Optional, Any
 import uuid
 from dotenv import load_dotenv
 import time
@@ -23,6 +25,9 @@ from app.ingestion.xlsx_processor import process_xlsx
 from app.ingestion.xml_ingestion import process_xml
 from app.ingestion.openapi_ingestion import process_openapi
 from app.ingestion.postman_ingestion import process_postman
+from app.ingestion.web_ingestion import ingest_web_url
+from app.ingestion.media_transcriber import transcribe_media
+from app.ingestion.image_ocr import extract_text_from_image
 from app.database_factory import init_database
 from app.qa_engine import QAEngine
 from app.extraction.langextract_adapter import run_langextract, write_visualization
@@ -96,6 +101,11 @@ HRM_CFG = HRMConfig(
     threshold=float(os.getenv("HRM_THRESHOLD", "0.5")),
 )
 HRM_STATS = HRMMetrics()
+
+AUDIO_SUFFIXES = {".mp3", ".wav", ".m4a", ".ogg", ".flac", ".aac"}
+VIDEO_SUFFIXES = {".mp4", ".mov", ".mkv", ".webm", ".avi"}
+IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
+MEDIA_SUFFIXES = AUDIO_SUFFIXES | VIDEO_SUFFIXES
 
 
 def _env_flag(name: str, default: bool = False) -> bool:
@@ -288,7 +298,15 @@ async def list_artifacts():
             continue
         bucket = summary.setdefault(
             art_id,
-            {"table_evidence": 0, "chart_evidence": 0, "formula_evidence": 0},
+            {
+                "table_evidence": 0,
+                "chart_evidence": 0,
+                "formula_evidence": 0,
+                "media_transcripts": 0,
+                "media_metadata": 0,
+                "web_pages": 0,
+                "image_ocr": 0,
+            },
         )
         ctype = (ev.get("content_type") or "").lower()
         if ctype == "table":
@@ -297,10 +315,29 @@ async def list_artifacts():
             bucket["chart_evidence"] += 1
         elif ctype == "formula":
             bucket["formula_evidence"] += 1
+        elif ctype in {"media_transcript", "audio_transcript", "video_transcript"}:
+            bucket["media_transcripts"] += 1
+        elif ctype == "media_metadata":
+            bucket["media_metadata"] += 1
+        elif ctype == "web_page":
+            bucket["web_pages"] += 1
+        elif ctype == "image_ocr":
+            bucket["image_ocr"] += 1
 
     enriched = []
     for art in artifacts:
-        counts = summary.get(art.get("id"), {"table_evidence": 0, "chart_evidence": 0, "formula_evidence": 0})
+        counts = summary.get(
+            art.get("id"),
+            {
+                "table_evidence": 0,
+                "chart_evidence": 0,
+                "formula_evidence": 0,
+                "media_transcripts": 0,
+                "media_metadata": 0,
+                "web_pages": 0,
+                "image_ocr": 0,
+            },
+        )
         enriched.append({**art, **counts})
     return {"artifacts": enriched}
 
@@ -313,6 +350,47 @@ async def artifact_detail(artifact_id: str):
     facts = [f for f in db.get_facts() if f.get("artifact_id") == artifact_id]
     evidence = [e for e in db.get_all_evidence() if e.get("artifact_id") == artifact_id]
     return {"artifact": art, "facts": facts, "evidence": evidence}
+
+
+@app.get("/artifacts/media")
+async def artifact_media():
+    artifacts = {a.get("id"): a for a in db.get_artifacts()}
+    evidence = db.get_all_evidence()
+    transcripts: list[dict] = []
+    metadata_rows: list[dict] = []
+    web_rows: list[dict] = []
+    ocr_rows: list[dict] = []
+
+    for ev in evidence:
+        art_id = ev.get("artifact_id")
+        ctype = (ev.get("content_type") or "").lower()
+        entry = {
+            "artifact_id": art_id,
+            "artifact": {
+                "id": art_id,
+                "filename": artifacts.get(art_id, {}).get("filename"),
+                "filetype": artifacts.get(art_id, {}).get("filetype"),
+            },
+            "locator": ev.get("locator"),
+            "preview": ev.get("preview"),
+            "content_type": ctype,
+            "full_data": ev.get("full_data"),
+        }
+        if ctype in {"media_transcript", "audio_transcript", "video_transcript"}:
+            transcripts.append(entry)
+        elif ctype == "media_metadata":
+            metadata_rows.append(entry)
+        elif ctype == "web_page":
+            web_rows.append(entry)
+        elif ctype == "image_ocr":
+            ocr_rows.append(entry)
+
+    return {
+        "transcripts": transcripts,
+        "media_metadata": metadata_rows,
+        "web_pages": web_rows,
+        "image_text": ocr_rows,
+    }
 
 @app.get("/documents")
 async def list_documents(type: str | None = None):
@@ -327,6 +405,85 @@ async def get_analysis_entities(document_id: str | None = None, label: str | Non
     except AttributeError:
         items = []
     return {"entities": items}
+
+
+@app.get("/analysis/artifacts/{artifact_id}")
+async def get_artifact_analysis(artifact_id: str):
+    arts = db.get_artifacts()
+    art = next((a for a in arts if a.get("id") == artifact_id), None)
+    if not art:
+        raise HTTPException(404, "Artifact not found")
+
+    evidence = [e for e in db.get_all_evidence() if e.get("artifact_id") == artifact_id]
+
+    tables: list[dict] = []
+    charts: list[dict] = []
+    formulas: list[dict] = []
+
+    for ev in evidence:
+        ctype = (ev.get("content_type") or "").lower()
+        base = {
+            "id": ev.get("id"),
+            "locator": ev.get("locator"),
+            "preview": ev.get("preview"),
+            "coordinates": ev.get("coordinates"),
+        }
+        full = ev.get("full_data") or {}
+
+        if ctype == "table":
+            rows = list(full.get("rows") or [])
+            tables.append(
+                {
+                    **base,
+                    "pages": full.get("pages", []),
+                    "merged": full.get("merged", False),
+                    "header_detected": full.get("header_detected", False),
+                    "columns": full.get("columns", []),
+                    "row_count": len(rows),
+                    "rows": rows[:20],
+                }
+            )
+        elif ctype == "chart":
+            charts.append(
+                {
+                    **base,
+                    "id": full.get("id") or base.get("id"),
+                    "page": full.get("page"),
+                    "bbox": full.get("bbox"),
+                    "image_path": full.get("image_path"),
+                    "caption": full.get("caption"),
+                    "type": full.get("type"),
+                    "extracted_text": full.get("extracted_text"),
+                    "vlm_enabled": full.get("vlm_enabled"),
+                }
+            )
+        elif ctype == "formula":
+            formulas.append({**base, **full})
+
+    try:
+        entities = db.list_entities(document_id=artifact_id)
+    except AttributeError:
+        entities = []
+
+    try:
+        structure = db.get_structure(artifact_id)
+    except AttributeError:
+        structure = None
+
+    try:
+        metric_hits = db.list_metric_hits(document_id=artifact_id)
+    except AttributeError:
+        metric_hits = []
+
+    return {
+        "artifact": art,
+        "tables": tables,
+        "charts": charts,
+        "formulas": formulas,
+        "entities": entities,
+        "structure": structure,
+        "metric_hits": metric_hits,
+    }
 
 
 @app.get("/analysis/structure")
@@ -1618,12 +1775,24 @@ def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict],
     json_payload = {"texts": [{"text": placeholder}]}
     json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
     units_path = artifacts_dir / f"{file_path.stem}.text_units.json"
-    units_path.write_text(json.dumps([{ "text": placeholder, "page": 1 }], indent=2), encoding="utf-8")
-    return [], [], {"entities": [], "structure": None, "metric_hits": []}
+    units_path.write_text(
+        json.dumps([{ "text": placeholder, "page": 1 }], indent=2),
+        encoding="utf-8",
+    )
+    return [], [], {
+        "entities": [],
+        "structure": None,
+        "metric_hits": [],
+        "tables": [],
+        "charts": [],
+        "formulas": [],
+    }
 
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
     try:
         analysis_payload: dict | None = None
+        facts: list[dict]
+        evidence: list[dict]
         if suffix == ".pdf":
             # PDF is async-capable but can be used sync too
             if _env_flag("FAST_PDF_MODE", True):
@@ -1648,6 +1817,78 @@ def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suff
             facts, evidence = process_csv(file_path, report_week)
         elif suffix in [".xlsx", ".xls"]:
             facts, evidence = process_xlsx(file_path, report_week)
+        elif suffix in MEDIA_SUFFIXES:
+            facts = []
+            media_payload = transcribe_media(file_path, ARTIFACTS_DIR, artifact_id)
+            evidence = []
+            transcript_text = (media_payload.get("text") or "").strip()
+            warnings = media_payload.get("warnings") or []
+            if transcript_text or warnings:
+                evidence.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "locator": f"{file_path.name}#transcript",
+                        "preview": media_payload.get("preview") or transcript_text[:240],
+                        "content_type": "media_transcript",
+                        "full_data": media_payload,
+                    }
+                )
+            metadata = media_payload.get("metadata") or {}
+            if metadata:
+                preview_meta = {k: metadata.get(k) for k in ("duration_seconds", "format", "notes") if metadata.get(k) is not None}
+                evidence.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "locator": f"{file_path.name}#metadata",
+                        "preview": json.dumps(preview_meta or metadata, ensure_ascii=False)[:240],
+                        "content_type": "media_metadata",
+                        "full_data": metadata,
+                    }
+                )
+            media_kind = "video" if suffix in VIDEO_SUFFIXES else "audio"
+            extras = {
+                "media": {
+                    "kind": media_kind,
+                    "transcript_preview": media_payload.get("preview"),
+                    "artifacts": media_payload.get("artifacts"),
+                    "engine": media_payload.get("engine"),
+                    "metadata": metadata,
+                    "status": media_payload.get("status"),
+                    "warnings": warnings,
+                }
+            }
+            try:
+                db.update_artifact(artifact_id, extras=extras)
+            except Exception:
+                pass
+        elif suffix in IMAGE_SUFFIXES:
+            facts = []
+            ocr_payload = extract_text_from_image(file_path, ARTIFACTS_DIR, artifact_id)
+            evidence = []
+            text = (ocr_payload.get("text") or "").strip()
+            warnings = ocr_payload.get("warnings") or []
+            if text or warnings:
+                evidence.append(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "locator": f"{file_path.name}#ocr",
+                        "preview": ocr_payload.get("preview") or text[:200],
+                        "content_type": "image_ocr",
+                        "full_data": ocr_payload,
+                    }
+                )
+            extras = {
+                "image": {
+                    "transcript_preview": ocr_payload.get("preview"),
+                    "artifacts": ocr_payload.get("artifacts"),
+                    "metadata": ocr_payload.get("metadata"),
+                    "warnings": warnings,
+                }
+            }
+            try:
+                db.update_artifact(artifact_id, extras=extras)
+            except Exception:
+                pass
         else:
             raise HTTPException(400, f"Unsupported file type: {suffix}")
 
@@ -1733,64 +1974,6 @@ def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suff
             raise
 
 
-@app.post("/upload")
-async def upload_files(background_tasks: BackgroundTasks, files: List[UploadFile] = File(...), report_week: str = "", async_pdf: bool = True):
-    """Upload and process documents"""
-    results = []
-    
-    for file in files:
-        # Save uploaded file
-        file_id = str(uuid.uuid4())
-        file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
-        
-        with file_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
-        
-        # Process based on file type
-        try:
-            suffix = file_path.suffix.lower()
-            # Store artifact first (status is informal metadata)
-            artifact_id = db.add_artifact({
-                "id": file_id,
-                "filename": file.filename,
-                "filepath": str(file_path),
-                "filetype": suffix,
-                "report_week": report_week,
-                "status": "processing" if (async_pdf and suffix == ".pdf") else "processed"
-            })
-            # Async for PDFs if requested
-            if async_pdf and suffix == ".pdf":
-                task_id = str(uuid.uuid4())
-                TASKS[task_id] = {"status": "queued", "filename": file.filename, "artifact_id": artifact_id}
-                background_tasks.add_task(_process_and_store, file_path, report_week, artifact_id, suffix, task_id)
-                results.append({
-                    "filename": file.filename,
-                    "status": "queued",
-                    "task_id": task_id
-                })
-            else:
-                # Synchronous processing (CSV/XLSX, or PDFs if async disabled)
-                _process_and_store(file_path, report_week, artifact_id, suffix, None)
-                # Calculate counts for the artifact we just added
-                facts_count = len([f for f in db.get_facts(report_week) if f.get("artifact_id") == artifact_id])
-                evidence_count = len([e for e in db.get_all_evidence() if e.get("artifact_id") == artifact_id])
-                results.append({
-                    "filename": file.filename,
-                    "status": "success",
-                    "facts_count": facts_count,
-                    "evidence_count": evidence_count
-                })
-            
-        except Exception as e:
-            results.append({
-                "filename": file.filename,
-                "status": "error",
-                "error": str(e)
-            })
-    
-    return {"results": results}
-
-
 @app.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
     task = TASKS.get(task_id)
@@ -1809,9 +1992,10 @@ async def load_samples(background_tasks: BackgroundTasks, report_week: str = "",
     results = []
     # Known sample names or all supported files in folder
     sample_files: List[Path] = []
-    for ext in ("*.csv", "*.xlsx", "*.xls", "*.pdf"):
+    for ext in ("*.csv", "*.xlsx", "*.xls", "*.pdf", "*.mp3", "*.wav", "*.mp4", "*.m4a", "*.png", "*.jpg", "*.jpeg"):
         sample_files.extend(sample_dir.glob(ext))
-    if not sample_files:
+    web_sample_path = sample_dir / "web_urls.txt"
+    if not sample_files and not web_sample_path.exists():
         return {"results": [{"status": "error", "error": "No sample files found"}]}
 
     # Reuse upload logic by simulating saved files
@@ -1849,6 +2033,52 @@ async def load_samples(background_tasks: BackgroundTasks, report_week: str = "",
         except Exception as e:
             results.append({"filename": p.name, "status": "error", "error": str(e)})
 
+    if web_sample_path.exists():
+        for line in web_sample_path.read_text(encoding="utf-8").splitlines():
+            url = line.strip()
+            if not url:
+                continue
+            artifact_id = str(uuid.uuid4())
+            try:
+                db.add_artifact(
+                    {
+                        "id": artifact_id,
+                        "filename": url,
+                        "filepath": url,
+                        "filetype": "url",
+                        "report_week": report_week,
+                        "status": "processed",
+                        "source_url": url,
+                        "extras": {"web": {"status": "queued"}},
+                    }
+                )
+                payload = ingest_web_url(url, ARTIFACTS_DIR, artifact_id)
+                db.add_evidence(
+                    {
+                        "id": str(uuid.uuid4()),
+                        "artifact_id": artifact_id,
+                        "locator": url,
+                        "preview": (payload.get("text") or "")[:280],
+                        "content_type": "web_page",
+                        "full_data": payload,
+                    }
+                )
+                db.update_artifact(
+                    artifact_id,
+                    extras={
+                        "web": {
+                            "status": "processed",
+                            "preview": (payload.get("text") or "")[:240],
+                            "metadata": payload.get("metadata"),
+                            "artifacts": payload.get("artifacts"),
+                            "warnings": payload.get("warnings"),
+                        }
+                    },
+                )
+                results.append({"filename": url, "status": "success", "facts_count": 0, "evidence_count": 1})
+            except Exception as exc:
+                results.append({"filename": url, "status": "error", "error": str(exc)})
+
     return {"results": results}
 
 @app.get("/facts")
@@ -1856,6 +2086,49 @@ async def get_facts(report_week: str = None):
     """Get all facts, optionally filtered by report week"""
     facts = db.get_facts(report_week)
     return {"facts": facts}
+
+
+@app.get("/analysis/financials")
+async def get_financial_statements(artifact_id: str | None = None):
+    """Return detected financial statements from processed tables."""
+    statements: List[Dict[str, Any]] = []
+    for ev in db.get_all_evidence():
+        if artifact_id and ev.get("artifact_id") != artifact_id:
+            continue
+        if ev.get("content_type") not in {"financial_table", "table"}:
+            continue
+        full_data = ev.get("full_data") or {}
+        if not isinstance(full_data, dict):
+            continue
+        statement = full_data.get("statement") or {}
+        if not isinstance(statement, dict):
+            continue
+        stmt_type = statement.get("type")
+        if stmt_type in (None, "", "unknown"):
+            continue
+        statements.append(
+            {
+                "evidence_id": ev.get("id"),
+                "artifact_id": ev.get("artifact_id"),
+                "locator": ev.get("locator"),
+                "statement_type": stmt_type,
+                "confidence": statement.get("confidence"),
+                "summary": statement.get("summary") or {},
+                "columns": full_data.get("columns", []),
+                "rows": full_data.get("rows", []),
+                "header_info": full_data.get("header_info"),
+            }
+        )
+
+    statements.sort(
+        key=lambda item: (
+            item.get("artifact_id") or "",
+            item.get("statement_type") or "",
+            item.get("locator") or "",
+        )
+    )
+    return {"statements": statements}
+
 
 @app.get("/evidence/{evidence_id}")
 async def get_evidence(evidence_id: str):
@@ -1998,8 +2271,120 @@ async def open_pdf(artifact_id: str, page: int | None = None):
             raise HTTPException(403, "Access denied")
     headers = {"Content-Disposition": f"inline; filename=\"{p.name}\""}
     return FileResponse(str(p), media_type="application/pdf", headers=headers)
+
+
+WebUrlForm = Annotated[List[str] | None, Form(default=None)]
+
+
+@app.post("/upload")
+async def upload_files(
+    background_tasks: BackgroundTasks,
+    files: List[UploadFile] | None = File(default=None),
+    report_week: str = "",
+    async_pdf: bool = True,
+    web_urls: WebUrlForm = None,
+):
+    """Upload and process documents."""
+
+    results: List[Dict] = []
+    incoming_files = files or []
+
+    for file in incoming_files:
+        file_id = str(uuid.uuid4())
+        file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+        with file_path.open("wb") as buffer:
+            shutil.copyfileobj(file.file, buffer)
+
+        try:
+            suffix = file_path.suffix.lower()
+            artifact_id = db.add_artifact(
+                {
+                    "id": file_id,
+                    "filename": file.filename,
+                    "filepath": str(file_path),
+                    "filetype": suffix,
+                    "report_week": report_week,
+                    "status": "processing" if (async_pdf and suffix == ".pdf") else "processed",
+                }
+            )
+            if async_pdf and suffix == ".pdf":
+                task_id = str(uuid.uuid4())
+                TASKS[task_id] = {"status": "queued", "filename": file.filename, "artifact_id": artifact_id}
+                background_tasks.add_task(_process_and_store, file_path, report_week, artifact_id, suffix, task_id)
+                results.append({"filename": file.filename, "status": "queued", "task_id": task_id})
+            else:
+                _process_and_store(file_path, report_week, artifact_id, suffix, None)
+                facts_count = len([f for f in db.get_facts(report_week) if f.get("artifact_id") == artifact_id])
+                evidence_count = len([e for e in db.get_all_evidence() if e.get("artifact_id") == artifact_id])
+                results.append(
+                    {
+                        "filename": file.filename,
+                        "status": "success",
+                        "facts_count": facts_count,
+                        "evidence_count": evidence_count,
+                    }
+                )
+        except Exception as exc:
+            results.append({"filename": file.filename, "status": "error", "error": str(exc)})
+
+    for raw_url in web_urls or []:
+        url = (raw_url or "").strip()
+        if not url:
+            continue
+        artifact_id = str(uuid.uuid4())
+        try:
+            artifact_record = {
+                "id": artifact_id,
+                "filename": url,
+                "filepath": url,
+                "filetype": "url",
+                "report_week": report_week,
+                "status": "processed",
+                "source_url": url,
+                "extras": {"web": {"status": "queued"}},
+            }
+            db.add_artifact(artifact_record)
+            web_payload = ingest_web_url(url, ARTIFACTS_DIR, artifact_id)
+            db.add_evidence(
+                {
+                    "id": str(uuid.uuid4()),
+                    "artifact_id": artifact_id,
+                    "locator": url,
+                    "preview": (web_payload.get("text") or "")[:280],
+                    "content_type": "web_page",
+                    "full_data": web_payload,
+                }
+            )
+            db.update_artifact(
+                artifact_id,
+                extras={
+                    "web": {
+                        "status": "processed",
+                        "preview": (web_payload.get("text") or "")[:240],
+                        "metadata": web_payload.get("metadata"),
+                        "artifacts": web_payload.get("artifacts"),
+                        "warnings": web_payload.get("warnings"),
+                    }
+                },
+            )
+            results.append(
+                {
+                    "filename": url,
+                    "status": "success",
+                    "facts_count": 0,
+                    "evidence_count": 1,
+                    "artifact_id": artifact_id,
+                }
+            )
+        except Exception as exc:
+            results.append({"filename": url, "status": "error", "error": str(exc)})
+
+    return {"results": results}
+
+
 if __name__ == "__main__":
     import uvicorn
+
     port = int(os.getenv("PORT", "8000"))
     uvicorn.run(app, host="0.0.0.0", port=port)
 

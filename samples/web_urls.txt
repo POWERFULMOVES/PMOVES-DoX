@@ -1,0 +1,1 @@
+data:text/html,%3Ch1%3EWorkspace%20Media%20Sample%3C/h1%3E%3Cp%3EThis%20page%20was%20ingested%20from%20a%20data%20URL%20fixture.%3C/p%3E

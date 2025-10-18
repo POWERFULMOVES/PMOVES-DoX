@@ -1,13 +1,13 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
-import { useEffect, useState } from 'react';
 import { useToast } from '@/components/Toast';
 
 export default function ArtifactsPanel() {
   const [artifacts, setArtifacts] = useState<any[]>([]);
   const [busy, setBusy] = useState<string | null>(null);
   const [detail, setDetail] = useState<any | null>(null);
+  const [analysis, setAnalysis] = useState<any | null>(null);
   const [opts, setOpts] = useState<Record<string, any>>({});
   const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
   const { push } = useToast();
@@ -86,9 +86,17 @@ export default function ArtifactsPanel() {
   };
 
   const openDetail = async (id: string) => {
-    const r = await fetch(`${API}/artifacts/${id}`);
-    if (!r.ok) return;
-    setDetail(await r.json());
+    const [detailRes, analysisRes] = await Promise.all([
+      fetch(`${API}/artifacts/${id}`),
+      fetch(`${API}/analysis/artifacts/${id}`)
+    ]);
+    if (!detailRes.ok) return;
+    setDetail(await detailRes.json());
+    if (analysisRes.ok) {
+      setAnalysis(await analysisRes.json());
+    } else {
+      setAnalysis(null);
+    }
   };
 
   return (
@@ -120,6 +128,18 @@ export default function ArtifactsPanel() {
                         )}
                         {a.status && (
                           <span className="text-[10px] px-2 py-0.5 rounded-full bg-amber-100 text-amber-700 border border-amber-200">{a.status}</span>
+                        )}
+                        {typeof a.media_transcripts === 'number' && a.media_transcripts > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-blue-100 text-blue-700 border border-blue-200">Transcripts {a.media_transcripts}</span>
+                        )}
+                        {typeof a.media_metadata === 'number' && a.media_metadata > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-cyan-100 text-cyan-700 border border-cyan-200">Media meta {a.media_metadata}</span>
+                        )}
+                        {typeof a.web_pages === 'number' && a.web_pages > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-700 border border-emerald-200">Web {a.web_pages}</span>
+                        )}
+                        {typeof a.image_ocr === 'number' && a.image_ocr > 0 && (
+                          <span className="text-[10px] px-2 py-0.5 rounded-full bg-rose-100 text-rose-700 border border-rose-200">OCR {a.image_ocr}</span>
                         )}
                       </div>
                     </td>
@@ -160,11 +180,11 @@ export default function ArtifactsPanel() {
       </div>
 
       {detail && (
-        <div className="fixed inset-0 bg-black/40 flex items-center justify-center" onClick={()=>setDetail(null)}>
-          <div className="bg-white rounded shadow p-4 w-[720px] max-h-[80vh] overflow-auto" onClick={e=>e.stopPropagation()}>
+        <div className="fixed inset-0 bg-black/40 flex items-center justify-center" onClick={()=>{ setDetail(null); setAnalysis(null); }}>
+          <div className="bg-white rounded shadow p-4 w-[900px] max-h-[85vh] overflow-auto" onClick={e=>e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-semibold">Artifact Details</h3>
-              <button onClick={()=>setDetail(null)} className="text-gray-500">✕</button>
+              <button onClick={()=>{ setDetail(null); setAnalysis(null); }} className="text-gray-500">✕</button>
             </div>
             <div className="text-sm mb-3">
               <div><span className="font-medium">ID:</span> {detail.artifact?.id}</div>
@@ -199,7 +219,167 @@ export default function ArtifactsPanel() {
                   </table>
                 </div>
               </div>
+              <div>
+                <div className="font-medium mb-1">Transcripts</div>
+                <div className="border rounded max-h-60 overflow-auto space-y-2 p-2">
+                  {(detail.evidence||[])
+                    .filter((e:any)=> (e.content_type||'').includes('transcript'))
+                    .map((e:any,i:number)=>(
+                      <div key={i} className="text-xs border-b pb-1 last:border-b-0">
+                        <div className="font-semibold">{e.locator}</div>
+                        <div className="text-gray-600 whitespace-pre-wrap">{e.full_data?.text || e.preview}</div>
+                        {e.full_data?.metadata && (
+                          <div className="text-[10px] text-gray-500 mt-1">{JSON.stringify(e.full_data.metadata)}</div>
+                        )}
+                      </div>
+                    ))}
+                  {(detail.evidence||[]).filter((e:any)=> (e.content_type||'').includes('transcript')).length===0 && (
+                    <div className="text-xs text-gray-500">No transcripts yet.</div>
+                  )}
+                </div>
+              </div>
+              <div>
+                <div className="font-medium mb-1">Media Metadata</div>
+                <div className="border rounded max-h-60 overflow-auto space-y-2 p-2">
+                  {(detail.evidence||[])
+                    .filter((e:any)=> e.content_type==='media_metadata' || e.content_type==='web_page')
+                    .map((e:any,i:number)=>(
+                      <div key={i} className="text-xs border-b pb-1 last:border-b-0">
+                        <div className="font-semibold">{e.content_type} – {e.locator}</div>
+                        <div className="text-gray-600 whitespace-pre-wrap">{e.preview}</div>
+                      </div>
+                    ))}
+                  {(detail.evidence||[]).filter((e:any)=> e.content_type==='media_metadata' || e.content_type==='web_page').length===0 && (
+                    <div className="text-xs text-gray-500">No additional metadata captured.</div>
+                  )}
+                </div>
+              </div>
             </div>
+            {analysis && (
+              <div className="mt-4 space-y-4">
+                <div className="grid md:grid-cols-2 gap-4">
+                  <section>
+                    <div className="font-medium mb-1">Merged Tables ({analysis.tables?.length || 0})</div>
+                    <div className="space-y-3">
+                      {(analysis.tables||[]).map((tbl:any)=>{
+                        const columns = Array.isArray(tbl.columns) && tbl.columns.length > 0
+                          ? tbl.columns
+                          : (tbl.rows && tbl.rows[0] ? Object.keys(tbl.rows[0]) : []);
+                        return (
+                          <div key={tbl.id} className="border rounded p-2 bg-gray-50">
+                            <div className="flex flex-wrap text-xs gap-2 mb-2">
+                              <span className="font-semibold">{tbl.locator}</span>
+                              <span>pages: {(tbl.pages||[]).join(', ')||'n/a'}</span>
+                              <span>rows: {tbl.row_count}</span>
+                              {tbl.header_detected && <span className="px-2 py-0.5 bg-emerald-100 text-emerald-700 rounded-full border border-emerald-200">header detected</span>}
+                            </div>
+                            <div className="max-h-48 overflow-auto bg-white border rounded">
+                              <table className="min-w-full text-[11px]">
+                                <thead className="bg-gray-100">
+                                  <tr>{columns.map((col:string)=>(<th key={col} className="px-2 py-1 text-left border-b">{col}</th>))}</tr>
+                                </thead>
+                                <tbody>
+                                  {(tbl.rows||[]).map((row:any, idx:number)=>(
+                                    <tr key={idx} className="border-b last:border-0">
+                                      {columns.map((col:string)=>(<td key={col} className="px-2 py-1">{row?.[col] ?? ''}</td>))}
+                                    </tr>
+                                  ))}
+                                </tbody>
+                              </table>
+                            </div>
+                          </div>
+                        );
+                      })}
+                      {(!analysis.tables || analysis.tables.length === 0) && (
+                        <div className="text-xs text-gray-500 border rounded p-2">No tables detected.</div>
+                      )}
+                    </div>
+                  </section>
+                  <section>
+                    <div className="font-medium mb-1">Charts ({analysis.charts?.length || 0})</div>
+                    <div className="space-y-3">
+                      {(analysis.charts||[]).map((chart:any)=>{
+                        const imageSrc = chart.image_path ? `${API}/download?rel=${encodeURIComponent(chart.image_path)}` : null;
+                        return (
+                          <div key={chart.id || chart.locator} className="border rounded p-2 bg-gray-50">
+                            <div className="flex flex-col text-xs gap-1 mb-2">
+                              <span className="font-semibold">{chart.locator}</span>
+                              <span>type: {chart.type || 'unknown'}</span>
+                              {chart.page != null && <span>page: {chart.page}</span>}
+                              {chart.caption && <span className="italic">{chart.caption}</span>}
+                            </div>
+                            {imageSrc && (
+                              <div className="border bg-white rounded overflow-hidden flex items-center justify-center">
+                                <img src={imageSrc} alt={chart.caption || chart.locator} className="max-h-48 object-contain" />
+                              </div>
+                            )}
+                            {chart.extracted_text && (
+                              <div className="mt-2 text-[11px] bg-white border rounded p-2">
+                                <div className="font-semibold">OCR</div>
+                                <div>{chart.extracted_text}</div>
+                              </div>
+                            )}
+                          </div>
+                        );
+                      })}
+                      {(!analysis.charts || analysis.charts.length === 0) && (
+                        <div className="text-xs text-gray-500 border rounded p-2">No charts detected.</div>
+                      )}
+                    </div>
+                  </section>
+                </div>
+                <div className="grid md:grid-cols-2 gap-4">
+                  <section>
+                    <div className="font-medium mb-1">Formulas ({analysis.formulas?.length || 0})</div>
+                    <div className="space-y-2">
+                      {(analysis.formulas||[]).map((formula:any)=> (
+                        <div key={formula.id || formula.locator} className="border rounded p-2 bg-gray-50 text-xs">
+                          <div className="font-semibold">{formula.locator}</div>
+                          {formula.latex && <div className="mt-1 font-mono text-[11px]">{formula.latex}</div>}
+                          {!formula.latex && formula.content && <div className="mt-1">{formula.content}</div>}
+                          {formula.kind && <div className="mt-1 text-gray-500">kind: {formula.kind}</div>}
+                          {formula.page != null && <div className="mt-1">page: {formula.page}</div>}
+                        </div>
+                      ))}
+                      {(!analysis.formulas || analysis.formulas.length === 0) && (
+                        <div className="text-xs text-gray-500 border rounded p-2">No formulas detected.</div>
+                      )}
+                    </div>
+                  </section>
+                  <section>
+                    <div className="font-medium mb-1">Named Entities ({analysis.entities?.length || 0})</div>
+                    <div className="border rounded max-h-64 overflow-auto">
+                      <table className="min-w-full text-left text-xs">
+                        <thead className="bg-gray-100"><tr><th className="px-2 py-1">label</th><th className="px-2 py-1">text</th><th className="px-2 py-1">page</th></tr></thead>
+                        <tbody>
+                          {(analysis.entities||[]).map((ent:any, idx:number)=>(
+                            <tr key={idx} className="border-t"><td className="px-2 py-1">{ent.label}</td><td className="px-2 py-1">{ent.text}</td><td className="px-2 py-1">{ent.page ?? ''}</td></tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      {(!analysis.entities || analysis.entities.length === 0) && (
+                        <div className="p-2 text-xs text-gray-500">No entities stored.</div>
+                      )}
+                    </div>
+                    {analysis.metric_hits && analysis.metric_hits.length > 0 && (
+                      <div className="mt-3">
+                        <div className="font-medium mb-1">Metric Hits ({analysis.metric_hits.length})</div>
+                        <div className="border rounded max-h-40 overflow-auto text-xs">
+                          <table className="min-w-full text-left text-[11px]">
+                            <thead className="bg-gray-100"><tr><th className="px-2 py-1">type</th><th className="px-2 py-1">value</th><th className="px-2 py-1">page</th></tr></thead>
+                            <tbody>
+                              {analysis.metric_hits.map((hit:any, idx:number)=>(
+                                <tr key={idx} className="border-t"><td className="px-2 py-1">{hit.type}</td><td className="px-2 py-1">{hit.value}</td><td className="px-2 py-1">{hit.page ?? ''}</td></tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+                      </div>
+                    )}
+                  </section>
+                </div>
+              </div>
+            )}
           </div>
         </div>
       )}

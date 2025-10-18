@@ -1,7 +1,11 @@
+import base64
+import io
+import json
 import os
 import sys
 import time
-import json
+import wave
+import zlib
 from pathlib import Path
 
 import requests as r
@@ -9,6 +13,53 @@ import requests as r
 
 API = os.getenv("API_BASE", "http://localhost:8000").rstrip("/")
 ROOT = Path(__file__).resolve().parents[1]
+
+
+# Tiny inline fixtures keep the repository free of binary blobs while still
+# exercising the multimodal ingestion paths end-to-end.
+SAMPLE_IMAGE_PNG_B64 = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/xcAAoMBgVbA3qoAAAAASUVORK5CYII="
+
+SAMPLE_VIDEO_MP4_Z_B64 = (
+    "eNrt08tLlAscxvF3TC3t4pTmZJkz3tLUzLvjzDsvJBoeFyYHOYcgykIOuDhpVHgQNFOQIxFpGzcSFkEb"
+    "F+ZiEBLhnbu38daYpaljlpe0tIuWmp75P86X3+ZZ/HgWD3x+/+38+ahNQfjz3B+5f/19S6MUBEHhuRrJ"
+    "E6oEwUtQCiVXb10VPD+C0O0ff3QjbCym/mxfeoWuxFAtvTCE6y0ZtqSi0880ClXbgXVFykb7smm247Vt"
+    "WN+XbfMyP5R35RxLocPXqXW1v02cL10L2p7wLTt850RX1GzC89R1bYNYIGmlPPG+NiI1OWE1suV4ldLt"
+    "E7J1ezXvw/Rk7cvygRn7ttktt8p681Obpe/GSOWbx+9aV+J/rHk9ObikqgpXxl1LFjPL9TOGf6RUQ6gu"
+    "P92dGBgTGiYF2fx8dvO/LS4mzZS+Gh809qRYy0w1cpkpxWrsGR8sfZU0s7iY/81n1+YnBYWGBca4E/PT"
+    "Q3Wpnp4ZQ7lezLyWrIyrCl9SPTm45hX/o3Xl8bvKNzdGLH1PbXpzq+yWt80z9vKB2pfTk3kfbq+GbLl9"
+    "qpQtx1cjkxMiUu9r80StVCA1iOva56mzCV1Rd06UHZ7wDdouXUucb3+rdfk6Cx05ll35oexlzrbp+2zD"
+    "Ha9Ns+3LKRvrirYDCtUzTdFpW5IlI1z/wrN1iaFC15def3YsZiMs/mi3vyBkf3ct+bnjxiuH0nsbrC2m"
+    "WjnXNG0Re3SDbWMXp3cXir767zj3FQZKJwtO6RKtad1ZO+J1SSF16dszN5MdcYURI8eaDy3vif7Z9Onu"
+    "XM5E2OiFfn97hblDdsid5pv2qf7BUeVkyfu6z+rNee97AZ0h4ZHV8Y0pGq23qJaKJat4KUtMe3CmPvpK"
+    "aPER196AX5e/BC/UTa26HjktjkaLxvSvPGCasxp71cMr43Nu00fd+pZg3K8KHlI3x8Ym5Wc4dU2GGqnJ"
+    "4NTlZ8QmNccOqVXBxv1bgm7d9HHOvTKuHjb2zlkHPD0aU6PF4njkXHXVTQUvXP4S8Mu1t/jIldD66Adn"
+    "xLRLWVaxWFJL3qJG25hSHR8e2RlyL2DeW71Z97nkvXJycHSq/6a90+yQO+QKs7/9Qn/YaM7E3bmmT9E/"
+    "l/c0Hxo5VhjhiNtMbs/s0iuk69KO2J1lTdMlFpySThYGOvf57xR93V24ON02phsUe6YtuZ6tW0wN1vTe"
+    "yqG4cT+3ayn7Oz7wgQ984AMf+MAHPvCBD3zgAx/4wAc+8IEPfOADH/jABz7wgQ984AMf+MAHPvCBD3zg"
+    "Ax/4wAc+8IEPfOADH/jABz7wgQ984AMf+MAHPvCBD3zgAx/4wAc+8IEPfOADH/jABz7wgQ984AMf+MAH"
+    "PvCBD3zgAx/4wAc+8IEPfOADH/jABz7wgQ984AMf+MAHPvCBD3zgAx/4wAc+8IEPfOADH/jABz7wgQ98"
+    "4AMf+MAHPvCBD3zgAx/4wAc+8IEPfOADH/jABz7wgQ984AMf+MAHPvCBD3zgAx/4wAc+8IEPfOADH/jA"
+    "Bz7wgQ984AMf+MAHPvCBD3zgAx/4wAc+8IEPfOADH/jABz7wgQ984AMf+MAHPvCBD3zgAx/4wAc+8IEP"
+    "fOADH/jABz7wgQ984AMf+MAHPvCBD3zgAx/4wAc+8IEPfOADH/jABz7wgQ98/F99/Adk0THn"
+)
+
+
+def _sample_audio_wav() -> bytes:
+    buf = io.BytesIO()
+    with wave.open(buf, "wb") as wf:
+        wf.setnchannels(1)
+        wf.setsampwidth(2)
+        wf.setframerate(8000)
+        wf.writeframes(b"\x00\x00" * 800)
+    return buf.getvalue()
+
+
+def _sample_video_mp4() -> bytes:
+    return zlib.decompress(base64.b64decode(SAMPLE_VIDEO_MP4_Z_B64))
+
+
+def _sample_image_png() -> bytes:
+    return base64.b64decode(SAMPLE_IMAGE_PNG_B64)
 
 
 def fail(msg: str):
@@ -207,6 +258,73 @@ def main():
         ok("/viz/datavzrd")
     except Exception as e:
         fail(f"/viz/datavzrd error: {e}")
+
+    # 7b) upload audio/video/image + URL
+    audio_name = "sample_audio.wav"
+    video_name = "sample_video.mp4"
+    image_name = "sample_image.png"
+    web_urls_file = ROOT / "samples" / "web_urls.txt"
+    audio_bytes = _sample_audio_wav()
+    video_bytes = _sample_video_mp4()
+    image_bytes = _sample_image_png()
+    files_media = [
+        ("files", (audio_name, audio_bytes, "audio/wav")),
+        ("files", (video_name, video_bytes, "video/mp4")),
+        ("files", (image_name, image_bytes, "image/png")),
+    ]
+    data_fields = []
+    if web_urls_file.exists():
+        for line in web_urls_file.read_text(encoding="utf-8").splitlines():
+            line = line.strip()
+            if line:
+                data_fields.append(("web_urls", line))
+    try:
+        upload_media = r.post(f"{API}/upload", files=files_media, data=data_fields, timeout=90)
+        upload_media.raise_for_status()
+        payload_media = upload_media.json()
+        media_results = payload_media.get("results", [])
+        if len(media_results) < 3:
+            fail("media upload did not return expected results")
+        for item in media_results:
+            if item.get("status") != "success":
+                fail(f"media upload failure: {item}")
+        ok("/upload media bundle")
+    except Exception as e:
+        fail(f"/upload media bundle error: {e}")
+
+    # Validate media artifacts summary
+    try:
+        media_summary = r.get(f"{API}/artifacts/media", timeout=15)
+        media_summary.raise_for_status()
+        media_payload = media_summary.json()
+        if not media_payload.get("transcripts"):
+            fail("media summary missing transcripts")
+        if not media_payload.get("media_metadata"):
+            fail("media summary missing metadata")
+        ok("/artifacts/media")
+    except Exception as e:
+        fail(f"/artifacts/media error: {e}")
+
+    # Confirm artifact counts for audio/image/web
+    try:
+        all_artifacts = r.get(f"{API}/artifacts", timeout=15)
+        all_artifacts.raise_for_status()
+        arts_payload = all_artifacts.json().get("artifacts", [])
+        audio_art = next((a for a in arts_payload if a.get("filename") == audio_name), None)
+        if not audio_art or audio_art.get("media_transcripts", 0) == 0:
+            fail("audio artifact missing transcript count")
+        image_art = next((a for a in arts_payload if a.get("filename") == image_name), None)
+        if not image_art or image_art.get("image_ocr", 0) == 0:
+            fail("image artifact missing OCR count")
+        url_art = None
+        if data_fields:
+            url_value = data_fields[0][1]
+            url_art = next((a for a in arts_payload if a.get("filename") == url_value), None)
+            if not url_art or url_art.get("web_pages", 0) == 0:
+                fail("web artifact missing page evidence")
+        ok("media artifacts summary checks")
+    except Exception as e:
+        fail(f"media artifacts check error: {e}")
 
     # 8) ingest xml/openapi/postman
     try:

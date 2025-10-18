@@ -3,6 +3,7 @@ import json
 import uuid
 from datetime import datetime
 from typing import List, Dict, Optional
+from typing import Any, List, Dict, Optional
 from pathlib import Path
 
 from sqlmodel import SQLModel, Field, create_engine, Session, select, delete
@@ -15,6 +16,8 @@ class Artifact(SQLModel, table=True):
     filetype: str
     report_week: Optional[str] = None
     status: Optional[str] = None
+    source_url: Optional[str] = None
+    extra_json: Optional[str] = None
 
 
 class Evidence(SQLModel, table=True):
@@ -60,6 +63,7 @@ class Database:
         self.engine = create_engine(self.db_url, echo=False)
         SQLModel.metadata.create_all(self.engine)
         self._ensure_fact_evidence_column()
+        self._ensure_artifact_columns()
 
     def _ensure_fact_evidence_column(self) -> None:
         """Ensure the fact table has the evidence_id column for backward compatibility."""
@@ -69,12 +73,49 @@ class Database:
             if "evidence_id" not in column_names:
                 conn.exec_driver_sql("ALTER TABLE fact ADD COLUMN evidence_id TEXT")
 
+    def _ensure_artifact_columns(self) -> None:
+        """Add optional artifact columns when migrating from older versions."""
+        with self.engine.connect() as conn:
+            columns = conn.exec_driver_sql("PRAGMA table_info(artifact)").fetchall()
+            column_names = {row[1] for row in columns}
+            if "source_url" not in column_names:
+                conn.exec_driver_sql("ALTER TABLE artifact ADD COLUMN source_url TEXT")
+            if "extra_json" not in column_names:
+                conn.exec_driver_sql("ALTER TABLE artifact ADD COLUMN extra_json TEXT")
+
     def add_artifact(self, artifact: Dict) -> str:
+        payload = dict(artifact)
+        extras = payload.pop("extras", None) or payload.pop("metadata", None)
+        if extras is not None:
+            payload["extra_json"] = json.dumps(extras, ensure_ascii=False)
         with Session(self.engine) as s:
-            row = Artifact(**artifact)
+            row = Artifact(**payload)
             s.add(row)
             s.commit()
-        return artifact["id"]
+        return payload["id"]
+
+    def update_artifact(self, artifact_id: str, **fields: Any) -> None:
+        extras = fields.pop("extras", None)
+        with Session(self.engine) as s:
+            row = s.get(Artifact, artifact_id)
+            if not row:
+                return
+            for key, value in fields.items():
+                if hasattr(row, key):
+                    setattr(row, key, value)
+            if extras is not None:
+                base: Dict[str, Any]
+                if row.extra_json:
+                    try:
+                        base = json.loads(row.extra_json)
+                    except json.JSONDecodeError:
+                        base = {}
+                else:
+                    base = {}
+                base.update(extras)
+                row.extra_json = json.dumps(base, ensure_ascii=False)
+            s.add(row)
+            s.commit()
 
     def add_fact(self, fact: Dict):
         metrics_json = json.dumps(fact.get("metrics", {}), ensure_ascii=False)
@@ -234,7 +275,19 @@ class Database:
     def get_artifacts(self) -> List[Dict]:
         with Session(self.engine) as s:
             rows = s.exec(select(Artifact)).all()
-        return [row.model_dump() for row in rows]
+        items: List[Dict] = []
+        for row in rows:
+            data = row.model_dump()
+            extra_payload = data.pop("extra_json", None)
+            if extra_payload:
+                try:
+                    data["extras"] = json.loads(extra_payload)
+                except json.JSONDecodeError:
+                    data["extras"] = extra_payload
+            else:
+                data["extras"] = None
+            items.append(data)
+        return items
 
     def reset(self):
         with Session(self.engine) as s:
