@@ -4,8 +4,8 @@ services:
       context: ./backend
       dockerfile: Dockerfile.jetson
     environment:
-      - FRONTEND_ORIGIN=http://localhost:3000
-      - PORT=8000
+      - FRONTEND_ORIGIN=http://localhost:3737
+      - PORT=8484
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
       - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -20,7 +20,7 @@ services:
       - NVIDIA_DRIVER_CAPABILITIES=compute,utility
     runtime: nvidia
     ports:
-      - "8000:8000"
+      - "8484:8484"
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/artifacts:/app/artifacts
@@ -33,10 +33,10 @@ services:
       context: ./frontend
       dockerfile: Dockerfile
     environment:
-      - NEXT_PUBLIC_API_BASE=http://localhost:8000
-      - PORT=3000
+      - NEXT_PUBLIC_API_BASE=http://localhost:8484
+      - PORT=3737
     ports:
-      - "3000:3000"
+      - "3737:3737"
     depends_on:
       - backend
     restart: unless-stopped

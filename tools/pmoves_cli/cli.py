@@ -14,7 +14,7 @@ import httpx
 import typer
 
 
-DEFAULT_BASE_URL = "http://localhost:8000"
+DEFAULT_BASE_URL = "http://localhost:8484"
 BACKEND_ROOT = Path(__file__).resolve().parents[2] / "backend"
 if BACKEND_ROOT.exists() and str(BACKEND_ROOT) not in sys.path:
     sys.path.insert(0, str(BACKEND_ROOT))

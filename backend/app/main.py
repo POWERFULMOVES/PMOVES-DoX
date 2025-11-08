@@ -4,9 +4,7 @@ from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 import os
 from pathlib import Path
 import shutil
-from typing import List, Dict, Optional, Any, Literal
-from typing import List, Dict, Optional, Annotated
-from typing import List, Dict, Optional, Any
+from typing import List, Dict, Optional, Any, Literal, Annotated
 import uuid
 from dotenv import load_dotenv
 import time
@@ -88,6 +86,9 @@ UPLOAD_DIR = Path("uploads")
 ARTIFACTS_DIR = Path("artifacts")
 UPLOAD_DIR.mkdir(exist_ok=True)
 ARTIFACTS_DIR.mkdir(exist_ok=True)
+
+# Security settings
+MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB limit for file uploads
 
 db, DB_BACKEND_META = init_database()
 qa_engine = QAEngine(db)
@@ -2291,9 +2292,27 @@ async def upload_files(
 
     for file in incoming_files:
         file_id = str(uuid.uuid4())
-        file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
+
+        # Sanitize filename to prevent path traversal attacks
+        safe_filename = os.path.basename(file.filename) if file.filename else "upload"
+        # Also remove any remaining path separators that might have been encoded
+        safe_filename = safe_filename.replace("/", "_").replace("\\", "_")
+
+        file_path = UPLOAD_DIR / f"{file_id}_{safe_filename}"
+
+        # Read file content and check size
+        file_content = await file.read()
+        if len(file_content) > MAX_FILE_SIZE:
+            results.append({
+                "filename": file.filename,
+                "status": "error",
+                "error": f"File size exceeds maximum allowed size of {MAX_FILE_SIZE // (1024*1024)}MB"
+            })
+            continue
+
+        # Write file to disk
         with file_path.open("wb") as buffer:
-            shutil.copyfileobj(file.file, buffer)
+            buffer.write(file_content)
 
         try:
             suffix = file_path.suffix.lower()
@@ -2385,7 +2404,7 @@ async def upload_files(
 if __name__ == "__main__":
     import uvicorn
 
-    port = int(os.getenv("PORT", "8000"))
+    port = int(os.getenv("PORT", "8484"))
     uvicorn.run(app, host="0.0.0.0", port=port)
 
 

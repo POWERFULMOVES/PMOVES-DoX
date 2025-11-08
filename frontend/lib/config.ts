@@ -3,7 +3,7 @@ export function getApiBase(): string {
     const v = localStorage.getItem('lms_api_base');
     if (v && v.trim()) return v.trim();
   }
-  return process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+  return process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8484';
 }
 
 export function setApiBase(v: string) {
