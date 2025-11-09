@@ -5,8 +5,8 @@ services:
       dockerfile: Dockerfile
     container_name: pmoves-dox-backend-cpu
     environment:
-      - FRONTEND_ORIGIN=http://localhost:3000
-      - PORT=8000
+      - FRONTEND_ORIGIN=http://localhost:3737
+      - PORT=8484
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
       - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
       - AUTO_MIGRATE=${AUTO_MIGRATE:-false}
@@ -17,14 +17,14 @@ services:
       - XML_XPATH_MAP_FILE=${XML_XPATH_MAP_FILE:-}
       - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-false}
     ports:
-      - "8000:8000"
+      - "8484:8484"
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/artifacts:/app/artifacts
       - ./samples:/app/samples
       - hf-cache:/root/.cache/huggingface
     healthcheck:
-      test: ["CMD", "wget", "-qO", "-", "http://localhost:8000/"]
+      test: ["CMD", "wget", "-qO", "-", "http://localhost:8484/"]
       interval: 15s
       timeout: 5s
       retries: 5
@@ -36,11 +36,11 @@ services:
       dockerfile: Dockerfile
     container_name: pmoves-dox-frontend
     environment:
-      - NEXT_PUBLIC_API_BASE=http://localhost:8000
-      - PORT=3000
+      - NEXT_PUBLIC_API_BASE=http://localhost:8484
+      - PORT=3737
       - NEXT_PUBLIC_POLL_INTERVAL_MS=3000
     ports:
-      - "3000:3000"
+      - "3737:3737"
     depends_on:
       - backend
     restart: unless-stopped

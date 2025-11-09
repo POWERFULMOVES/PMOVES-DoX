@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import asyncio
+import ipaddress
 import json
 import re
 from pathlib import Path
@@ -68,6 +69,56 @@ def _clean_html(html: str) -> Tuple[str, Dict[str, Any]]:
     return normalized, metadata
 
 
+def _is_safe_url(url: str) -> Tuple[bool, str]:
+    """Validate URL to prevent SSRF attacks.
+
+    Returns:
+        Tuple of (is_safe, error_message)
+    """
+    parsed = urlparse(url)
+
+    # Only allow http/https and data schemes
+    if parsed.scheme not in ["http", "https", "data"]:
+        return False, f"Unsupported URL scheme: {parsed.scheme}. Only http, https, and data URLs are allowed."
+
+    # Allow data URLs (they're safe as they don't make network requests)
+    if parsed.scheme == "data":
+        return True, ""
+
+    # Block URLs without hostname
+    if not parsed.hostname:
+        return False, "URL must have a valid hostname"
+
+    # Block localhost and loopback addresses
+    localhost_names = ["localhost", "127.0.0.1", "::1", "0.0.0.0"]
+    if parsed.hostname.lower() in localhost_names:
+        return False, "Access to localhost is not allowed"
+
+    # Check for private IP addresses
+    try:
+        ip = ipaddress.ip_address(parsed.hostname)
+        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+            return False, f"Access to private/internal IP addresses is not allowed: {parsed.hostname}"
+    except ValueError:
+        # Not an IP address, it's a hostname - need to check further
+        # Block common internal/metadata endpoints
+        blocked_domains = [
+            "metadata.google.internal",
+            "169.254.169.254",  # AWS/Azure metadata
+            "metadata.azure.com",
+            "internal",
+            ".internal.",
+            ".local",
+            ".localhost",
+        ]
+        hostname_lower = parsed.hostname.lower()
+        for blocked in blocked_domains:
+            if blocked in hostname_lower:
+                return False, f"Access to internal domain is not allowed: {parsed.hostname}"
+
+    return True, ""
+
+
 def ingest_web_url(url: str, artifacts_dir: Path, artifact_id: str, timeout: float = 15.0) -> Dict[str, Any]:
     """Fetch and sanitize a web page.
 
@@ -83,6 +134,11 @@ def ingest_web_url(url: str, artifacts_dir: Path, artifact_id: str, timeout: flo
     parsed = urlparse(url)
     if not parsed.scheme:
         raise ValueError("URL must include scheme (http/https)")
+
+    # Validate URL to prevent SSRF attacks
+    is_safe, error_msg = _is_safe_url(url)
+    if not is_safe:
+        raise ValueError(f"SSRF protection: {error_msg}")
 
     warnings: List[str] = []
     html_content = None

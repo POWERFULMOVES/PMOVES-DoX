@@ -11,7 +11,7 @@ from pathlib import Path
 import requests as r
 
 
-API = os.getenv("API_BASE", "http://localhost:8000").rstrip("/")
+API = os.getenv("API_BASE", "http://localhost:8484").rstrip("/")
 ROOT = Path(__file__).resolve().parents[1]
 
 
