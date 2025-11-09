@@ -4,8 +4,9 @@ import asyncio
 import ipaddress
 import json
 import re
+import socket
 from pathlib import Path
-from typing import Any, Dict, List, Tuple
+from typing import Any, Dict, List, Tuple, Union
 from urllib.parse import urlparse
 
 import base64
@@ -69,6 +70,20 @@ def _clean_html(html: str) -> Tuple[str, Dict[str, Any]]:
     return normalized, metadata
 
 
+IPAddress = Union[ipaddress.IPv4Address, ipaddress.IPv6Address]
+
+
+def _is_private_ip(ip: IPAddress) -> bool:
+    return (
+        ip.is_private
+        or ip.is_loopback
+        or ip.is_link_local
+        or ip.is_reserved
+        or ip.is_multicast
+        or ip.is_unspecified
+    )
+
+
 def _is_safe_url(url: str) -> Tuple[bool, str]:
     """Validate URL to prevent SSRF attacks.
 
@@ -97,8 +112,9 @@ def _is_safe_url(url: str) -> Tuple[bool, str]:
     # Check for private IP addresses
     try:
         ip = ipaddress.ip_address(parsed.hostname)
-        if ip.is_private or ip.is_loopback or ip.is_link_local or ip.is_reserved:
+        if _is_private_ip(ip):
             return False, f"Access to private/internal IP addresses is not allowed: {parsed.hostname}"
+        return True, ""
     except ValueError:
         # Not an IP address, it's a hostname - need to check further
         # Block common internal/metadata endpoints
@@ -115,6 +131,29 @@ def _is_safe_url(url: str) -> Tuple[bool, str]:
         for blocked in blocked_domains:
             if blocked in hostname_lower:
                 return False, f"Access to internal domain is not allowed: {parsed.hostname}"
+
+        try:
+            addrinfos = socket.getaddrinfo(parsed.hostname, None)
+        except socket.gaierror as exc:
+            return False, f"Failed to resolve hostname: {exc}"
+
+        resolved_any = False
+        for _, _, _, _, sockaddr in addrinfos:
+            if not sockaddr:
+                continue
+            host = sockaddr[0]
+            if "%" in host:
+                host = host.split("%", 1)[0]
+            try:
+                resolved_ip = ipaddress.ip_address(host)
+            except ValueError:
+                continue
+            resolved_any = True
+            if _is_private_ip(resolved_ip):
+                return False, f"Resolved hostname to a disallowed IP address: {host}"
+
+        if not resolved_any:
+            return False, "Failed to resolve hostname to a valid IP address"
 
     return True, ""
 
