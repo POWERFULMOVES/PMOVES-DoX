@@ -1,6 +1,44 @@
 # PMOVES-DoX
 
+**Document Intelligence Platform**: Extract, analyze, and structure data from PDFs, spreadsheets, logs, and APIs with AI-powered insights.
+
 The ultimate document structured data extraction and analysis tool. Extract, analyze, transform, and visualize data from PDFs, XML logs, CSV/XLSX, and OpenAPI/Postman collections. Local‑first with Hugging Face + Ollama; ships as standalone, Docker, and MS Teams Copilot/MCP‑friendly.
+
+---
+
+## 📚 Complete Documentation
+
+New comprehensive documentation is available:
+
+### 📖 Getting Started
+- **[User Guide](docs/USER_GUIDE.md)** - Complete feature guide, workflows, and best practices
+- **[Quick Start Tutorial](docs/DEMOS.md#demo-1-5-minute-quick-start)** - Get running in 5 minutes
+
+### 🍳 Practical Guides
+- **[Cookbooks](docs/COOKBOOKS.md)** - 8 detailed recipes for common use cases:
+  - Financial Statement Analysis Pipeline
+  - Log Analysis & Error Tracking
+  - API Documentation from OpenAPI
+  - Research Paper Clustering
+  - LMS Tag Extraction for Training Materials
+  - Multi-Source Intelligence Gathering
+  - Contract Analysis and Q&A
+  - Marketing Performance Dashboards
+
+### 🎨 Examples & Demos
+- **[Demos & Examples](docs/DEMOS.md)** - Interactive demos with sample data and scripts
+  - 5-minute quick start
+  - Financial report analysis
+  - API documentation generator
+  - Log analytics dashboard
+  - Research paper organizer
+
+### 🔧 Technical References
+- **[API Reference](docs/API_REFERENCE.md)** - Complete REST API documentation with examples
+- **[Architecture](docs/ARCHITECTURE.md)** - System design, data flow, and internals
+- **[Project Structure](PROJECT_STRUCTURE.md)** - Codebase organization
+
+---
 
 ## Quick Start
 
