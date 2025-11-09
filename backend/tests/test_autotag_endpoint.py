@@ -40,7 +40,7 @@ class StubDB:
             return [t for t in self._tags if t.get("document_id") == document_id]
         return list(self._tags)
 
-    def list_logs(self, level=None, code=None, q=None, ts_from=None, ts_to=None):  # noqa: ANN001 - test stub
+    def list_logs(self, level=None, code=None, q=None, ts_from=None, ts_to=None, document_id=None):  # noqa: ANN001 - test stub
         return []
 
     def list_apis(self, tag=None, method=None, path_like=None):  # noqa: ANN001 - test stub
