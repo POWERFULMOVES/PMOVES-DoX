@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState, useRef } from 'react';
+import { getApiBase } from '@/lib/config';
 
 export default function CHRPanel() {
   const [artifactId, setArtifactId] = useState('');
@@ -21,12 +22,12 @@ export default function CHRPanel() {
   const [hrmDigits, setHrmDigits] = useState('93241');
   const [hrmTrace, setHrmTrace] = useState<string[] | null>(null);
   const [hrmSteps, setHrmSteps] = useState<number | null>(null);
-  const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
 
   useEffect(() => {
     (async () => {
       try {
-        const r = await fetch(`${API}/artifacts`);
+        const apiBase = getApiBase();
+        const r = await fetch(`${apiBase}/artifacts`);
         if (!r.ok) return;
         const data = await r.json();
         setArtifacts(Array.isArray(data.artifacts) ? data.artifacts : []);
@@ -35,7 +36,8 @@ export default function CHRPanel() {
     // fetch config for OPEN_PDF_ENABLED
     (async () => {
       try {
-        const r = await fetch(`${API}/config`);
+        const apiBase = getApiBase();
+        const r = await fetch(`${apiBase}/config`);
         if (!r.ok) return;
         const cfg = await r.json();
         setOpenPdfEnabled(!!cfg?.open_pdf_enabled);
@@ -47,7 +49,8 @@ export default function CHRPanel() {
     if (!artifactId.trim()) return;
     setBusy(true);
     try {
-      const res = await fetch(`${API}/structure/chr`, {
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/structure/chr`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ artifact_id: artifactId.trim(), K })
@@ -67,7 +70,8 @@ export default function CHRPanel() {
     setConvertBusy(true);
     setConvertRel(null);
     try {
-      const res = await fetch(`${API}/convert`, {
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/convert`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ artifact_id: artifactId.trim(), format: convertFormat })
@@ -87,7 +91,8 @@ export default function CHRPanel() {
     setVizBusy(true);
     setVizRel(null);
     try {
-      const res = await fetch(`${API}/viz/datavzrd`, {
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/viz/datavzrd`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ artifact_id: artifactId.trim(), title: `CHR – ${artifactId.trim().slice(0,8)}...` })
@@ -107,7 +112,8 @@ export default function CHRPanel() {
   const runHRMDemo = async () => {
     setHrmTrace(null); setHrmSteps(null);
     try {
-      const res = await fetch(`${API}/experiments/hrm/sort_digits`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ seq: hrmDigits }) });
+      const apiBase = getApiBase();
+      const res = await fetch(`${apiBase}/experiments/hrm/sort_digits`, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ seq: hrmDigits }) });
       if (!res.ok) throw new Error('hrm demo failed');
       const data = await res.json();
       setHrmTrace(Array.isArray(data.trace) ? data.trace : []);
@@ -145,7 +151,7 @@ export default function CHRPanel() {
       <h2 className="text-2xl font-bold mb-2">Structure (CHR)</h2>
       {artifactId && pageNum!=null && openPdfEnabled && (
         <div className="mb-2 text-xs">
-          <a className="text-blue-700 underline" href={`${API}/open/pdf?artifact_id=${encodeURIComponent(artifactId)}#page=${pageNum}`} target="_blank">Open PDF at page</a>
+          <a className="text-blue-700 underline" href={`${getApiBase()}/open/pdf?artifact_id=${encodeURIComponent(artifactId)}#page=${pageNum}`} target="_blank">Open PDF at page</a>
         </div>
       )}
       <div className="space-y-4">
@@ -195,13 +201,13 @@ export default function CHRPanel() {
             {pageNum!=null && (<div className="mt-1 text-xs text-gray-700">Approx. page: {pageNum}</div>)}
             {artifactId && pageNum!=null && openPdfEnabled && (
               <div className="mt-1 text-xs">
-                <a className="text-blue-700 underline" href={`${API}/open/pdf?artifact_id=${encodeURIComponent(artifactId)}#page=${pageNum}`} target="_blank">Open PDF at page</a>
+                <a className="text-blue-700 underline" href={`${getApiBase()}/open/pdf?artifact_id=${encodeURIComponent(artifactId)}#page=${pageNum}`} target="_blank">Open PDF at page</a>
               </div>
             )}
           </div>
           {result.artifacts?.rel_plot && (
             <div>
-              <img src={`${API}/download?rel=${encodeURIComponent(result.artifacts.rel_plot)}`} alt="CHR PCA" className="border rounded" />
+              <img src={`${getApiBase()}/download?rel=${encodeURIComponent(result.artifacts.rel_plot)}`} alt="CHR PCA" className="border rounded" />
             </div>
           )}
           {Array.isArray(result.preview_rows) && result.preview_rows.length > 0 && (
@@ -241,7 +247,7 @@ export default function CHRPanel() {
               <div className="flex items-center gap-2">
                 <span className="font-medium">CSV:</span>
                 {result.artifacts.rel_csv ? (
-                  <a className="text-blue-600 hover:underline" href={`${API}/download?rel=${encodeURIComponent(result.artifacts.rel_csv)}`}>Download</a>
+                  <a className="text-blue-600 hover:underline" href={`${getApiBase()}/download?rel=${encodeURIComponent(result.artifacts.rel_csv)}`}>Download</a>
                 ) : (
                   <span>{result.artifacts.csv}</span>
                 )}
@@ -249,7 +255,7 @@ export default function CHRPanel() {
               <div className="flex items-center gap-2">
                 <span className="font-medium">JSON:</span>
                 {result.artifacts.rel_json ? (
-                  <a className="text-blue-600 hover:underline" href={`${API}/download?rel=${encodeURIComponent(result.artifacts.rel_json)}`}>Download</a>
+                  <a className="text-blue-600 hover:underline" href={`${getApiBase()}/download?rel=${encodeURIComponent(result.artifacts.rel_json)}`}>Download</a>
                 ) : (
                   <span>{result.artifacts.json}</span>
                 )}
@@ -270,7 +276,7 @@ export default function CHRPanel() {
             {convertBusy ? 'Converting…' : 'Convert'}
           </button>
           {convertRel && (
-            <a className="text-blue-600 hover:underline" href={`${API}/download?rel=${encodeURIComponent(convertRel)}`}>Download</a>
+            <a className="text-blue-600 hover:underline" href={`${getApiBase()}/download?rel=${encodeURIComponent(convertRel)}`}>Download</a>
           )}
         </div>
       </div>

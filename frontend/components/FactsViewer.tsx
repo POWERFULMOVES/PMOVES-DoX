@@ -2,6 +2,7 @@
 
 import { useEffect, useRef, useState } from 'react';
 import axios from 'axios';
+import { getApiBase } from '@/lib/config';
 
 export default function FactsViewer() {
   const [facts, setFacts] = useState<any[]>([]);
@@ -20,7 +21,7 @@ export default function FactsViewer() {
 
   const loadFacts = async (silent = false) => {
     try {
-      const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
+      const API = getApiBase();
       const [factsResponse, financialsResponse] = await Promise.all([
         axios.get(`${API}/facts`),
         axios.get(`${API}/analysis/financials`),
