@@ -59,7 +59,7 @@ export default function QAInterface() {
           </button>
         </div>
         <div className="text-[12px] text-gray-600">
-          Try: "What is PMOVES?", "Summarize API endpoints for Loan Servicing", or "Explain error CODE-123 from LMS logs".
+          Try: &quot;What is PMOVES?&quot;, &quot;Summarize API endpoints for Loan Servicing&quot;, or &quot;Explain error CODE-123 from LMS logs&quot;.
         </div>
         {hrmOn && (
           <div className="text-[10px] text-gray-600 -mt-2 mb-1">HRM: Mmax {hrmMmax}, Mmin {hrmMmin}</div>
