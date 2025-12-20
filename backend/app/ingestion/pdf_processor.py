@@ -224,8 +224,6 @@ async def process_pdf(
                 },
             })
 
-            if metrics:
-                facts.append({
     # Process tables (multi-page aware)
     merged_tables = table_processor.detect_spanning_tables(doc)
     for table_idx, table_entry in enumerate(merged_tables):

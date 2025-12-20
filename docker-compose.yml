@@ -12,8 +12,8 @@ services:
       dockerfile: Dockerfile.gpu
     container_name: pmoves-dox-backend
     environment:
-      - FRONTEND_ORIGIN=http://localhost:3737
-      - PORT=8484
+      - FRONTEND_ORIGIN=http://localhost:${FRONTEND_PORT:-3001}
+      - PORT=${BACKEND_PORT:-8484}
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
       - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
       - OLLAMA_BASE_URL=http://ollama:11434
@@ -53,10 +53,10 @@ services:
       dockerfile: Dockerfile
     container_name: pmoves-dox-frontend
     environment:
-      - NEXT_PUBLIC_API_BASE=http://localhost:8484
-      - PORT=3737
+      - NEXT_PUBLIC_API_BASE=http://localhost:${BACKEND_PORT:-8484}
+      - PORT=3000
     ports:
-      - "3737:3737"
+      - "${FRONTEND_PORT:-3001}:3000"
     depends_on:
       - backend
     restart: unless-stopped

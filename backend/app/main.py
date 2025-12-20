@@ -2276,7 +2276,7 @@ async def open_pdf(artifact_id: str, page: int | None = None):
     return FileResponse(str(p), media_type="application/pdf", headers=headers)
 
 
-WebUrlForm = Annotated[List[str] | None, Form(default=None)]
+WebUrlForm = Annotated[List[str] | None, Form()]
 
 
 @app.post("/upload")
