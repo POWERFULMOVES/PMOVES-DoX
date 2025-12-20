@@ -51,6 +51,8 @@ services:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: http://localhost:${BACKEND_PORT:-8484}
     container_name: pmoves-dox-frontend
     environment:
       - NEXT_PUBLIC_API_BASE=http://localhost:${BACKEND_PORT:-8484}
