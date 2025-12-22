@@ -27,10 +27,16 @@ PMOVES-DoX/
 │   │   └── .gitkeep
 │   ├── artifacts/                     # Processed outputs (MD, JSON)
 │   │   └── .gitkeep
+│   ├── docs/                          # Documentation (API, Architecture, Math UI)
 │   └── tests/                         # Unit tests
 │       └── .gitkeep
 │
-└── frontend/                          # Next.js Frontend (Port 3000)
+├── external/                          # Submodules and external tools
+│   └── Pmoves-hyperdimensions/        # Mathematical Visualization Engine
+├── external_services/                 # Docker services (DB, Weaviate, etc.)
+├── frontend/                          # Next.js Frontend (Port 3000)
+├── GEMINI.md                          # Geometric Intelligence Agent Guide
+├── PROJECT_STRUCTURE.md               # This file
     ├── package.json                   # Node dependencies
     ├── tsconfig.json                  # TypeScript configuration
     ├── next.config.js                 # Next.js configuration
@@ -141,3 +147,18 @@ npm run dev
 - Semantic search
 - Multi-hop reasoning
 - Citation highlighting in PDFs
+
+## Ecosystem Integration (PMOVES-BoTZ)
+
+This repository (`PMOVES-DoX`) functions as the specialized "Document Intelligence" module within the larger PMOVES ecosystem.
+
+### Branch Strategy
+*   **`main`**: The active development branch for new features (like Geometric Intelligence).
+*   **`hardened-DoX`**: The production-ready branch utilized by **PMOVES-BoTZ**.
+    *   Requests from BoTZ to DoX running on this branch are treated as "mini super capable helpers".
+    *   Enhanced by **n8n** workflows for orchestration.
+
+### Submodules & Integrations
+*   `external/n8n`: Integration with **n8n** for advanced workflows (Cookbooks).
+*   `external/conductor`: PMOVES-BoTZ context and CLI extensions.
+
