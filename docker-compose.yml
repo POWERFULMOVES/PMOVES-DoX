@@ -12,7 +12,7 @@ services:
       dockerfile: Dockerfile.gpu
     container_name: pmoves-dox-backend
     environment:
-      - FRONTEND_ORIGIN=http://localhost:${FRONTEND_PORT:-3001}
+      - FRONTEND_ORIGIN=http://localhost:${FRONTEND_PORT:-3001},http://127.0.0.1:${FRONTEND_PORT:-3001}
       - PORT=${BACKEND_PORT:-8484}
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
       - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
@@ -94,9 +94,29 @@ services:
       - "5174:5174"
     restart: unless-stopped
 
+
+  cipher-service:
+    build:
+      context: ./PsyFeR_reference
+      dockerfile: Dockerfile
+    container_name: pmoves-dox-cipher
+    image: cipher-api
+    ports:
+      - "3000:3000"
+    environment:
+      - CIPHER_API_PREFIX=""
+      - NODE_ENV=production
+    volumes:
+      - ./backend/cipher-config/cipher.yml:/app/memAgent/cipher.yml
+      - cipher-data:/app/.cipher
+    depends_on:
+      - ollama
+    restart: unless-stopped
+
 networks:
   default:
     name: pmoves-dox-net
 volumes:
   hf-cache:
   ollama:
+  cipher-data:
