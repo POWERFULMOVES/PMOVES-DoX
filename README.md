@@ -38,6 +38,12 @@ New comprehensive documentation is available:
 - **[Architecture](docs/ARCHITECTURE.md)** - System design, data flow, and internals
 - **[Project Structure](PROJECT_STRUCTURE.md)** - Codebase organization
 
+### 🧠 Byterover Cipher Integration
+This project integrates **Byterover Cipher**, a memory-powered AI agent framework.
+- **System 1 Memory**: Stores programming concepts, business logic, and interaction history.
+- **System 2 Memory**: Captures reasoning steps and cognitive traces.
+- **Submodule**: `PsyFeR_reference` is included as a submodule. Initialize with `git submodule update --init --recursive`.
+
 ---
 
 ## Quick Start

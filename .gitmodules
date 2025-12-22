@@ -1,0 +1,3 @@
+[submodule "PsyFeR_reference"]
+	path = PsyFeR_reference
+	url = https://github.com/POWERFULMOVES/Pmoves-PsyFeR-Holo.git
