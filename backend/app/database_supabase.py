@@ -534,3 +534,90 @@ class SupabaseDatabase:
             "evidence_ids": evidence_ids or [],
             "created_at": row.get("created_at", self._now_iso()),
         }
+
+    # ----------------------------------------------------------------- Cipher / Memory
+    def add_memory(self, category: str, content: Dict, context: Optional[Dict] = None) -> str:
+        payload = {
+            "category": category,
+            "content": content,
+            "context": context or {},
+            "created_at": self._now_iso(),
+        }
+        # If accessing the native supabase client returning the inserted row:
+        # data = self._table("cipher_memory").insert(payload).execute()
+        # But we use the helper _run which returns a list of rows if configured correctly, 
+        # or we might need to fetch the ID depending on the client config.
+        # Assuming defaults that return inserted data:
+        rows = self._run(self._table("cipher_memory").insert(payload).select(), operation="add_memory")
+        if rows and len(rows) > 0:
+            return rows[0]["id"]
+        return ""
+
+    def search_memory(
+        self, 
+        category: Optional[str] = None, 
+        limit: int = 10, 
+        q: Optional[str] = None
+    ) -> List[Dict]:
+        query = self._table("cipher_memory").select("*")
+        if category:
+            query = query.eq("category", category)
+        
+        # Simple text search on the JSONB content if 'q' is provided is hard without pg_trgm validation
+        # For now, we return recent items. Real semantic search requires the vector extension.
+        query = query.order("created_at", desc=True).limit(limit)
+        
+        return self._run(query, operation="search_memory")
+
+    def get_user_prefs(self, user_id: str) -> Dict:
+        rows = self._run(
+            self._table("user_prefs").select("*").eq("user_id", user_id), 
+            operation="get_user_prefs"
+        )
+        if rows:
+            return rows[0].get("preferences", {})
+        return {}
+
+    def set_user_pref(self, user_id: str, key: str, value: Any) -> None:
+        # First get existing
+        existing = self.get_user_prefs(user_id)
+        existing[key] = value
+        
+        payload = {
+            "user_id": user_id,
+            "preferences": existing,
+            "updated_at": self._now_iso()
+        }
+        self._run(self._table("user_prefs").upsert(payload), operation="set_user_pref")
+
+    def register_skill(
+        self, 
+        name: str, 
+        description: str, 
+        parameters: Dict, 
+        workflow_def: Dict,
+        enabled: bool = True
+    ) -> str:
+        payload = {
+            "name": name,
+            "description": description,
+            "parameters": parameters,
+            "workflow_def": workflow_def,
+            "enabled": enabled,
+            "created_at": self._now_iso()
+        }
+        # Upsert by name if possible, but standard upsert needs unique constraint/index
+        # We assume 'name' has a unique constraint in schema
+        rows = self._run(
+            self._table("skills_registry").upsert(payload, on_conflict="name").select(), 
+            operation="register_skill"
+        )
+        if rows:
+            return rows[0]["id"]
+        return ""
+
+    def list_skills(self, enabled_only: bool = True) -> List[Dict]:
+        query = self._table("skills_registry").select("*")
+        if enabled_only:
+            query = query.eq("enabled", True)
+        return self._run(query, operation="list_skills")

@@ -1,8 +1,11 @@
 export function getApiBase(): string {
-  if (typeof window !== 'undefined') {
-    const v = localStorage.getItem('lms_api_base');
-    if (v && v.trim()) return v.trim();
+  // Server-side (SSR)
+  if (typeof window === 'undefined') {
+    return process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8484';
   }
+  // Client-side
+  const v = localStorage.getItem('lms_api_base');
+  if (v && v.trim()) return v.trim();
   return process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8484';
 }
 

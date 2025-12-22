@@ -55,10 +55,12 @@ services:
         NEXT_PUBLIC_API_BASE: http://localhost:${BACKEND_PORT:-8484}
     container_name: pmoves-dox-frontend
     environment:
+    environment:
+      - API_URL=http://backend:8484
       - NEXT_PUBLIC_API_BASE=http://localhost:${BACKEND_PORT:-8484}
-      - PORT=3000
+      - PORT=3001
     ports:
-      - "${FRONTEND_PORT:-3001}:3000"
+      - "${FRONTEND_PORT:-3001}:3001"
     depends_on:
       - backend
     restart: unless-stopped
