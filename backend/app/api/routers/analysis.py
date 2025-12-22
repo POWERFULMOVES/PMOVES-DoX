@@ -250,16 +250,31 @@ async def get_tag_presets():
 
 @router.get("/summaries")
 async def list_summaries(document_id: str | None = None):
-    return {"summaries": [{"summary": "Placeholder summary", "style": "bullet"}]} # Implement db.list_summaries if available
+    # If document_id is provided, imply 'artifact' scope filter
+    scope = "artifact" if document_id else None
+    # We can fetch all and filter in memory if service doesn't support complex filtering
+    summaries = summary_service.list_summaries(scope=scope)
+    if document_id:
+        # Filter strictly for this artifact
+        summaries = [s for s in summaries if document_id in s["scope"]["artifact_ids"]]
+    return {"summaries": summaries}
 
 @router.post("/summaries/generate")
 async def generate_summary(req: SummaryGenerateRequest):
-    # Placeholder
-    return {
-        "summary": "Generated summary placeholder.",
-        "style": req.style,
-        "scope": {"artifact_ids": req.artifact_ids} if req.scope == "artifact" else req.scope
-    }
+    # Map request to service call
+    # Default scope to 'workspace' if not artifact_ids
+    scope = "artifact" if (req.scope == "artifact" or req.artifact_ids) else "workspace"
+    
+    # Ensure style is valid or default
+    style = req.style if req.style in ("bullet", "executive", "action_items") else "bullet"
+    
+    result = summary_service.generate_summary(
+        style=style,
+        scope=scope,
+        artifact_ids=req.artifact_ids,
+        # Provider could be passed if req had it, currently defaulting to configured default
+    )
+    return result
 
 # ---------------- Conversion & Structure ----------------
 

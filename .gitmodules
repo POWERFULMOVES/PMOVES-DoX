@@ -1,3 +1,9 @@
 [submodule "PsyFeR_reference"]
 	path = PsyFeR_reference
 	url = https://github.com/POWERFULMOVES/Pmoves-PsyFeR-Holo.git
+[submodule "external/Pmoves-hyperdimensions"]
+	path = external/Pmoves-hyperdimensions
+	url = https://github.com/POWERFULMOVES/Pmoves-hyperdimensions.git
+[submodule "external/conductor"]
+	path = external/conductor
+	url = https://github.com/gemini-cli-extensions/conductor.git
