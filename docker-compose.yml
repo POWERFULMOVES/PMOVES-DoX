@@ -1,7 +1,7 @@
 services:
   ollama:
     image: ollama/ollama:latest
-    profiles: ["ollama"]
+
     volumes:
       - ollama:/root/.ollama
     restart: unless-stopped
@@ -24,6 +24,7 @@ services:
       - XML_XPATH_MAP=${XML_XPATH_MAP:-}
       - XML_XPATH_MAP_FILE=${XML_XPATH_MAP_FILE:-}
       - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-false}
+      - NATS_URL=nats://nats:4222
     ports:
       - "8484:8484"
     volumes:
@@ -112,6 +113,18 @@ services:
       - cipher-data:/app/.cipher
     depends_on:
       - ollama
+      - nats
+    restart: unless-stopped
+
+  nats:
+    image: nats:latest
+    command: -js
+    container_name: pmoves-dox-nats
+    ports:
+      - "4222:4222"
+      - "8222:8222"
+    networks:
+      - default
     restart: unless-stopped
 
 networks:

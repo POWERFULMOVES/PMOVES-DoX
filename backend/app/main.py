@@ -7,6 +7,7 @@ from pathlib import Path
 import shutil
 from typing import List, Dict, Optional, Any, Literal, Annotated
 import uuid
+import asyncio
 from dotenv import load_dotenv
 import time
 import json
@@ -234,6 +235,15 @@ async def _startup_watch():
         search_index.rebuild()
     except Exception:
         pass
+    
+    # Connect to NATS Geometry Bus (non-blocking)
+    try:
+        from app.services.chit_service import chit_service
+        # Use NATS_URL from env or default to docker service name
+        nats_url = os.getenv("NATS_URL", "nats://nats:4222")
+        asyncio.create_task(chit_service.connect_nats(nats_url))
+    except Exception as e:
+        print(f"Failed to initiate NATS connection: {e}")
 
 app.include_router(documents.router)
 app.include_router(analysis.router)
