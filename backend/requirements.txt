@@ -1,6 +1,6 @@
 fastapi==0.109.0
 uvicorn[standard]==0.27.0
-python-multipart==0.0.6
+python-multipart==0.0.21
 # Docling 2.x supports Python 3.11 and modern pipeline APIs
 docling>=2.50.0,<3.0
 pandas==2.2.0
