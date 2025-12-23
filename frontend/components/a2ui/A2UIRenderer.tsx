@@ -5,6 +5,8 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from "@/com
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { cn } from "@/lib/utils";
+import { HyperbolicNavigator } from "../geometry/HyperbolicNavigator";
+import { ZetaVisualizer } from "../geometry/ZetaVisualizer";
 
 // Types based on A2UI Protocol v0.8
 type ComponentId = string;
@@ -104,6 +106,25 @@ const ComponentRegistry: Record<string, React.FC<any>> = {
                 </div>
             ))}
         </div>
+    ),
+    
+    HyperbolicNavigator: ({ data, width, height, className }) => (
+        <HyperbolicNavigator 
+            data={data}
+            width={width}
+            height={height}
+            className={className}
+        />
+    ),
+
+    ZetaVisualizer: ({ frequencies, amplitudes, width, height, className }) => (
+        <ZetaVisualizer 
+            frequencies={frequencies}
+            amplitudes={amplitudes}
+            width={width}
+            height={height}
+            className={className}
+        />
     )
 };
 

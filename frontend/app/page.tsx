@@ -103,8 +103,6 @@ export default function Home() {
     { id: 'workspace', label: 'Workspace', icon: Database },
     { id: 'modellab', label: 'Model Lab', icon: BrainCircuit },
     { id: 'knowledge', label: 'Knowledge Graph', icon: Network },
-    { id: 'modellab', label: 'Model Lab', icon: BrainCircuit },
-    { id: 'knowledge', label: 'Knowledge Graph', icon: Network },
     { id: 'a2ui', label: 'A2UI Lab', icon: Cpu },
     { id: 'system', label: 'System', icon: Activity },
   ];
