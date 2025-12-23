@@ -13,6 +13,8 @@ export const metadata: Metadata = {
   description: 'Premium AI Document Analysis & Reasoning Platform',
 };
 
+import { NatsProvider } from '@/lib/nats-context';
+
 export default function RootLayout({
   children,
 }: {
@@ -25,22 +27,24 @@ export default function RootLayout({
         inter.variable,
         outfit.variable
       )}>
-        <ToastProvider>
-          <div className="flex h-screen bg-[url('/grid-pattern.svg')] bg-fixed">
-             {/* Global background effects */}
-             <div className="fixed inset-0 bg-background/90 -z-50" />
-             <div className="fixed top-0 left-0 right-0 h-[500px] bg-purple-500/10 blur-[120px] rounded-full mix-blend-screen pointer-events-none -z-40" />
-             <div className="fixed bottom-0 right-0 w-[500px] h-[500px] bg-cyan-500/10 blur-[120px] rounded-full mix-blend-screen pointer-events-none -z-40" />
-
-            <Sidebar />
-            
-            <main className="flex-1 overflow-y-auto relative z-10 p-6 md:p-8">
-              <div className="mx-auto max-w-7xl animate-fade-in">
-                {children}
-              </div>
-            </main>
-          </div>
-        </ToastProvider>
+        <NatsProvider>
+          <ToastProvider>
+            <div className="flex h-screen bg-[url('/grid-pattern.svg')] bg-fixed">
+               {/* Global background effects */}
+               <div className="fixed inset-0 bg-background/90 -z-50" />
+               <div className="fixed top-0 left-0 right-0 h-[500px] bg-purple-500/10 blur-[120px] rounded-full mix-blend-screen pointer-events-none -z-40" />
+               <div className="fixed bottom-0 right-0 w-[500px] h-[500px] bg-cyan-500/10 blur-[120px] rounded-full mix-blend-screen pointer-events-none -z-40" />
+  
+              <Sidebar />
+              
+              <main className="flex-1 overflow-y-auto relative z-10 p-6 md:p-8">
+                <div className="mx-auto max-w-7xl animate-fade-in">
+                  {children}
+                </div>
+              </main>
+            </div>
+          </ToastProvider>
+        </NatsProvider>
       </body>
     </html>
   );
