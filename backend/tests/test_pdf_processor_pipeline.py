@@ -79,6 +79,7 @@ class DummyDoc:
         self.pages = pages
         self.pictures = pictures
         self.texts = texts
+        self.tables = [t for p in pages for t in p.tables]
 
     def export_to_markdown(self):
         return "# Sample Document"
