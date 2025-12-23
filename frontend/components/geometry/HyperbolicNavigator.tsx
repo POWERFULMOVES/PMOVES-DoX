@@ -3,6 +3,8 @@
 import React, { useEffect, useRef, useState } from 'react';
 import * as d3 from 'd3';
 import { cn } from '@/lib/utils';
+import { useNats } from '@/lib/nats-context';
+import { StringCodec } from 'nats.ws';
 
 interface CGPPoint {
   id: string;
@@ -44,9 +46,44 @@ export function HyperbolicNavigator({ data, className, width = 800, height = 600
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
+  const { connection } = useNats();
+  const [vizData, setVizData] = useState(data);
+
+  // Sync prop data to state if it changes upstream
+  useEffect(() => {
+    setVizData(data);
+  }, [data]);
+
+  // NATS Subscription for Real-time Geometry Updates
+  useEffect(() => {
+    if (!connection) return;
+
+    const sc = StringCodec();
+    const sub = connection.subscribe("geometry.event.>");
+    console.log("HyperbolicNavigator: Subscribed to geometry.event.>");
+
+    (async () => {
+      for await (const m of sub) {
+        try {
+          const payload = JSON.parse(sc.decode(m.data));
+           // If payload looks like a CGP or has super_nodes, update viz
+           if (payload.super_nodes) {
+               console.log("HyperbolicNavigator: Received Geometry Update via NATS", payload);
+               setVizData(payload);
+           }
+        } catch (err) {
+          console.error("Failed to parse NATS geometry event", err);
+        }
+      }
+    })();
+
+    return () => {
+      sub.unsubscribe();
+    };
+  }, [connection]);
 
   useEffect(() => {
-    if (!svgRef.current || !data?.super_nodes) return;
+    if (!svgRef.current || !vizData?.super_nodes) return;
 
     const svg = d3.select(svgRef.current);
     const w = width;
@@ -72,7 +109,7 @@ export function HyperbolicNavigator({ data, className, width = 800, height = 600
 
     // Render Super Nodes
     const superNodes = g.selectAll(".super-node")
-      .data(data.super_nodes)
+      .data(vizData.super_nodes)
       .join("g")
       .attr("class", "super-node")
       .attr("transform", d => `translate(${d.x}, ${d.y})`)
@@ -116,7 +153,8 @@ export function HyperbolicNavigator({ data, className, width = 800, height = 600
       // For v0.1 spec, points have x,y. Let's assume constellations need a visual anchor.
       .attr("transform", (d, i, nodes) => {
          // Distribute evenly if no coords (fallback)
-         const radius = (d3.select(nodes[i].parentNode).datum() as CGPSuperNode).r * 0.6;
+         const parent = (nodes[i] as any).parentNode as unknown as SVGElement;
+         const radius = (d3.select(parent).datum() as CGPSuperNode).r * 0.6;
          const angle = (i / nodes.length) * 2 * Math.PI;
          return `translate(${Math.cos(angle) * radius}, ${Math.sin(angle) * radius})`;
       });
@@ -176,7 +214,7 @@ export function HyperbolicNavigator({ data, className, width = 800, height = 600
         .text(d => `${d.text?.substring(0, 50)}... (Conf: ${d.conf})`);
 
 
-  }, [data, width, height]);
+  }, [vizData, width, height]);
 
   return (
     <div ref={containerRef} className={cn("relative overflow-hidden border rounded-lg bg-slate-950/50", className)}>
