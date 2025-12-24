@@ -177,12 +177,32 @@ backend/
 │   │   ├── metric_extractor.py
 │   │   └── summarization.py
 │   │
-│   └── extraction/
-│       └── langextract_adapter.py # Tag extraction
-│
+│   ├── extraction/
+│   │       └── langextract_adapter.py # Tag extraction
+│   │
+│   ├── services/                  # Business Logic Services
+│   │   ├── cipher_service.py      # Memory/Skills/Cipher integration
+│   │   └── a2ui_service.py        # A2UI Protocol generation
+│   │
+│   ├── api/
+│   │   └── routers/
+│   │       └── cipher.py          # Cipher API Endpoints
+│   │
 ├── migrations/                    # Alembic migrations
 ├── tests/                         # Unit tests
 └── requirements.txt               # Dependencies
+```
+
+### Cipher Subsystem (New)
+
+The Cipher subsystem provides memory and agent capability management:
+
+```
+backend/app/
+├── api/routers/cipher.py          # REST endpoints
+├── services/
+│   ├── cipher_service.py          # Core logic
+│   └── a2ui_service.py            # A2UI protocol generation
 ```
 
 ### Database Schema
