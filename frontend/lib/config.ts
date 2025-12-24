@@ -1,12 +1,12 @@
 export function getApiBase(): string {
   // Server-side (SSR)
   if (typeof window === 'undefined') {
-    return process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8484';
+    return process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://backend:8484';
   }
   // Client-side
   const v = localStorage.getItem('lms_api_base');
   if (v && v.trim()) return v.trim();
-  return process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8484';
+  return process.env.NEXT_PUBLIC_API_BASE || '/api';
 }
 
 export function setApiBase(v: string) {
