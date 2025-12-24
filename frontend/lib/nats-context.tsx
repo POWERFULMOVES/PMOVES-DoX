@@ -26,7 +26,7 @@ interface NatsProviderProps {
   servers?: string[];
 }
 
-export function NatsProvider({ children, servers = ['ws://localhost:9223'] }: NatsProviderProps) {
+export function NatsProvider({ children, servers = [process.env.NEXT_PUBLIC_NATS_WS_URL || 'ws://localhost:9223'] }: NatsProviderProps) {
   const [connection, setConnection] = useState<NatsConnection | null>(null);
   const [isConnected, setIsConnected] = useState(false);
   const [error, setError] = useState<Error | null>(null);

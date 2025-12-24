@@ -61,6 +61,7 @@ services:
     environment:
       - API_URL=http://backend:8484
       - NEXT_PUBLIC_API_BASE=/api
+      - NEXT_PUBLIC_NATS_WS_URL=ws://localhost:9223
       - PORT=3001
     ports:
       - "0:3001"
