@@ -1,17 +1,20 @@
+
 services:
-  ollama:
-    image: ollama/ollama:latest
-
-    volumes:
-      - ollama:/root/.ollama
-    restart: unless-stopped
-
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.gpu
     container_name: pmoves-dox-backend
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/artifacts:/app/artifacts
+      - ./backend/app:/app/app
+      - ./backend/data:/app/data
+      - hf-cache:/root/.cache/huggingface
     environment:
+      - DATABASE_URL=postgresql://postgres:postgres@supabase-db:5432/postgres
+      - REDIS_URL=redis://redis:6379
+      - NATS_URL=nats://nats:4222
       - FRONTEND_ORIGIN=http://localhost:${FRONTEND_PORT:-3001},http://127.0.0.1:${FRONTEND_PORT:-3001}
       - PORT=${BACKEND_PORT:-8484}
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
@@ -24,15 +27,13 @@ services:
       - XML_XPATH_MAP=${XML_XPATH_MAP:-}
       - XML_XPATH_MAP_FILE=${XML_XPATH_MAP_FILE:-}
       - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-false}
-      - NATS_URL=nats://nats:4222
     ports:
-      - "8484:8484"
-    volumes:
-      - ./backend/uploads:/app/uploads
-      - ./backend/artifacts:/app/artifacts
-      - ./samples:/app/samples
-      - ./watch:/app/watch
-      - hf-cache:/root/.cache/huggingface
+      - "0:8484"
+    networks:
+      - api_tier
+      - app_tier
+      - bus_tier
+      - data_tier
     deploy:
       resources:
         reservations:
@@ -40,29 +41,119 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "wget", "-qO", "-", "http://localhost:8484/"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+    depends_on:
+      - supabase-db
+      - nats
     restart: unless-stopped
-    # No hard dependency on ollama; backend works without it
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "-", "http://localhost:8484/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
       args:
-        NEXT_PUBLIC_API_BASE: http://localhost:${BACKEND_PORT:-8484}
+        NEXT_PUBLIC_API_BASE: /api
     container_name: pmoves-dox-frontend
     environment:
       - API_URL=http://backend:8484
-      - NEXT_PUBLIC_API_BASE=http://localhost:${BACKEND_PORT:-8484}
+      - NEXT_PUBLIC_API_BASE=/api
       - PORT=3001
     ports:
-      - "${FRONTEND_PORT:-3001}:3001"
+      - "0:3001"
+    networks:
+      - api_tier
     depends_on:
       - backend
+    restart: unless-stopped
+
+  nats:
+    image: nats:latest
+    container_name: pmoves-dox-nats
+    command: -c /etc/nats/nats.conf
+    ports:
+      - "4223:4222"
+      - "8223:8222"
+      - "9223:9222"
+    volumes:
+      - ./backend/nats-config/nats.conf:/etc/nats/nats.conf
+    networks:
+      - bus_tier
+      - api_tier
+    restart: unless-stopped
+
+  supabase-db:
+    image: supabase/postgres:15.1.0.117
+    container_name: supabase-db
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+    networks:
+      - data_tier
+    volumes:
+      - supabase_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  supabase-rest:
+    image: postgrest/postgrest:v11.1.0
+    container_name: supabase-rest
+    environment:
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
+      PGRST_DB_SCHEMA: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${PGRST_JWT_SECRET}
+    ports:
+      - "54321:3000"
+    networks:
+      - api_tier
+      - data_tier
+    depends_on:
+      - supabase-db
+
+  cipher-service:
+    container_name: pmoves-dox-cipher
+    image: cipher-api
+    build:
+      context: ./PsyFeR_reference
+      dockerfile: Dockerfile
+    # Internal service: No ports exposed to host. Reachable via http://cipher-service:3000 on app_tier
+    networks:
+      - app_tier
+    environment:
+      - CIPHER_API_PREFIX=""
+      - NODE_ENV=production
+    volumes:
+      - ./backend/cipher-config/cipher.yml:/app/memAgent/cipher.yml
+      - cipher-data:/app/.cipher
+    depends_on:
+      - ollama
+      - nats
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: pmoves-dox-ollama-1
+    ports:
+      - "11435:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - api_tier
+      - app_tier
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
     restart: unless-stopped
 
   datavzrd:
@@ -77,6 +168,8 @@ services:
       - ./backend/artifacts:/app/artifacts
     ports:
       - "5173:5173"
+    networks:
+      - app_tier
     depends_on:
       - backend
     restart: unless-stopped
@@ -94,46 +187,53 @@ services:
       - ./backend/artifacts:/app/out
     ports:
       - "5174:5174"
-    restart: unless-stopped
-
-
-  cipher-service:
-    build:
-      context: ./PsyFeR_reference
-      dockerfile: Dockerfile
-    container_name: pmoves-dox-cipher
-    image: cipher-api
-    ports:
-      - "3000:3000"
-    environment:
-      - CIPHER_API_PREFIX=""
-      - NODE_ENV=production
-    volumes:
-      - ./backend/cipher-config/cipher.yml:/app/memAgent/cipher.yml
-      - cipher-data:/app/.cipher
-    depends_on:
-      - ollama
-      - nats
-    restart: unless-stopped
-
-  nats:
-    image: nats:latest
-    command: -c /etc/nats/nats.conf
-    container_name: pmoves-dox-nats
-    ports:
-      - "4223:4222"
-      - "8223:8222"
-      - "9222:9222"
-    volumes:
-      - ./backend/nats-config/nats.conf:/etc/nats/nats.conf
     networks:
-      - default
+      - app_tier
     restart: unless-stopped
 
 networks:
-  default:
-    name: pmoves-dox-net
+  api_tier:
+    driver: bridge
+    name: pmoves_api
+    ipam:
+      config:
+        - subnet: 172.30.1.0/24
+
+  app_tier:
+    driver: bridge
+    name: pmoves_app
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.2.0/24
+
+  bus_tier:
+    driver: bridge
+    name: pmoves_bus
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.3.0/24
+
+  data_tier:
+    driver: bridge
+    name: pmoves_data
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.30.4.0/24
+
+  monitoring_tier:
+    driver: bridge
+    name: pmoves_monitoring
+    ipam:
+      config:
+        - subnet: 172.30.5.0/24
+
 volumes:
   hf-cache:
   ollama:
   cipher-data:
+  supabase_data:
+  nats_data:
+  ollama_data:
