@@ -27,6 +27,9 @@ WRITE_METHODS = {
     "store_structure",
     "store_metric_hits",
     "store_summary",
+    "add_memory",
+    "set_user_pref",
+    "register_skill",
 }
 
 
@@ -106,3 +109,8 @@ def init_database() -> Tuple[Any, Dict[str, Any]]:
     }
 
     return db_instance, metadata
+
+
+def get_db_interface() -> Any:
+    db, _ = init_database()
+    return db

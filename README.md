@@ -38,6 +38,19 @@ New comprehensive documentation is available:
 - **[Architecture](docs/ARCHITECTURE.md)** - System design, data flow, and internals
 - **[Project Structure](PROJECT_STRUCTURE.md)** - Codebase organization
 
+### 🧠 Byterover Cipher Integration
+This project integrates **Byterover Cipher**, a memory-powered AI agent framework.
+- **System 1 Memory**: Stores programming concepts, business logic, and interaction history.
+- **System 2 Memory**: Captures reasoning steps and cognitive traces.
+- **System 2 Memory**: Captures reasoning steps and cognitive traces.
+- **Submodule**: `PsyFeR_reference` is included as a submodule. Initialize with `git submodule update --init --recursive`.
+
+### 🤖 PMOVES-BoTZ (Google Conductor)
+Integrated support for **Context-Driven Development** using the [Google Conductor](docs/google_conductor.md) extension.
+- **Workflow**: `Context -> Spec -> Plan -> Implement`
+- **Location**: `external/conductor`
+- **Powered By**: Hardened Google SDKs (`google-generativeai`, `google-cloud-aiplatform`) compatible with TensorZero.
+
 ---
 
 ## Quick Start
@@ -173,6 +186,10 @@ Local-first models
 ## Features
 
 - Multi‑format ingestion: PDF (Docling), CSV/XLSX, XML logs, OpenAPI/Postman
+- **New** **Geometric Intelligence**: "Mathematical UI" powered by Hyperbolic Geometry and Riemann Zeta spectral analysis.
+    - **Hyperbolic Navigator**: Visualize knowledge hierarchies on a Poincaré Disk.
+    - **Manifold Visualizer**: "Trickout" 3D surfaces to see the "Shape of Data" (via `Pmoves-hyperdimensions`).
+- **New** **CHIT Protocol**: Support for "Cymatic-Holographic Information Transfer" geometry packets.
 - Vector search (FAISS or NumPy fallback) with a global UI search bar
 - PDF page awareness: Global Search displays page numbers for PDF hits; optional "Open PDF at page" links when enabled
 - Logs view with time/level/code filters and CSV export
@@ -260,7 +277,9 @@ python -m venv venv
 # Activate virtual environment
 .\venv\Scripts\Activate.ps1
 
-# Install dependencies
+# Install dependencies using uv (faster)
+uv pip install -r pyproject.toml
+# OR standard pip
 pip install -r requirements.txt
 
 # Run the backend (PORT via .env if set)

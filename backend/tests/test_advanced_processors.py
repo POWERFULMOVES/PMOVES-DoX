@@ -71,7 +71,11 @@ class DummyFigure:
 class DummyDoc:
     def __init__(self, pages, tables=None, pictures=None, texts=None):
         self.pages = pages
-        self.tables = tables or []
+        if tables is None:
+            # Flatten tables from pages if not explicitly provided
+            self.tables = [t for p in pages for t in p.tables]
+        else:
+            self.tables = tables
         self.pictures = pictures or []
         self.texts = texts or []
 
@@ -105,7 +109,8 @@ def test_chart_processor_collects_metadata(tmp_path: Path):
     chart = charts[0]
     assert chart["caption"] == "Revenue by Quarter"
     assert chart["page"] == 2
-    assert chart["image_path"].startswith("charts/")
+    # Normalize path separators for Windows compatibility
+    assert chart["image_path"].replace("\\", "/").startswith("charts/")
     saved = tmp_path / chart["image_path"]
     assert saved.exists()
 

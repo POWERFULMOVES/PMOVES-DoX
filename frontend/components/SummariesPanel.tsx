@@ -1,6 +1,7 @@
 'use client';
 
 import { useCallback, useEffect, useMemo, useState } from 'react';
+import { getApiBase } from '@/lib/config';
 import { useToast } from '@/components/Toast';
 
 type SummaryStyle = 'bullet' | 'executive' | 'action_items';
@@ -34,7 +35,6 @@ const STYLE_LABELS: Record<SummaryStyle, string> = {
 };
 
 export default function SummariesPanel() {
-  const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
   const { push } = useToast();
   const [style, setStyle] = useState<SummaryStyle>('bullet');
   const [scope, setScope] = useState<SummaryScope>('workspace');
@@ -51,7 +51,8 @@ export default function SummariesPanel() {
 
   const loadArtifacts = useCallback(async () => {
     try {
-      const resp = await fetch(`${API}/artifacts`);
+      const apiBase = getApiBase();
+      const resp = await fetch(`${apiBase}/artifacts`);
       if (!resp.ok) return;
       const data = await resp.json();
       const rows = Array.isArray(data?.artifacts) ? data.artifacts : [];
@@ -59,7 +60,7 @@ export default function SummariesPanel() {
     } catch {
       // ignore fetch errors for now
     }
-  }, [API]);
+  }, []);
 
   const loadHistory = useCallback(async () => {
     if (scope === 'artifact' && selected.length === 0) {
@@ -72,7 +73,8 @@ export default function SummariesPanel() {
       params.append('scope', 'artifact');
     }
     try {
-      const resp = await fetch(`${API}/summaries?${params.toString()}`);
+      const apiBase = getApiBase();
+      const resp = await fetch(`${apiBase}/summaries?${params.toString()}`);
       if (!resp.ok) return;
       const data = await resp.json();
       const items: SummaryRecord[] = Array.isArray(data?.summaries) ? data.summaries : [];
@@ -84,7 +86,7 @@ export default function SummariesPanel() {
     } catch {
       // ignore errors during history fetch
     }
-  }, [API, scope, selected, scopeKey, style]);
+  }, [scope, selected, scopeKey, style]);
 
   useEffect(() => {
     loadArtifacts();
@@ -124,7 +126,8 @@ export default function SummariesPanel() {
       if (scope === 'artifact') {
         body.artifact_ids = [...selected];
       }
-      const resp = await fetch(`${API}/summaries/generate`, {
+      const apiBase = getApiBase();
+      const resp = await fetch(`${apiBase}/summaries/generate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(body),
