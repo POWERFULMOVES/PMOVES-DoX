@@ -5,7 +5,10 @@ import * as d3 from 'd3';
 import { cn } from '@/lib/utils';
 import { useNats } from '@/lib/nats-context';
 import { StringCodec } from 'nats.ws';
+import { Button } from '@/components/ui/button';
+import dynamic from 'next/dynamic';
 
+// --- Types ---
 interface CGPPoint {
   id: string;
   x: number;
@@ -42,19 +45,33 @@ export interface HyperbolicNavigatorProps {
   height?: number;
 }
 
+
+// Dynamically import Manifold3D with no SSR to prevent text/canvas hydration mismatches
+const Manifold3D = dynamic(() => import('./Manifold3D'), { 
+    ssr: false,
+    loading: () => <div className="flex items-center justify-center w-full h-full text-slate-500">Loading 3D Engine...</div>
+});
+
+// Remove local Manifold3D definition and imports
+// const Manifold3D = ... (Deleted)
+
+
+// --- Main Navigator Component ---
 export function HyperbolicNavigator({ data, className, width = 800, height = 600 }: HyperbolicNavigatorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const { connection } = useNats();
   const [vizData, setVizData] = useState(data);
+  const [manifoldParams, setManifoldParams] = useState<any>(null);
+  const [viewMode, setViewMode] = useState<'navigator' | 'manifold'>('navigator');
 
-  // Sync prop data to state if it changes upstream
+  // Sync prop data
   useEffect(() => {
     setVizData(data);
   }, [data]);
 
-  // NATS Subscription for Real-time Geometry Updates
+  // NATS Subscription
   useEffect(() => {
     if (!connection) return;
 
@@ -66,9 +83,15 @@ export function HyperbolicNavigator({ data, className, width = 800, height = 600
       for await (const m of sub) {
         try {
           const payload = JSON.parse(sc.decode(m.data));
-           // If payload looks like a CGP or has super_nodes, update viz
-           if (payload.super_nodes) {
-               console.log("HyperbolicNavigator: Received Geometry Update via NATS", payload);
+          
+           // Type Detection
+           if (payload.type === 'manifold_update' || payload.parameters) {
+               console.log("HyperbolicNavigator: Manifold Update", payload);
+               setManifoldParams(payload.parameters);
+               // Auto-switch to manifold mode if we get a pure manifold update? 
+               // Maybe just let user toggle.
+           } else if (payload.super_nodes || payload.type === 'constellation_update') {
+               console.log("HyperbolicNavigator: Constellation Update", payload);
                setVizData(payload);
            }
         } catch (err) {
@@ -82,32 +105,25 @@ export function HyperbolicNavigator({ data, className, width = 800, height = 600
     };
   }, [connection]);
 
+  // D3 Renderer (Navigator Mode)
   useEffect(() => {
-    if (!svgRef.current || !vizData?.super_nodes) return;
+    if (viewMode !== 'navigator' || !svgRef.current || !vizData?.super_nodes) return;
 
     const svg = d3.select(svgRef.current);
     const w = width;
     const h = height;
 
-    // Clear previous
     svg.selectAll("*").remove();
 
-    // Setup group and zoom
     const g = svg.append("g").attr("class", "main-group");
-    
-    // Zoom behavior
     const zoom = d3.zoom<SVGSVGElement, unknown>()
       .scaleExtent([0.1, 10])
-      .on("zoom", (event) => {
-        g.attr("transform", event.transform);
-      });
+      .on("zoom", (event) => g.attr("transform", event.transform));
       
     svg.call(zoom);
-
-    // Initial center transform
     svg.call(zoom.transform, d3.zoomIdentity.translate(w/2, h/2));
 
-    // Render Super Nodes
+    // Super Nodes
     const superNodes = g.selectAll(".super-node")
       .data(vizData.super_nodes)
       .join("g")
@@ -117,118 +133,89 @@ export function HyperbolicNavigator({ data, className, width = 800, height = 600
       .on("click", (event, d) => {
         event.stopPropagation();
         setSelectedNode(d.id);
-        
-        // Zoom to node
-        const scale = 2; // Fixed zoom scale for now
-        const transform = d3.zoomIdentity
-          .translate(w/2, h/2)
-          .scale(scale)
-          .translate(-d.x, -d.y);
-          
+        const transform = d3.zoomIdentity.translate(w/2, h/2).scale(2).translate(-d.x, -d.y);
         svg.transition().duration(750).call(zoom.transform, transform);
       });
 
-    // Super Node Circle (The "Disk" of this local manifold)
     superNodes.append("circle")
       .attr("r", d => d.r)
-      .attr("fill", "rgba(147, 197, 253, 0.1)") // blue-300 with low opacity
-      .attr("stroke", "#60a5fa") // blue-400
+      .attr("fill", "rgba(147, 197, 253, 0.1)")
+      .attr("stroke", "#60a5fa")
       .attr("stroke-width", 1)
       .attr("stroke-dasharray", "4,4");
 
-    // Super Node Label
     superNodes.append("text")
       .attr("y", d => -d.r - 10)
       .attr("text-anchor", "middle")
       .attr("class", "fill-foreground text-xs font-mono")
       .text(d => d.label);
 
-    // Render Constellations (Sub-clusters)
+    // Constellations
     const constellations = superNodes.selectAll(".constellation")
       .data(d => d.constellations || [])
       .join("g")
-      .attr("class", "constellation")
-      // Simple radial layout for constellations within super node if encoded positions aren't absolute relative to super node
-      // Assuming for now data has relative positions or we project them.
-      // For v0.1 spec, points have x,y. Let's assume constellations need a visual anchor.
       .attr("transform", (d, i, nodes) => {
-         // Distribute evenly if no coords (fallback)
          const parent = (nodes[i] as any).parentNode as unknown as SVGElement;
          const radius = (d3.select(parent).datum() as CGPSuperNode).r * 0.6;
          const angle = (i / nodes.length) * 2 * Math.PI;
          return `translate(${Math.cos(angle) * radius}, ${Math.sin(angle) * radius})`;
       });
 
-    // Constellation Marker (Star)
-    const starSymbol = d3.symbol().type(d3.symbolStar).size(80);
     constellations.append("path")
-      .attr("d", starSymbol)
-      .attr("fill", "#f87171") // red-400
-      .attr("stroke", "none");
+      .attr("d", d3.symbol().type(d3.symbolStar).size(80))
+      .attr("fill", "#f87171");
 
-    // Ripple Rings (Cymatic Visuals based on Spectrum)
-    // We use the first few bins of spectrum to define ring intensity/radius
-    constellations.each(function(d) {
-        const group = d3.select(this);
-        const spectrum = d.spectrum || [];
-        
-        // Add animated rings
-        spectrum.slice(0, 3).forEach((intensity, idx) => {
-            group.append("circle")
-                .attr("r", 10 + (idx * 5))
-                .attr("fill", "none")
-                .attr("stroke", `rgba(248, 113, 113, ${intensity * 0.5})`) // red-400 with spectrum alpha
-                .attr("class", "animate-pulse"); // Use Tailwind animation
-        });
-    });
-
-    // Constellation Points (The actual data items)
-    // Note: points usually have x,y coordinates. If they are global, we need to map them.
-    // Spec says points have x,y "2D layout coordinates for viz".
-    // We'll render them relative to the constellation for now, or assume they are pre-projected.
-    // Spec in doc says points have x,y. Let's render them relative to SuperNode? 
-    // Wait, spec: "points": [{ "x": 13.4, "y": -8.2 ... }] 
-    // And "constellations" are children of "super_nodes".
-    // Let's assume points x,y are relative to the SuperNode center for this first pass.
-    
-    // Actually, creating a separate layer for points might be cleaner, but let's nest them for now
-    // to keep the hierarchy visual.
+    // Points
     const points = constellations.selectAll(".point")
         .data(d => d.points || [])
         .join("circle")
-        .attr("class", "point")
-        .attr("r", d => 2 + (d.conf * 2)) // Size by confidence
-        .attr("cx", d => d.x * 0.2) // Scale down if coordinates are large, simplistic for demo
+        .attr("r", d => 2 + (d.conf * 2))
+        .attr("cx", d => d.x * 0.2)
         .attr("cy", d => d.y * 0.2)
-        .attr("fill", "#22d3ee") // cyan-400
-        .attr("opacity", 0.7)
-        .on("mouseover", function(event, d) {
-            d3.select(this).attr("r", 6).attr("opacity", 1);
-            // Tooltip logic could go here
-        })
-        .on("mouseout", function(event, d) {
-            d3.select(this).attr("r", 2 + (d.conf * 2)).attr("opacity", 0.7);
-        });
+        .attr("fill", "#22d3ee")
+        .attr("opacity", 0.7);
 
-    points.append("title")
-        .text(d => `${d.text?.substring(0, 50)}... (Conf: ${d.conf})`);
+    points.append("title").text(d => `${d.text} (Conf: ${d.conf})`);
 
-
-  }, [vizData, width, height]);
+  }, [vizData, width, height, viewMode]);
 
   return (
     <div ref={containerRef} className={cn("relative overflow-hidden border rounded-lg bg-slate-950/50", className)}>
-        <svg 
-            ref={svgRef} 
-            width={width} 
-            height={height} 
-            viewBox={`0 0 ${width} ${height}`}
-            className="w-full h-full"
-        />
+        {/* Toolbar */}
+        <div className="absolute top-4 right-4 z-10 flex gap-2">
+            <Button 
+                variant={viewMode === 'navigator' ? 'default' : 'outline'} 
+                size="sm" 
+                onClick={() => setViewMode('navigator')}
+            >
+                Navigator (2D)
+            </Button>
+            <Button 
+                variant={viewMode === 'manifold' ? 'default' : 'outline'} 
+                size="sm" 
+                onClick={() => setViewMode('manifold')}
+            >
+                Manifold (3D)
+            </Button>
+        </div>
+
+        {/* Viewport */}
+        {viewMode === 'navigator' ? (
+             <svg 
+                ref={svgRef} 
+                width={width} 
+                height={height} 
+                className="w-full h-full"
+            />
+        ) : (
+            <Manifold3D width={width} height={height} params={manifoldParams} />
+        )}
+
+        {/* HUD */}
         <div className="absolute top-4 left-4 pointer-events-none">
             <h3 className="text-sm font-bold text-slate-400">Hyperbolic Manifold</h3>
             <p className="text-xs text-slate-500">
-                {selectedNode ? `Focused: ${selectedNode}` : "Global View"}
+                {selectedNode ? `Focused: ${selectedNode}` : "Global View"} | Mode: {viewMode}
             </p>
         </div>
     </div>

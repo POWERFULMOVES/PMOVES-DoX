@@ -17,6 +17,7 @@
     "@types/node": "^20.11.5",
     "@types/react": "^18.2.48",
     "@types/react-dom": "^18.2.18",
+    "@types/three": "^0.182.0",
     "axios": "^1.6.5",
     "class-variance-authority": "^0.7.1",
     "clsx": "^2.1.1",
@@ -24,10 +25,11 @@
     "framer-motion": "^12.23.26",
     "lucide-react": "^0.562.0",
     "nats.ws": "^1.30.3",
-    "next": "^16.1.0",
+    "next": "^16.1.1",
     "react": "^19.2.3",
     "react-dom": "^19.2.3",
     "tailwind-merge": "^3.4.0",
+    "three": "^0.182.0",
     "typescript": "^5.3.3"
   },
   "devDependencies": {

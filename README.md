@@ -199,7 +199,8 @@ Local-first models
 - Q&A with citations over extracted facts
 - Financial statement detection with merged-header normalization and confidence scoring
 
-### Financial Statement Analysis
+### Financial Statement Analysis (🚧 Planned / Coming Soon)
+> **Note**: This feature is currently in development.
 
 - Enable `PDF_FINANCIAL_ANALYSIS=true` (default) to run Docling tables through the new complex table processor.
 - API: `GET /analysis/financials` returns detected statements, summaries, and table snippets for dashboards.
@@ -207,7 +208,7 @@ Local-first models
 - Samples: see `samples/financials/financial_statements.pdf` for the curated test fixture used in automated checks.
 - Advanced PDF analysis: Named entity recognition, heading hierarchy detection, and contextual metric extraction surfaced via `/analysis/*` APIs
 
-### Advanced Analysis Endpoints
+### Advanced Analysis Endpoints (🚧 Planned)
 
 - `GET /analysis/entities` &mdash; Named entities detected from Docling text blocks (requires a spaCy English model such as `en_core_web_sm`).
 - `GET /analysis/structure` &mdash; Hierarchical section map derived from Docling heading annotations.
