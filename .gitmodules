@@ -8,4 +8,6 @@
 	path = external/conductor
 	url = https://github.com/gemini-cli-extensions/conductor.git
 [submodule "external/PMOVES-Agent-Zero"]
+	path = external/PMOVES-Agent-Zero
+	url = https://github.com/POWERFULMOVES/PMOVES-Agent-Zero.git
 	branch = PMOVES.AI-Edition-Hardened-DoX
