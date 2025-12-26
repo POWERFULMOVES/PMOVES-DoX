@@ -15,7 +15,7 @@ Practical recipes and step-by-step tutorials for common use cases.
 
 ---
 
-## Cookbook 1: Financial Statement Analysis Pipeline
+## Cookbook 1: Financial Statement Analysis Pipeline (🚧 Planned / Coming Soon)
 
 **Scenario:** You have quarterly financial reports in PDF format and need to extract tables, detect financial statements, and create a searchable knowledge base.
 

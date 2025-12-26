@@ -15,7 +15,8 @@ import {
   ChevronRight, 
   Activity,
   Search,
-  BookOpen
+  BookOpen,
+  Network
 } from 'lucide-react';
 import { cn } from "@/lib/utils";
 
@@ -37,6 +38,7 @@ export default function Sidebar() {
     { label: "Logs", href: "/logs", icon: Activity },
     { label: "APIs", href: "/apis", icon: Code },
     { label: "Tags", href: "/tags", icon: Tag },
+    { label: "Geometry", href: "/geometry", icon: Network },
   ];
 
   return (
