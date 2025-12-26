@@ -1,6 +1,12 @@
+[submodule "A2UI_reference"]
+	path = A2UI_reference
+	url = https://github.com/POWERFULMOVES/Pmoves-A2UI.git
 [submodule "PsyFeR_reference"]
 	path = PsyFeR_reference
 	url = https://github.com/POWERFULMOVES/Pmoves-PsyFeR-Holo.git
+[submodule "external/Pmoves-Glancer"]
+	path = external/Pmoves-Glancer
+	url = https://github.com/POWERFULMOVES/Pmoves-Glancer.git
 [submodule "external/Pmoves-hyperdimensions"]
 	path = external/Pmoves-hyperdimensions
 	url = https://github.com/POWERFULMOVES/Pmoves-hyperdimensions.git
@@ -11,3 +17,9 @@
 	path = external/PMOVES-Agent-Zero
 	url = https://github.com/POWERFULMOVES/PMOVES-Agent-Zero.git
 	branch = PMOVES.AI-Edition-Hardened-DoX
+[submodule "external/PMOVES-BoTZ"]
+	path = external/PMOVES-BoTZ
+	url = https://github.com/POWERFULMOVES/PMOVES-BoTZ.git
+[submodule "external/PMOVES-BotZ-gateway"]
+	path = external/PMOVES-BotZ-gateway
+	url = https://github.com/POWERFULMOVES/PMOVES-BotZ-gateway.git

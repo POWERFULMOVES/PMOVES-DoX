@@ -2,7 +2,7 @@
 
 ## Core Directive
 
-**"The shape of the data determines the shape of the intelligence."**
+## "The shape of the data determines the shape of the intelligence."
 
 This document guides the AI Agent in understanding, visualizing, and manipulating the **Geometric Structure** of information within the PMOVES ecosystem.
 
@@ -12,8 +12,8 @@ This document guides the AI Agent in understanding, visualizing, and manipulatin
 
 Traditional RAG (Retrieval-Augmented Generation) treats data as points in a flat High-Dimensional Euclidean space. This fails to capture:
 
-*   **Hierarchy**: General concepts vs. specific details.
-*   **Flow**: Directonal relationships (A leads to B).
+*   **Hierarchy**: General concepts vs. details.
+*   **Flow**: Directional relationships (A leads to B).
 *   **Cycles**: Recurring patterns (Seasonality, Loops).
 
 ### 1.2 The Solution: Manifold Learning

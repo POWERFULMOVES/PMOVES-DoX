@@ -1,9 +1,24 @@
 import asyncio
 import json
 import random
+import signal
+import sys
 import time
 import os
 from nats.aio.client import Client as NATS
+
+# Global flag for graceful shutdown
+shutdown_requested = False
+
+def signal_handler(sig, frame):
+    """Handle shutdown signals gracefully."""
+    global shutdown_requested
+    print(f"\nReceived signal {sig}, shutting down gracefully...")
+    shutdown_requested = True
+
+# Register signal handlers
+signal.signal(signal.SIGINT, signal_handler)
+signal.signal(signal.SIGTERM, signal_handler)
 
 # Path to the demo data file
 DEMO_DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "docs", "demo", "collectionsHost.JSON")
@@ -25,7 +40,7 @@ async def main():
 
         demo_snapshots = load_demo_data()
         
-        while True:
+        while not shutdown_requested:
             snapshot = demo_snapshots[0] if demo_snapshots else {}
             
             t = time.time()
