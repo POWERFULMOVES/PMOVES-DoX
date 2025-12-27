@@ -45,7 +45,7 @@ const COOKBOOKS: Cookbook[] = [
     id: 'auto-tagging',
     title: 'Auto-Tagging & Classification',
     description: 'Automatically tag and classify documents using LLMs.',
-    status: 'in-progress',
+    status: 'ready',
     steps: [
       'Upload any document',
       'Click "Auto-Tag"',
