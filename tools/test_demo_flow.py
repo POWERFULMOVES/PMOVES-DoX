@@ -10,6 +10,19 @@ import requests
 import json
 
 def test_mcp_endpoint(name, url, expected_method="POST", payload=None):
+    """
+    Test MCP server endpoint availability.
+
+    Args:
+        name (str): Display name for the endpoint being tested.
+        url (str): Full endpoint URL to test.
+        expected_method (str): HTTP method to use ("GET" or "POST"). Default: "POST".
+        payload (dict, optional): JSON payload for POST requests.
+
+    Returns:
+        tuple: (success: bool, response_text: str)
+            success is True if HTTP 2xx/400/405 (server responding).
+    """
     print(f"\nTesting {name} at {url}...")
     try:
         if expected_method == "GET":
@@ -36,6 +49,15 @@ def test_mcp_endpoint(name, url, expected_method="POST", payload=None):
         return False, str(e)
 
 def main():
+    """
+    Test demo workflow: Postman and Docling MCP agent connectivity.
+
+    Verifies:
+    - Docling agent health endpoint (localhost:3020/health)
+    - Postman agent MCP endpoint (localhost:3026/mcp)
+
+    Prints connectivity status and MCP client usage instructions.
+    """
     # 1. Postman Agent
     # FastMCP typically exposes tools via JSON-RPC over SSE or HTTP.
     # We can try to list tools if it exposes a standardized endpoint or just verify the /mcp endpoint
