@@ -78,19 +78,11 @@ def main():
     
     # 2. Postman Agent (Port 3026 -> 8000)
     results.append(check_port("localhost", 3026, "Postman Agent"))
-    # The proxy usually serves SSE at /mcp or health at /health (if fastmcp)
-    results.append(check_http("http://localhost:3026/mcp", "Postman SSE Endpoint", expected_codes=[200, 404, 405, 400])) 
-    # 400/405 is fine for SSE endpoint checked via GET
+    results.append(check_http("http://localhost:3026/mcp", "Postman SSE Endpoint", expected_codes=[200, 404, 405, 400]))
 
     # 3. Agent Zero (Port 50051)
     results.append(check_port("localhost", 50051, "Agent Zero"))
-    
-    # 4. Gateway (Port 3000 -> 54321 in docker-compose for supabase, wait gateway isn't running on host port? 
-    # Ah, gateway runs internally. Check if we exposed it? 
-    # We didn't explicitly expose 'mcp-gateway' in the last edit, we added 'postman-agent'.
-    # Agent Zero UI is usually 80 or 9000-9009. DockerfileLocal exposes 80, 9000-9009.
-    # We mapped 50051:50051. Let's check 50051.
-    
+
     if all(results):
         print("\nAll integration checks PASSED.")
         sys.exit(0)
