@@ -38,11 +38,11 @@ services:
       # Neo4j Knowledge Graph - Local (DoX container)
       - NEO4J_LOCAL_URI=bolt://neo4j:7687
       - NEO4J_LOCAL_USER=neo4j
-      - NEO4J_LOCAL_PASSWORD=dox_knowledge_graph_2025
+      - NEO4J_LOCAL_PASSWORD=${NEO4J_LOCAL_PASSWORD}
       # Neo4j Knowledge Graph - Parent (PMOVES.AI shared)
       - NEO4J_PARENT_URI=bolt://pmoves-neo4j-1:7687
       - NEO4J_PARENT_USER=neo4j
-      - NEO4J_PARENT_PASSWORD=${NEO4J_PARENT_PASSWORD:-pmovesNeo4j!Local2025}
+      - NEO4J_PARENT_PASSWORD=${NEO4J_PARENT_PASSWORD}
     ports:
       - "8484:8484"
     networks:
@@ -192,7 +192,8 @@ services:
     image: neo4j:5.15-community
     container_name: pmoves-dox-neo4j
     environment:
-      - NEO4J_AUTH=neo4j/dox_knowledge_graph_2025
+      # Use env variable for password: NEO4J_LOCAL_PASSWORD must be set in .env.local
+      - NEO4J_AUTH=neo4j/${NEO4J_LOCAL_PASSWORD}
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=1G
       - NEO4J_dbms_memory_pagecache_size=512m
@@ -208,7 +209,8 @@ services:
       - data_tier
       - pmoves_data  # Connect to parent Neo4j for shared knowledge graphs
     healthcheck:
-      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "dox_knowledge_graph_2025", "RETURN 1"]
+      # Healthcheck uses env variable for password
+      test: ["CMD", "sh", "-c", "cypher-shell -u neo4j -p $${NEO4J_LOCAL_PASSWORD} RETURN 1"]
       interval: 30s
       timeout: 10s
       retries: 5

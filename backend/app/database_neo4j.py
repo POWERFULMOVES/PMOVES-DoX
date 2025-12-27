@@ -9,10 +9,10 @@ Mirrors the dual Supabase pattern:
 Environment Variables:
     NEO4J_PARENT_URI: Bolt URI for parent Neo4j (default: bolt://pmoves-neo4j-1:7687)
     NEO4J_PARENT_USER: Username for parent Neo4j (default: neo4j)
-    NEO4J_PARENT_PASSWORD: Password for parent Neo4j (default: pmovesNeo4j!Local2025)
+    NEO4J_PARENT_PASSWORD: Password for parent Neo4j (required for parent connection)
     NEO4J_LOCAL_URI: Bolt URI for local Neo4j (default: bolt://neo4j:7687)
     NEO4J_LOCAL_USER: Username for local Neo4j (default: neo4j)
-    NEO4J_LOCAL_PASSWORD: Password for local Neo4j (default: dox_knowledge_graph_2025)
+    NEO4J_LOCAL_PASSWORD: Password for local Neo4j (required)
     NEO4J_ENABLED: Enable Neo4j integration (default: true)
 """
 
@@ -107,7 +107,7 @@ class Neo4jManager:
             "NEO4J_LOCAL_USER", "neo4j"
         )
         self.local_password = local_password or os.getenv(
-            "NEO4J_LOCAL_PASSWORD", "dox_knowledge_graph_2025"
+            "NEO4J_LOCAL_PASSWORD", ""
         )
 
         # Driver instances
@@ -160,6 +160,13 @@ class Neo4jManager:
         }
 
         # Try parent Neo4j first
+        if not self.parent_password:
+            LOGGER.warning(
+                "Parent Neo4j password not configured (NEO4J_PARENT_PASSWORD empty). "
+                "Skipping parent connection, using local Neo4j only. "
+                "Set NEO4J_PARENT_PASSWORD to enable hybrid mode."
+            )
+
         if self.parent_password:
             try:
                 self.parent_driver = AsyncGraphDatabase.driver(
@@ -187,6 +194,13 @@ class Neo4jManager:
 
         # Fallback to local Neo4j
         if not self.connected:
+            if not self.local_password:
+                LOGGER.error(
+                    "Local Neo4j password not configured (NEO4J_LOCAL_PASSWORD empty). "
+                    "Cannot connect to any Neo4j instance. "
+                    "Set NEO4J_LOCAL_PASSWORD in .env.local to enable knowledge graph."
+                )
+                raise Neo4jUnavailable("No Neo4j credentials configured")
             try:
                 self.local_driver = AsyncGraphDatabase.driver(
                     self.local_uri,
@@ -294,7 +308,16 @@ class Neo4jManager:
                 async with secondary.session() as session:
                     await session.run(query, params)
             except Exception as exc:
-                LOGGER.warning("Neo4j dual-write failed: %s", exc)
+                # ERROR level: dual-write failure means backup not saved
+                # This is critical for data durability
+                backend_type = "local" if self.use_parent else "parent"
+                query_preview = query[:100] + "..." if len(query) > 100 else query
+                LOGGER.error(
+                    "Neo4j dual-write to %s backend failed: %s. Query preview: %s",
+                    backend_type,
+                    exc,
+                    query_preview,
+                )
 
         return results
 
@@ -304,6 +327,8 @@ class Neo4jManager:
         self,
         document_id: str,
         entities: List[Dict[str, Any]],
+        max_distance: int = 500,
+        min_weight: float = 0.1,
     ) -> Dict[str, Any]:
         """
         Store document entities as graph nodes with relationships.
@@ -322,6 +347,9 @@ class Neo4jManager:
                 - start_char, end_char: Position in document
                 - page: Page number
                 - context: Surrounding text
+            max_distance: Maximum character distance for relationship discovery
+                (entities within this distance are considered related)
+            min_weight: Minimum relationship weight threshold (0.0-1.0)
 
         Returns:
             Dict with node_count, edge_count stored
@@ -377,6 +405,7 @@ class Neo4jManager:
 
         # Auto-discover relationships between entities
         # Create RELATED_TO edges for entities of same type appearing near each other
+        # Uses max_distance and min_weight parameters for configurable relationship discovery
         rel_query = """
         MATCH (d:Document {id: $doc_id})-[:CONTAINS]->(e1:Entity),
               (d)-[:CONTAINS]->(e2:Entity)
@@ -384,11 +413,16 @@ class Neo4jManager:
         WITH e1, e2,
              abs(e1.start_char - e2.start_char) as distance,
              size(e1.text) + size(e2.text) as total_length
-        WHERE distance < 500  // Within 500 characters
+        WHERE distance < $max_distance
+        WITH e1, e2, distance, (1.0 - (distance / $max_distance)) as calculated_weight
+        WHERE calculated_weight >= $min_weight
         MERGE (e1)-[r:RELATED_TO]-(e2)
-        SET r.proximity = distance, r.weight = (1.0 - (distance / 500.0))
+        SET r.proximity = distance, r.weight = calculated_weight
         """
-        await self._dual_write(rel_query, {"doc_id": document_id})
+        await self._dual_write(
+            rel_query,
+            {"doc_id": document_id, "max_distance": max_distance, "min_weight": min_weight}
+        )
 
         return {
             "document_id": document_id,
@@ -509,9 +543,12 @@ class Neo4jManager:
 
         Returns:
             List of matching entities with documents
+
+        Raises:
+            Neo4jUnavailable: If not connected to Neo4j
         """
         if not self.connected:
-            return []
+            raise Neo4jUnavailable("Not connected to Neo4j")
 
         cypher = """
         MATCH (e:Entity)
@@ -543,9 +580,12 @@ class Neo4jManager:
 
         Returns:
             List of entity dicts
+
+        Raises:
+            Neo4jUnavailable: If not connected to Neo4j
         """
         if not self.connected:
-            return []
+            raise Neo4jUnavailable("Not connected to Neo4j")
 
         query = """
         MATCH (d:Document {id: $doc_id})-[:CONTAINS]->(e:Entity)

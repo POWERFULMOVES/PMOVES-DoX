@@ -19,16 +19,24 @@ Endpoints:
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List, Optional
+from typing import Any, Dict, List, Optional, Literal
 
 from fastapi import APIRouter, HTTPException, status
-from pydantic import BaseModel
+from pydantic import BaseModel, field_validator
 
 from app.database_neo4j import Neo4jManager, get_neo4j, Neo4jUnavailable
 
 
 LOGGER = logging.getLogger(__name__)
 router = APIRouter(prefix="/graph", tags=["graph"])
+
+
+# Valid entity types (spaCy NER types)
+VALID_ENTITY_TYPES = {
+    "PERSON", "ORG", "LOC", "DATE", "PRODUCT", "GPE", "EVENT",
+    "WORK_OF_ART", "LAW", "LANGUAGE", "NORP", "PERCENT", "MONEY",
+    "QUANTITY", "ORDINAL", "CARDINAL", "TIME", "FAC", "ORG",
+}
 
 
 # ------------------------------------------------------------------ Request Models
@@ -47,6 +55,10 @@ class EntityRequest(BaseModel):
         page: Page number where entity was found
         context: Surrounding text for additional context
         source_index: Index of the source in multi-source documents
+
+    Raises:
+        ValueError: If start_char >= end_char (invalid span)
+        ValueError: If label is not a valid entity type
     """
 
     id: Optional[str] = None
@@ -58,16 +70,63 @@ class EntityRequest(BaseModel):
     context: Optional[str] = None
     source_index: Optional[int] = None
 
+    @field_validator("label")
+    @classmethod
+    def validate_entity_type(cls, v: str) -> str:
+        """Validate that the entity label is a known type."""
+        if not v or v.strip() == "":
+            raise ValueError("Entity label cannot be empty")
+        # Normalize to uppercase for consistency
+        v_upper = v.strip().upper()
+        if v_upper not in VALID_ENTITY_TYPES:
+            # Allow custom types but warn - log this in production
+            valid_list = ", ".join(sorted(VALID_ENTITY_TYPES))
+            LOGGER.warning(
+                "Unknown entity type '%s' (valid types: %s). "
+                "Using custom type.",
+                v,
+                valid_list
+            )
+        return v_upper
+
+    @field_validator("start_char", "end_char")
+    @classmethod
+    def validate_span(cls, start_char: Optional[int], info) -> Optional[int]:
+        """Validate that start_char < end_char when both are provided."""
+        # Get the field name being validated
+        field_name = info.field_name
+        # Get all values to check the relationship
+        values = info.data
+        if field_name == "end_char" and start_char is not None:
+            start = values.get("start_char")
+            if start is not None and start >= start_char:
+                raise ValueError(
+                    f"end_char ({start_char}) must be greater than start_char ({start})"
+                )
+        return start_char
+
+    @field_validator("text")
+    @classmethod
+    def validate_text(cls, v: str) -> str:
+        """Validate that entity text is not empty or just whitespace."""
+        if not v or v.strip() == "":
+            raise ValueError("Entity text cannot be empty or whitespace")
+        return v.strip()
+
 
 class EntityListRequest(BaseModel):
     """
-    Request model for bulk entity storage.
+    Request model for bulk entity storage with relationship discovery.
 
     Attributes:
         entities: List of entities to store in the knowledge graph
+        max_distance: Maximum character distance for relationship discovery
+        min_weight: Minimum relationship weight threshold
     """
 
     entities: List[EntityRequest]
+    max_distance: int = 500  # Character distance for co-occurrence
+    min_weight: float = 0.1  # Minimum relationship weight
 
 
 class GraphSearchRequest(BaseModel):
@@ -132,6 +191,59 @@ async def graph_health() -> Dict[str, Any]:
         )
 
 
+@router.get("/search", response_model=Dict[str, Any])
+async def search_graph(
+    query: str,
+    entity_type: Optional[str] = None,
+    limit: int = 20,
+) -> Dict[str, Any]:
+    """
+    Search knowledge graph for entities.
+
+    NOTE: This route must be defined BEFORE parameterized routes like /{document_id}
+    to ensure "/search" is matched literally rather than as a document_id.
+
+    Args:
+        query: Text to search for (partial match)
+        entity_type: Filter by entity type (PERSON, ORG, etc.)
+        limit: Maximum results
+
+    Returns:
+        List of matching entities with document IDs
+    """
+    if not query or len(query.strip()) < 2:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail={"error": "Query must be at least 2 characters"},
+        )
+
+    try:
+        neo4j = await get_neo4j()
+        results = await neo4j.search_entities(
+            query=query.strip(),
+            entity_type=entity_type,
+            limit=limit,
+        )
+
+        return {
+            "query": query,
+            "entity_type": entity_type,
+            "results": results,
+            "count": len(results),
+        }
+    except Neo4jUnavailable as exc:
+        raise HTTPException(
+            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
+            detail={"error": "Neo4j unavailable", "message": str(exc)},
+        )
+    except Exception as exc:
+        LOGGER.error("Failed to search graph: %s", exc)
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail={"error": "Search failed", "message": str(exc)},
+        )
+
+
 @router.get("/{document_id}", response_model=Dict[str, Any])
 async def get_entity_graph(document_id: str) -> Dict[str, Any]:
     """
@@ -191,7 +303,7 @@ async def store_entity_graph(
 
     Args:
         document_id: Document identifier
-        request: Entity list with metadata
+        request: Entity list with metadata and relationship discovery parameters
 
     Returns:
         {
@@ -207,7 +319,12 @@ async def store_entity_graph(
         # Convert pydantic models to dicts
         entities = [entity.model_dump() for entity in request.entities]
 
-        result = await neo4j.store_entities(document_id, entities)
+        result = await neo4j.store_entities(
+            document_id,
+            entities,
+            max_distance=request.max_distance,
+            min_weight=request.min_weight,
+        )
 
         return {
             **result,
@@ -288,56 +405,6 @@ async def discover_relationships(
         raise HTTPException(
             status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
             detail={"error": "Failed to discover relationships", "message": str(exc)},
-        )
-
-
-@router.get("/search", response_model=Dict[str, Any])
-async def search_graph(
-    query: str,
-    entity_type: Optional[str] = None,
-    limit: int = 20,
-) -> Dict[str, Any]:
-    """
-    Search knowledge graph for entities.
-
-    Args:
-        query: Text to search for (partial match)
-        entity_type: Filter by entity type (PERSON, ORG, etc.)
-        limit: Maximum results
-
-    Returns:
-        List of matching entities with document IDs
-    """
-    if not query or len(query.strip()) < 2:
-        raise HTTPException(
-            status_code=status.HTTP_400_BAD_REQUEST,
-            detail={"error": "Query must be at least 2 characters"},
-        )
-
-    try:
-        neo4j = await get_neo4j()
-        results = await neo4j.search_entities(
-            query=query.strip(),
-            entity_type=entity_type,
-            limit=limit,
-        )
-
-        return {
-            "query": query,
-            "entity_type": entity_type,
-            "results": results,
-            "count": len(results),
-        }
-    except Neo4jUnavailable as exc:
-        raise HTTPException(
-            status_code=status.HTTP_503_SERVICE_UNAVAILABLE,
-            detail={"error": "Neo4j unavailable", "message": str(exc)},
-        )
-    except Exception as exc:
-        LOGGER.error("Failed to search graph: %s", exc)
-        raise HTTPException(
-            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
-            detail={"error": "Search failed", "message": str(exc)},
         )
 
 
