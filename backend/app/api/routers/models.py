@@ -16,7 +16,7 @@ router = APIRouter()
 
 # Model service URLs
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")
-TENSORZERO_BASE_URL = os.getenv("TENSORZERO_BASE_URL", "http://tensorzero:3000")
+TENSORZERO_BASE_URL = os.getenv("TENSORZERO_BASE_URL", "http://tensorzero-gateway:3000")
 
 
 class ModelInfo(BaseModel):

@@ -18,7 +18,7 @@ import threading
 import re
 from pydantic import BaseModel
 from app.hrm import HRMConfig, HRMMetrics, refine_sort_digits
-from app.api.routers import documents, analysis, system, cipher, models
+from app.api.routers import documents, analysis, system, cipher, models, graph
 
 app = FastAPI(title="PMOVES-DoX API")
 
@@ -27,6 +27,7 @@ app.include_router(analysis.router)
 app.include_router(system.router)
 app.include_router(cipher.router)
 app.include_router(models.router, prefix="/models", tags=["models"])
+app.include_router(graph.router)
 
 from app.ingestion.pdf_processor import process_pdf
 from app.ingestion.csv_processor import process_csv
@@ -251,6 +252,7 @@ app.include_router(analysis.router)
 app.include_router(system.router)
 app.include_router(cipher.router)
 app.include_router(models.router, prefix="/models", tags=["models"])
+app.include_router(graph.router)
 
 @app.get("/")
 async def root():
