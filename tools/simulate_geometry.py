@@ -9,15 +9,30 @@ from nats.aio.client import Client as NATS
 DEMO_DATA_PATH = os.path.join(os.path.dirname(__file__), "..", "docs", "demo", "collectionsHost.JSON")
 
 def load_demo_data():
+    """
+    Load Postman collection demo data from JSON file.
+
+    Returns:
+        list: List containing collection data dict, or empty list if file not found.
+    """
     try:
         with open(DEMO_DATA_PATH, 'r') as f:
             data = json.load(f)
-            return [data] 
+            return [data]
     except FileNotFoundError:
         print(f"Warning: Demo file not found at {DEMO_DATA_PATH}. Using fallback.")
         return []
 
 async def main():
+    """
+    Publish geometry events to NATS for visualization demo.
+
+    Connects to NATS (localhost:4223) and continuously publishes:
+    - Manifold updates (hyperbolic surface parameters)
+    - Constellation updates (API endpoint/model points from demo collection)
+
+    Publishes every 3 seconds to geometry.event.manifold and geometry.event.constellation.
+    """
     nc = NATS()
     try:
         await nc.connect("nats://localhost:4223")

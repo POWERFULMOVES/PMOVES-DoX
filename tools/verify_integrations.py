@@ -10,6 +10,17 @@ import requests
 import time
 
 def check_port(host, port, name):
+    """
+    Verify TCP port is open and accepting connections.
+
+    Args:
+        host (str): Hostname or IP address to connect to.
+        port (int): TCP port number to test.
+        name (str): Display name for logging.
+
+    Returns:
+        bool: True if port is open and reachable, False otherwise.
+    """
     try:
         with socket.create_connection((host, port), timeout=3):
             print(f"[PASS] {name} port {port} is open.")
@@ -22,6 +33,18 @@ def check_port(host, port, name):
         return False
 
 def check_http(url, name, expected_codes=[200]):
+    """
+    Verify HTTP endpoint responds with expected status codes.
+
+    Args:
+        url (str): Full HTTP(S) URL to test.
+        name (str): Display name for logging.
+        expected_codes (list): HTTP status codes considered successful.
+            Default: [200]. MCP SSE endpoints often return 200/400/405.
+
+    Returns:
+        bool: True if response status in expected_codes, False otherwise.
+    """
     try:
         headers = {'Accept': 'text/event-stream'}
         resp = requests.get(url, headers=headers, timeout=5)
@@ -36,6 +59,16 @@ def check_http(url, name, expected_codes=[200]):
         return False
 
 def main():
+    """
+    Run PMOVES-DoX integration verification suite.
+
+    Tests connectivity and HTTP responses for:
+    - Cipher Agent (port 3025, MCP endpoint)
+    - Postman Agent (port 3026, MCP endpoint)
+    - Agent Zero (port 50051)
+
+    Exits with code 0 if all checks pass, 1 if any fail.
+    """
     print("Starting Integration Verification...")
     results = []
 
