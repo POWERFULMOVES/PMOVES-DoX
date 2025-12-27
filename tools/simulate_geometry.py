@@ -78,8 +78,9 @@ async def main():
             
             # Extract Paths (Endpoints) - LIMIT to 10
             if "paths" in snapshot:
-                for i, (path, methods) in enumerate(snapshot["paths"].items()):
-                    if i >= 10: break
+                for i, (path, _methods) in enumerate(snapshot["paths"].items()):
+                    if i >= 10:
+                        break
                     points.append({
                         "id": f"path_{path}",
                         "x": random.uniform(-15, 15),
@@ -92,8 +93,9 @@ async def main():
             
             # Extract Definitions (Models) - LIMIT to 10
             if "definitions" in snapshot:
-                for i, (def_name, def_body) in enumerate(snapshot["definitions"].items()):
-                    if i >= 10: break
+                for i, (def_name, _def_body) in enumerate(snapshot["definitions"].items()):
+                    if i >= 10:
+                        break
                     points.append({
                         "id": f"def_{def_name}",
                         "x": random.uniform(-20, 20),
