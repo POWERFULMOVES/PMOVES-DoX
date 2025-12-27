@@ -4,6 +4,14 @@ import { useEffect, useState, useRef } from "react";
 import * as d3 from "d3";
 import { Network, Loader2, AlertCircle, RefreshCw } from "lucide-react";
 
+/**
+ * Node in the knowledge graph.
+ *
+ * @property id - Unique node identifier (typically UUID)
+ * @property label - Display text for the node (entity text)
+ * @property type - Entity type (PERSON, ORG, LOC, DATE, etc.)
+ * @property title - Tooltip text showing full entity info
+ */
 interface GraphNode {
   id: string;
   label: string;
@@ -11,6 +19,14 @@ interface GraphNode {
   title?: string;
 }
 
+/**
+ * Edge (relationship) in the knowledge graph.
+ *
+ * @property from - Source node ID
+ * @property to - Target node ID
+ * @property weight - Relationship strength (0-1, affects line thickness)
+ * @property title - Tooltip text describing the relationship
+ */
 interface GraphEdge {
   from: string;
   to: string;
@@ -18,6 +34,15 @@ interface GraphEdge {
   title?: string;
 }
 
+/**
+ * Graph data response from the API.
+ *
+ * @property nodes - Array of entity nodes
+ * @property edges - Array of relationships between entities
+ * @property document_id - Associated document ID
+ * @property error - Error message if the request failed
+ * @property message - Optional message (e.g., "No entities found")
+ */
 interface GraphData {
   nodes: GraphNode[];
   edges: GraphEdge[];
@@ -26,6 +51,13 @@ interface GraphData {
   message?: string;
 }
 
+/**
+ * Props for the KnowledgeGraphViewer component.
+ *
+ * @property documentId - Document ID to fetch entities for
+ * @property width - Graph width in pixels (default: 600)
+ * @property height - Graph height in pixels (default: 500)
+ */
 interface KnowledgeGraphViewerProps {
   documentId: string;
   width?: number;
@@ -52,10 +84,22 @@ const ENTITY_COLORS: Record<string, string> = {
   UNKNOWN: "#95a5a6",
 };
 
+/**
+ * Get the color for an entity type.
+ *
+ * @param type - Entity type (PERSON, ORG, etc.)
+ * @returns Hex color string for the entity type
+ */
 function getNodeColor(type: string): string {
   return ENTITY_COLORS[type] || ENTITY_COLORS.UNKNOWN;
 }
 
+/**
+ * Get the emoji icon for an entity type.
+ *
+ * @param type - Entity type (PERSON, ORG, etc.)
+ * @returns Emoji character representing the entity type
+ */
 function getEntityIcon(type: string): string {
   // Simple icons for entity types
   const icons: Record<string, string> = {
@@ -70,6 +114,20 @@ function getEntityIcon(type: string): string {
   return icons[type] || "•";
 }
 
+/**
+ * KnowledgeGraphViewer - D3.js force-directed graph visualization.
+ *
+ * Displays entities extracted from a document as an interactive graph.
+ * Features:
+ * - Force-directed layout using D3.js
+ * - Zoom and pan support
+ * - Draggable nodes
+ * - Color-coded entity types
+ * - Hover tooltips showing entity details
+ *
+ * @param props - Component props (documentId, width, height)
+ * @returns React component with graph visualization
+ */
 export default function KnowledgeGraphViewer({
   documentId,
   width = 600,

@@ -35,6 +35,14 @@ services:
       - OPENAI_BASE_URL=http://tensorzero-gateway:3000/openai/v1
       - TENSORZERO_BASE_URL=http://tensorzero-gateway:3000
       - OPENAI_API_KEY=tensorzero
+      # Neo4j Knowledge Graph - Local (DoX container)
+      - NEO4J_LOCAL_URI=bolt://neo4j:7687
+      - NEO4J_LOCAL_USER=neo4j
+      - NEO4J_LOCAL_PASSWORD=dox_knowledge_graph_2025
+      # Neo4j Knowledge Graph - Parent (PMOVES.AI shared)
+      - NEO4J_PARENT_URI=bolt://pmoves-neo4j-1:7687
+      - NEO4J_PARENT_USER=neo4j
+      - NEO4J_PARENT_PASSWORD=${NEO4J_PARENT_PASSWORD:-pmovesNeo4j!Local2025}
     ports:
       - "8484:8484"
     networks:

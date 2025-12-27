@@ -35,7 +35,19 @@ router = APIRouter(prefix="/graph", tags=["graph"])
 
 
 class EntityRequest(BaseModel):
-    """Entity data for storage."""
+    """
+    Entity data for storage in Neo4j knowledge graph.
+
+    Attributes:
+        id: Optional unique identifier (auto-generated if not provided)
+        text: The entity text content (e.g., "Apple Inc.")
+        label: Entity type (PERSON, ORG, LOC, DATE, PRODUCT, GPE, etc.)
+        start_char: Starting character position in source document
+        end_char: Ending character position in source document
+        page: Page number where entity was found
+        context: Surrounding text for additional context
+        source_index: Index of the source in multi-source documents
+    """
 
     id: Optional[str] = None
     text: str
@@ -48,13 +60,25 @@ class EntityRequest(BaseModel):
 
 
 class EntityListRequest(BaseModel):
-    """List of entities for bulk storage."""
+    """
+    Request model for bulk entity storage.
+
+    Attributes:
+        entities: List of entities to store in the knowledge graph
+    """
 
     entities: List[EntityRequest]
 
 
 class GraphSearchRequest(BaseModel):
-    """Graph search parameters."""
+    """
+    Request model for searching the knowledge graph.
+
+    Attributes:
+        query: Text to search for (case-insensitive partial match)
+        entity_type: Optional filter by entity type (PERSON, ORG, etc.)
+        limit: Maximum number of results to return (default: 20)
+    """
 
     query: str
     entity_type: Optional[str] = None
@@ -62,7 +86,13 @@ class GraphSearchRequest(BaseModel):
 
 
 class RelationshipDiscoveryRequest(BaseModel):
-    """Parameters for relationship discovery."""
+    """
+    Request model for auto-discovering entity relationships.
+
+    Attributes:
+        max_distance: Maximum character distance for co-occurrence (default: 500)
+        min_weight: Minimum relationship weight threshold (default: 0.1)
+    """
 
     max_distance: int = 500  # Character distance for co-occurrence
     min_weight: float = 0.1  # Minimum relationship weight

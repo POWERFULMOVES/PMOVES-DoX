@@ -7,10 +7,10 @@ Mirrors the dual Supabase pattern:
 - Write Strategy: Dual write to both for backup
 
 Environment Variables:
-    NEO4J_PARENT_URI: Bolt URI for parent Neo4j (default: bolt://neo4j:7687)
+    NEO4J_PARENT_URI: Bolt URI for parent Neo4j (default: bolt://pmoves-neo4j-1:7687)
     NEO4J_PARENT_USER: Username for parent Neo4j (default: neo4j)
-    NEO4J_PARENT_PASSWORD: Password for parent Neo4j (from env.shared)
-    NEO4J_LOCAL_URI: Bolt URI for local Neo4j (default: bolt://localhost:17687)
+    NEO4J_PARENT_PASSWORD: Password for parent Neo4j (default: pmovesNeo4j!Local2025)
+    NEO4J_LOCAL_URI: Bolt URI for local Neo4j (default: bolt://neo4j:7687)
     NEO4J_LOCAL_USER: Username for local Neo4j (default: neo4j)
     NEO4J_LOCAL_PASSWORD: Password for local Neo4j (default: dox_knowledge_graph_2025)
     NEO4J_ENABLED: Enable Neo4j integration (default: true)
@@ -64,6 +64,25 @@ class Neo4jManager:
         local_user: Optional[str] = None,
         local_password: Optional[str] = None,
     ) -> None:
+        """
+        Initialize Neo4j manager with parent and local connection config.
+
+        Args:
+            parent_uri: Bolt URI for parent Neo4j (from pmoves_data network)
+            parent_user: Username for parent Neo4j
+            parent_password: Password for parent Neo4j
+            local_uri: Bolt URI for local Neo4j container
+            local_user: Username for local Neo4j
+            local_password: Password for local Neo4j
+
+        Raises:
+            Neo4jUnavailable: If neo4j driver is not installed
+
+        Environment Variables (used as fallbacks):
+            NEO4J_PARENT_URI, NEO4J_PARENT_USER, NEO4J_PARENT_PASSWORD
+            NEO4J_LOCAL_URI, NEO4J_LOCAL_USER, NEO4J_LOCAL_PASSWORD
+            NEO4J_ENABLED
+        """
         if AsyncGraphDatabase is None:
             raise Neo4jUnavailable(
                 "neo4j driver not available; install `neo4j>=5.0.0` and retry"
@@ -71,7 +90,7 @@ class Neo4jManager:
 
         # Parent Neo4j configuration (shared with PMOVES.AI)
         self.parent_uri = parent_uri or os.getenv(
-            "NEO4J_PARENT_URI", "bolt://neo4j:7687"
+            "NEO4J_PARENT_URI", "bolt://pmoves-neo4j-1:7687"
         )
         self.parent_user = parent_user or os.getenv(
             "NEO4J_PARENT_USER", "neo4j"
@@ -82,7 +101,7 @@ class Neo4jManager:
 
         # Local Neo4j configuration (DoX-specific)
         self.local_uri = local_uri or os.getenv(
-            "NEO4J_LOCAL_URI", "bolt://localhost:17687"
+            "NEO4J_LOCAL_URI", "bolt://neo4j:7687"
         )
         self.local_user = local_user or os.getenv(
             "NEO4J_LOCAL_USER", "neo4j"
@@ -108,7 +127,12 @@ class Neo4jManager:
         }
 
     def is_enabled(self) -> bool:
-        """Check if Neo4j integration is enabled."""
+        """
+        Check if Neo4j integration is enabled.
+
+        Returns:
+            True if NEO4J_ENABLED environment variable is set to a truthy value
+        """
         return self._enabled
 
     async def connect(self) -> Dict[str, Any]:
@@ -205,7 +229,12 @@ class Neo4jManager:
         return status
 
     async def close(self) -> None:
-        """Close all driver connections."""
+        """
+        Close all driver connections.
+
+        Closes both parent and local Neo4j drivers if they are active.
+        Sets connected flag to False.
+        """
         if self.parent_driver:
             await self.parent_driver.close()
             self.parent_driver = None
@@ -215,7 +244,15 @@ class Neo4jManager:
         self.connected = False
 
     def _get_driver(self) -> AsyncDriver:
-        """Get the active driver for operations."""
+        """
+        Get the active driver for operations.
+
+        Returns:
+            The parent driver if use_parent is True, otherwise the local driver
+
+        Raises:
+            Neo4jUnavailable: If not connected to any Neo4j instance
+        """
         if not self.connected:
             raise Neo4jUnavailable("Not connected to Neo4j")
         if self.use_parent and self.parent_driver:
@@ -228,9 +265,18 @@ class Neo4jManager:
         self, query: str, params: Dict[str, Any]
     ) -> List[Dict[str, Any]]:
         """
-        Execute query on both parent and local Neo4j.
+        Execute query on both parent and local Neo4j (dual-write strategy).
 
-        Returns results from primary, logs errors from secondary.
+        Executes the query on the primary driver (parent if available, else local)
+        and also on the secondary driver for backup. Logs errors from secondary
+        without failing the operation.
+
+        Args:
+            query: Cypher query string to execute
+            params: Query parameters
+
+        Returns:
+            List of result records from the primary driver execution
         """
         primary = self.parent_driver if self.use_parent else self.local_driver
         secondary = self.local_driver if self.use_parent else None
@@ -635,7 +681,16 @@ _neo4j_instance: Optional[Neo4jManager] = None
 
 
 async def get_neo4j() -> Neo4jManager:
-    """Get or create the Neo4j manager singleton."""
+    """
+    Get or create the Neo4j manager singleton.
+
+    Returns:
+        The shared Neo4jManager instance, connecting on first access
+
+    Note:
+        This function maintains a singleton instance across requests.
+        Automatically reconnects if the connection was lost.
+    """
     global _neo4j_instance
     if _neo4j_instance is None:
         _neo4j_instance = Neo4jManager()
