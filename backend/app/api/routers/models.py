@@ -11,11 +11,8 @@ from fastapi import APIRouter, HTTPException
 from typing import Dict, List, Any
 from pydantic import BaseModel
 import os
-from app.globals import get_settings
 
-router = APIRouter(prefix="/models", tags=["models"])
-
-settings = get_settings()
+router = APIRouter()
 
 # Model service URLs
 OLLAMA_BASE_URL = os.getenv("OLLAMA_BASE_URL", "http://ollama:11434")

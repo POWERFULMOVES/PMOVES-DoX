@@ -7,3 +7,15 @@
 [submodule "external/conductor"]
 	path = external/conductor
 	url = https://github.com/gemini-cli-extensions/conductor.git
+[submodule "external/PMOVES-Agent-Zero"]
+	path = external/PMOVES-Agent-Zero
+	url = https://github.com/POWERFULMOVES/PMOVES-Agent-Zero.git
+[submodule "external/PMOVES-BoTZ"]
+	path = external/PMOVES-BoTZ
+	url = https://github.com/POWERFULMOVES/PMOVES-BoTZ.git
+[submodule "external/PMOVES-BotZ-gateway"]
+	path = external/PMOVES-BotZ-gateway
+	url = https://github.com/POWERFULMOVES/PMOVES-BotZ-gateway.git
+[submodule "external/Pmoves-Glancer"]
+	path = external/Pmoves-Glancer
+	url = https://github.com/POWERFULMOVES/Pmoves-Glancer.git
