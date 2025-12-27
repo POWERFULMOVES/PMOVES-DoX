@@ -162,7 +162,7 @@ window.dispatchEvent(new CustomEvent('global-deeplink', {
 
 ### Processing Flow
 
-```
+```mermaid
 Upload → Ingestion → Evidence Extraction → Fact Creation → Indexing
    ↓         ↓              ↓                    ↓            ↓
 Artifacts  Pages/       Chunks with         Structured   FAISS/NumPy
