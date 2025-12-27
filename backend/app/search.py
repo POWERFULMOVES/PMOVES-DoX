@@ -248,3 +248,24 @@ class SearchIndex:
             ch = self.payloads[idx]
             out.append(SearchResult(score=float(score), text=ch["text"], meta=ch["meta"]))
         return out
+
+    def get_embeddings_for_document(self, document_id: str) -> List[List[float]]:
+        """Retrieve all embedding vectors for chunks belonging to a document."""
+        if not self._loaded:
+            self.rebuild()
+            
+        vectors: List[List[float]] = []
+        for i, ch in enumerate(self.payloads):
+            meta = ch.get("meta") or {}
+            # Match strict ID or artifact ID
+            if meta.get("artifact_id") == document_id or meta.get("document_id") == document_id:
+                vec: Optional[np.ndarray] = None
+                if faiss is not None and hasattr(self.faiss_index, "reconstruct"):
+                    # FAISS reconstruct returns numpy array
+                    vec = self.faiss_index.reconstruct(i)
+                elif isinstance(self.faiss_index, np.ndarray):
+                    vec = self.faiss_index[i]
+                
+                if vec is not None:
+                    vectors.append(vec.tolist())
+        return vectors

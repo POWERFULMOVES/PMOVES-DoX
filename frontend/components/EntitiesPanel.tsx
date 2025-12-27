@@ -2,6 +2,7 @@
 
 import { useEffect, useMemo, useState } from 'react';
 import axios from 'axios';
+import { getApiBase } from '@/lib/config';
 
 type DocumentItem = {
   id: string;
@@ -21,8 +22,6 @@ type Props = {
   refreshKey: number;
 };
 
-const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
-
 export default function EntitiesPanel({ refreshKey }: Props) {
   const [documents, setDocuments] = useState<DocumentItem[]>([]);
   const [selected, setSelected] = useState<string>('');
@@ -33,6 +32,7 @@ export default function EntitiesPanel({ refreshKey }: Props) {
   useEffect(() => {
     const loadDocuments = async () => {
       try {
+        const API = getApiBase();
         const res = await axios.get(`${API}/documents`, { params: { type: 'pdf' } });
         const docs = (res.data?.documents || []) as DocumentItem[];
         setDocuments(docs);
@@ -59,6 +59,7 @@ export default function EntitiesPanel({ refreshKey }: Props) {
       setLoading(true);
       setError(null);
       try {
+        const API = getApiBase();
         const res = await axios.get(`${API}/analysis/entities`, { params: { document_id: selected } });
         if (!cancelled) {
           setEntities((res.data?.entities || []) as EntityRow[]);

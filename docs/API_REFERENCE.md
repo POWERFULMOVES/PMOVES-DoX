@@ -21,6 +21,7 @@ http://localhost:8484
 9. [Export](#export)
 10. [Task Management](#task-management)
 11. [Error Codes](#error-codes)
+12. [Cipher Integration](#cipher-integration)
 
 ---
 

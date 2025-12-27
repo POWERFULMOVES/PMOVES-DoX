@@ -1,0 +1,47 @@
+[gateway]
+bind_address = "0.0.0.0:3000"
+
+# -----------------
+# Providers
+# -----------------
+
+[providers.google_ai]
+type = "google_ai"
+api_key = "${GOOGLE_AI_API_KEY}" # Env var
+
+[providers.ollama_local]
+type = "ollama"
+base_url = "http://host.docker.internal:11434" # Access host Ollama from container
+# If running locally without docker, usage might vary, but TensorZero usually runs as binary/container.
+
+# -----------------
+# Functions
+# -----------------
+
+# 1. Chat (Hybrid: Gemini Flash primary, Llama local secondary)
+[functions.chat]
+type = "chat"
+system_schema = { type = "string" }
+user_schema = { type = "string" }
+
+[[functions.chat.variants]]
+name = "gemini_flash"
+weight = 0.8
+provider = "google_ai"
+model = "gemini-1.5-flash"
+
+[[functions.chat.variants]]
+name = "ollama_local"
+weight = 0.2
+provider = "ollama_local"
+model = "llama3.2" # Latest efficient local model
+
+# 2. Embedding (Local Ollama)
+[functions.embed]
+type = "embedding"
+
+[[functions.embed.variants]]
+name = "ollama_embed"
+weight = 1.0
+provider = "ollama_local"
+model = "nomic-embed-text" # Best-in-class local embedding

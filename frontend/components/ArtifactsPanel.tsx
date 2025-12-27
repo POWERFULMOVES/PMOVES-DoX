@@ -1,6 +1,7 @@
 'use client';
 
 import { Fragment, useEffect, useState } from 'react';
+import { getApiBase } from '@/lib/config';
 import { useToast } from '@/components/Toast';
 
 export default function ArtifactsPanel() {
@@ -9,11 +10,11 @@ export default function ArtifactsPanel() {
   const [detail, setDetail] = useState<any | null>(null);
   const [analysis, setAnalysis] = useState<any | null>(null);
   const [opts, setOpts] = useState<Record<string, any>>({});
-  const API = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8000';
   const { push } = useToast();
 
   const load = async () => {
-    const r = await fetch(`${API}/artifacts`);
+    const apiBase = getApiBase();
+    const r = await fetch(`${apiBase}/artifacts`);
     if (!r.ok) return;
     const data = await r.json();
     setArtifacts(Array.isArray(data.artifacts) ? data.artifacts : []);
@@ -24,24 +25,27 @@ export default function ArtifactsPanel() {
   const structure = async (id: string) => {
     setBusy(id);
     try {
-      await fetch(`${API}/structure/chr`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ artifact_id: id, K: 8 }) });
+      const apiBase = getApiBase();
+      await fetch(`${apiBase}/structure/chr`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ artifact_id: id, K: 8 }) });
     } finally { setBusy(null); }
   };
 
   const convert = async (id: string, fmt: 'txt'|'docx') => {
     setBusy(id+fmt);
     try {
-      const r = await fetch(`${API}/convert`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ artifact_id: id, format: fmt }) });
+      const apiBase = getApiBase();
+      const r = await fetch(`${apiBase}/convert`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ artifact_id: id, format: fmt }) });
       if (!r.ok) return;
       const data = await r.json();
-      if (data.rel) window.open(`${API}/download?rel=${encodeURIComponent(data.rel)}`, '_blank');
+      if (data.rel) window.open(`${apiBase}/download?rel=${encodeURIComponent(data.rel)}`, '_blank');
     } finally { setBusy(null); }
   };
 
   const chrViz = async (id: string) => {
     setBusy(id+'viz');
     try {
-      const r = await fetch(`${API}/viz/datavzrd`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ artifact_id: id }) });
+      const apiBase = getApiBase();
+      const r = await fetch(`${apiBase}/viz/datavzrd`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ artifact_id: id }) });
       if (r.ok) alert('CHR datavzrd project generated. Open http://localhost:5173');
     } finally { setBusy(null); }
   };
@@ -57,7 +61,8 @@ export default function ArtifactsPanel() {
       if (o.mangleFile) body.mangle_file = String(o.mangleFile);
       if (o.mangleQuery) body.mangle_query = String(o.mangleQuery);
       if (o.pomlVariant) body.poml_variant = String(o.pomlVariant);
-      const r = await fetch(`${API}/autotag/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
+      const apiBase = getApiBase();
+      const r = await fetch(`${apiBase}/autotag/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(body) });
       const contentType = r.headers.get('content-type') || '';
       const payload = contentType.includes('application/json') ? await r.json() : await r.text();
       if (!r.ok) {
@@ -86,9 +91,10 @@ export default function ArtifactsPanel() {
   };
 
   const openDetail = async (id: string) => {
+    const apiBase = getApiBase();
     const [detailRes, analysisRes] = await Promise.all([
-      fetch(`${API}/artifacts/${id}`),
-      fetch(`${API}/analysis/artifacts/${id}`)
+      fetch(`${apiBase}/artifacts/${id}`),
+      fetch(`${apiBase}/analysis/artifacts/${id}`)
     ]);
     if (!detailRes.ok) return;
     setDetail(await detailRes.json());
@@ -299,7 +305,7 @@ export default function ArtifactsPanel() {
                     <div className="font-medium mb-1">Charts ({analysis.charts?.length || 0})</div>
                     <div className="space-y-3">
                       {(analysis.charts||[]).map((chart:any)=>{
-                        const imageSrc = chart.image_path ? `${API}/download?rel=${encodeURIComponent(chart.image_path)}` : null;
+                        const imageSrc = chart.image_path ? `${getApiBase()}/download?rel=${encodeURIComponent(chart.image_path)}` : null;
                         return (
                           <div key={chart.id || chart.locator} className="border rounded p-2 bg-gray-50">
                             <div className="flex flex-col text-xs gap-1 mb-2">

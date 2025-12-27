@@ -1,9 +1,18 @@
 'use client';
 
-import { useEffect, useState } from 'react';
+import { useCallback, useEffect, useRef, useState } from 'react';
 
 import { useToast } from '@/components/Toast';
 import { getApiBase } from '@/lib/config';
+
+type LogFilters = {
+  level?: string;
+  code?: string;
+  q?: string;
+  tsFrom?: string;
+  tsTo?: string;
+  documentId?: string;
+};
 
 export default function LogsPanel() {
   const [level, setLevel] = useState('');
@@ -18,16 +27,22 @@ export default function LogsPanel() {
   const API = getApiBase();
   const { push } = useToast();
 
-  const load = async () => {
+  const filtersRef = useRef<LogFilters>({ level, code, q, tsFrom, tsTo, documentId });
+
+  useEffect(() => {
+    filtersRef.current = { level, code, q, tsFrom, tsTo, documentId };
+  }, [code, documentId, level, q, tsFrom, tsTo]);
+
+  const fetchLogs = useCallback(async (filters: LogFilters) => {
     setLoading(true);
     try {
       const params = new URLSearchParams();
-      if (level) params.set('level', level);
-      if (code) params.set('code', code);
-      if (q) params.set('q', q);
-      if (tsFrom) params.set('ts_from', tsFrom);
-      if (tsTo) params.set('ts_to', tsTo);
-      if (documentId) params.set('document_id', documentId);
+      if (filters.level) params.set('level', filters.level);
+      if (filters.code) params.set('code', filters.code);
+      if (filters.q) params.set('q', filters.q);
+      if (filters.tsFrom) params.set('ts_from', filters.tsFrom);
+      if (filters.tsTo) params.set('ts_to', filters.tsTo);
+      if (filters.documentId) params.set('document_id', filters.documentId);
       const r = await fetch(`${API}/logs?${params.toString()}`);
       if (!r.ok) return;
       const data = await r.json();
@@ -35,22 +50,63 @@ export default function LogsPanel() {
     } finally {
       setLoading(false);
     }
-  };
+  }, [API]);
 
-  useEffect(() => { load(); }, []);
+  const load = useCallback(() => {
+    fetchLogs({ level, code, q, tsFrom, tsTo, documentId });
+  }, [code, documentId, fetchLogs, level, q, tsFrom, tsTo]);
+
+  useEffect(() => {
+    if (typeof window === 'undefined') return;
+    const params = new URLSearchParams(window.location.search);
+    const initialLevel = params.get('level') || '';
+    const initialCode = params.get('code') || '';
+    const initialQuery = params.get('q') || '';
+    const initialTsFrom = params.get('ts_from') || '';
+    const initialTsTo = params.get('ts_to') || '';
+    const initialDocumentId = params.get('document_id') || '';
+
+    setLevel(initialLevel);
+    setCode(initialCode);
+    setQ(initialQuery);
+    setTsFrom(initialTsFrom);
+    setTsTo(initialTsTo);
+    setDocumentId(initialDocumentId);
+    fetchLogs({
+      level: initialLevel,
+      code: initialCode,
+      q: initialQuery,
+      tsFrom: initialTsFrom,
+      tsTo: initialTsTo,
+      documentId: initialDocumentId,
+    });
+  }, [fetchLogs]);
 
   // Handle deep links to logs (code/document_id pre-filters)
   useEffect(() => {
-    function onDeeplink(ev: any){
+    function onDeeplink(ev: any) {
       const dl = ev?.detail || {};
-      if (String(dl.panel||'').toLowerCase() !== 'logs') return;
-      if (dl.code) setCode(String(dl.code));
-      if (dl.document_id) setDocumentId(String(dl.document_id));
-      setTimeout(load, 0);
+      if (String(dl.panel || '').toLowerCase() !== 'logs') return;
+      const nextCode = dl.code ? String(dl.code) : '';
+      const nextDocumentId = dl.document_id ? String(dl.document_id) : '';
+
+      setCode(nextCode);
+      setDocumentId(nextDocumentId);
+      const { level: currentLevel, q: currentQuery, tsFrom: currentTsFrom, tsTo: currentTsTo } = filtersRef.current;
+      fetchLogs({
+        level: currentLevel,
+        code: nextCode,
+        q: currentQuery,
+        tsFrom: currentTsFrom,
+        tsTo: currentTsTo,
+        documentId: nextDocumentId,
+      });
     }
     if (typeof window !== 'undefined') window.addEventListener('global-deeplink' as any, onDeeplink as any);
-    return () => { if (typeof window !== 'undefined') window.removeEventListener('global-deeplink' as any, onDeeplink as any); };
-  }, []);
+    return () => {
+      if (typeof window !== 'undefined') window.removeEventListener('global-deeplink' as any, onDeeplink as any);
+    };
+  }, [fetchLogs]);
 
   const buildViz = async () => {
     setBuilding(true);
@@ -65,16 +121,35 @@ export default function LogsPanel() {
     }
   };
 
+  const resetFilters = () => {
+    setLevel('');
+    setCode('');
+    setQ('');
+    setTsFrom('');
+    setTsTo('');
+    setDocumentId('');
+    fetchLogs({});
+  };
+
   return (
     <div className="bg-white p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Logs</h2>
-      <div className="grid grid-cols-1 md:grid-cols-6 gap-2 mb-3">
-        <input className="border rounded px-2 py-1" placeholder="level" value={level} onChange={e=>setLevel(e.target.value)} />
-        <input className="border rounded px-2 py-1" placeholder="code" value={code} onChange={e=>setCode(e.target.value)} />
-        <input className="border rounded px-2 py-1" placeholder="search text" value={q} onChange={e=>setQ(e.target.value)} />
-        <input className="border rounded px-2 py-1" placeholder="ts from (YYYY-MM-DD)" value={tsFrom} onChange={e=>setTsFrom(e.target.value)} />
-        <input className="border rounded px-2 py-1" placeholder="ts to (YYYY-MM-DD)" value={tsTo} onChange={e=>setTsTo(e.target.value)} />
-        <button onClick={load} className="bg-blue-600 text-white rounded px-3">Filter</button>
+      <div className="grid grid-cols-1 md:grid-cols-7 gap-2 mb-3">
+        <input className="border rounded px-2 py-1" placeholder="level" value={level} onChange={e => setLevel(e.target.value)} />
+        <input className="border rounded px-2 py-1" placeholder="code" value={code} onChange={e => setCode(e.target.value)} />
+        <input className="border rounded px-2 py-1" placeholder="search text" value={q} onChange={e => setQ(e.target.value)} />
+        <input className="border rounded px-2 py-1" placeholder="ts from (YYYY-MM-DD)" value={tsFrom} onChange={e => setTsFrom(e.target.value)} />
+        <input className="border rounded px-2 py-1" placeholder="ts to (YYYY-MM-DD)" value={tsTo} onChange={e => setTsTo(e.target.value)} />
+        <input
+          className="border rounded px-2 py-1"
+          placeholder="document id"
+          value={documentId}
+          onChange={e => setDocumentId(e.target.value)}
+        />
+        <div className="flex gap-2">
+          <button onClick={load} className="bg-blue-600 text-white rounded px-3">Filter</button>
+          <button onClick={resetFilters} className="bg-gray-200 text-gray-800 rounded px-3">Reset</button>
+        </div>
       </div>
       <div className="mb-3">
         <button onClick={buildViz} disabled={building} className="bg-green-600 text-white rounded px-3 py-1 mr-2">{building ? 'Building…' : 'Generate datavzrd logs dashboard'}</button>
@@ -95,7 +170,7 @@ export default function LogsPanel() {
           <button
             onClick={() => {
               setDocumentId('');
-              setTimeout(load, 0);
+              fetchLogs({ level, code, q, tsFrom, tsTo });
             }}
             className="text-blue-700 underline"
           >

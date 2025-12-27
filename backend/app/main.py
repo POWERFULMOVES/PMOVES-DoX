@@ -1,4 +1,5 @@
 from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query, Form
+from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
 import os
@@ -6,6 +7,7 @@ from pathlib import Path
 import shutil
 from typing import List, Dict, Optional, Any, Literal, Annotated
 import uuid
+import asyncio
 from dotenv import load_dotenv
 import time
 import json
@@ -16,6 +18,14 @@ import threading
 import re
 from pydantic import BaseModel
 from app.hrm import HRMConfig, HRMMetrics, refine_sort_digits
+from app.api.routers import documents, analysis, system, cipher
+
+app = FastAPI(title="PMOVES-DoX API")
+
+app.include_router(documents.router)
+app.include_router(analysis.router)
+app.include_router(system.router)
+app.include_router(cipher.router)
 
 from app.ingestion.pdf_processor import process_pdf
 from app.ingestion.csv_processor import process_csv
@@ -73,6 +83,12 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Mount Pmoves-hyperdimensions tool
+import os
+hyp_path = os.path.join(os.path.dirname(os.path.dirname(os.path.dirname(__file__))), "external", "Pmoves-hyperdimensions")
+if os.path.exists(hyp_path):
+    app.mount("/hyperdimensions", StaticFiles(directory=hyp_path, html=True), name="hyperdimensions")
 
 @app.middleware("http")
 async def _fast_pdf_middleware(request, call_next):
@@ -219,6 +235,20 @@ async def _startup_watch():
         search_index.rebuild()
     except Exception:
         pass
+    
+    # Connect to NATS Geometry Bus (non-blocking)
+    try:
+        from app.services.chit_service import chit_service
+        # Use NATS_URL from env or default to docker service name
+        nats_url = os.getenv("NATS_URL", "nats://nats:4222")
+        asyncio.create_task(chit_service.connect_nats(nats_url))
+    except Exception as e:
+        print(f"Failed to initiate NATS connection: {e}")
+
+app.include_router(documents.router)
+app.include_router(analysis.router)
+app.include_router(system.router)
+app.include_router(cipher.router)
 
 @app.get("/")
 async def root():
@@ -2276,7 +2306,7 @@ async def open_pdf(artifact_id: str, page: int | None = None):
     return FileResponse(str(p), media_type="application/pdf", headers=headers)
 
 
-WebUrlForm = Annotated[List[str] | None, Form(default=None)]
+WebUrlForm = Annotated[List[str] | None, Form()]
 
 
 @app.post("/upload")

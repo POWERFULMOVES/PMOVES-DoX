@@ -56,3 +56,9 @@ watch/
 uploads/
 .db.sqlite3
 .supabase/
+docker-compose.override.yml.bak
+
+db.sqlite3
+backend_logs.txt
+backend_errors.txt
+*.pdf

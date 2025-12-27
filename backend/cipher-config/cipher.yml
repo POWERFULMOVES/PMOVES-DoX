@@ -1,0 +1,23 @@
+
+# Cipher Configuration for Local Integration (Ollama)
+
+llm:
+  provider: ollama
+  model: qwen2.5:32b  # Adjust based on user's available models
+  baseURL: http://host.docker.internal:11434 
+  # Using host.docker.internal to access Ollama running on the host machine
+
+embedding:
+  type: ollama
+  model: nomic-embed-text
+  baseUrl: http://host.docker.internal:11434
+
+# Memory Configuration
+memory:
+  # Using SQLite for local/containerized persistence if Postgres not avail
+  storageType: sqlite 
+  
+# Server Configuration
+server:
+  port: 3000
+  host: 0.0.0.0
