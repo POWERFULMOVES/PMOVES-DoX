@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useRef, useState } from 'react';
+import { useRouter } from 'next/navigation';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   Upload, 
@@ -42,6 +43,7 @@ import A2UIRenderer from '@/components/a2ui/A2UIRenderer';
 import { api } from '@/lib/api';
 
 export default function Home() {
+  const router = useRouter();
   const [refreshKey, setRefreshKey] = useState(0);
   const [vlmRepo, setVlmRepo] = useState<string | null>(null);
   const [queuedCount, setQueuedCount] = useState<number>(0);
@@ -52,9 +54,14 @@ export default function Home() {
 
   useEffect(() => {
     if (activeTab === 'a2ui') {
-        api.getA2UIDemo().then(setA2uiContent).catch(console.error);
+        // Navigate to dedicated A2UI page
+        router.push('/a2ui');
     }
-  }, [activeTab]);
+    if (activeTab === 'modellab') {
+        // Navigate to dedicated Model Lab page
+        router.push('/modellab');
+    }
+  }, [activeTab, router]);
 
   const saveBlueprint = async () => {
       if (a2uiContent.length === 0) return;

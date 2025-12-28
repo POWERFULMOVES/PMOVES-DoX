@@ -11,11 +11,14 @@ services:
       - ./backend/app:/app/app
       - ./backend/data:/app/data
       - hf-cache:/root/.cache/huggingface
+    env_file:
+      - ../pmoves/env.shared
+      - .env.local
     environment:
       - DATABASE_URL=postgresql://postgres:postgres@supabase-db:5432/postgres
       - REDIS_URL=redis://redis:6379
       - NATS_URL=nats://nats:4222
-      - FRONTEND_ORIGIN=http://localhost:${FRONTEND_PORT:-3001},http://127.0.0.1:${FRONTEND_PORT:-3001}
+      - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001
       - PORT=${BACKEND_PORT:-8484}
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
       - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
@@ -27,13 +30,27 @@ services:
       - XML_XPATH_MAP=${XML_XPATH_MAP:-}
       - XML_XPATH_MAP_FILE=${XML_XPATH_MAP_FILE:-}
       - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-false}
+      - LANGEXTRACT_API_KEY=${GOOGLE_API_KEY}
+      # Use TensorZero gateway as OpenAI-compatible endpoint
+      - OPENAI_BASE_URL=http://tensorzero-gateway:3000/openai/v1
+      - TENSORZERO_BASE_URL=http://tensorzero-gateway:3000
+      - OPENAI_API_KEY=tensorzero
+      # Neo4j Knowledge Graph - Local (DoX container)
+      - NEO4J_LOCAL_URI=bolt://neo4j:7687
+      - NEO4J_LOCAL_USER=neo4j
+      - NEO4J_LOCAL_PASSWORD=${NEO4J_LOCAL_PASSWORD}
+      # Neo4j Knowledge Graph - Parent (PMOVES.AI shared)
+      - NEO4J_PARENT_URI=bolt://pmoves-neo4j-1:7687
+      - NEO4J_PARENT_USER=neo4j
+      - NEO4J_PARENT_PASSWORD=${NEO4J_PARENT_PASSWORD}
     ports:
-      - "0:8484"
+      - "8484:8484"
     networks:
       - api_tier
       - app_tier
       - bus_tier
       - data_tier
+      - pmoves_data  # Connect to parent PMOVES.AI services (TensorZero, Neo4j)
     deploy:
       resources:
         reservations:
@@ -57,14 +74,18 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_BASE: /api
+        NEXT_PUBLIC_NATS_WS_URL: ws://localhost:9223
     container_name: pmoves-dox-frontend
+    env_file:
+      - ../pmoves/env.shared
+      - .env.local
     environment:
       - API_URL=http://backend:8484
       - NEXT_PUBLIC_API_BASE=/api
       - NEXT_PUBLIC_NATS_WS_URL=ws://localhost:9223
       - PORT=3001
     ports:
-      - "0:3001"
+      - "3001:3001"
     networks:
       - api_tier
     depends_on:
@@ -85,6 +106,11 @@ services:
       - bus_tier
       - api_tier
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "-", "http://localhost:8222/varz"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   supabase-db:
     image: supabase/postgres:15.1.0.117
@@ -120,9 +146,8 @@ services:
 
   cipher-service:
     container_name: pmoves-dox-cipher
-    image: cipher-api
     build:
-      context: ./PsyFeR_reference
+      context: ../PMOVES-BoTZ/features/cipher/pmoves_cipher
       dockerfile: Dockerfile
     # Internal service: No ports exposed to host. Reachable via http://cipher-service:3000 on app_tier
     networks:
@@ -130,6 +155,7 @@ services:
     environment:
       - CIPHER_API_PREFIX=""
       - NODE_ENV=production
+      - OLLAMA_BASE_URL=http://ollama:11434
     volumes:
       - ./backend/cipher-config/cipher.yml:/app/memAgent/cipher.yml
       - cipher-data:/app/.cipher
@@ -137,6 +163,11 @@ services:
       - ollama
       - nats
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   ollama:
     image: ollama/ollama:latest
@@ -155,6 +186,52 @@ services:
             - driver: nvidia
               count: 1
               capabilities: [gpu]
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: pmoves-dox-neo4j
+    environment:
+      # Use env variable for password: NEO4J_LOCAL_PASSWORD must be set in .env.local
+      - NEO4J_AUTH=neo4j/${NEO4J_LOCAL_PASSWORD}
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=1G
+      - NEO4J_dbms_memory_pagecache_size=512m
+      - NEO4J_dbms_connector_bolt_advertised__address=:17687
+      - NEO4J_dbms_connector_http_advertised__address=:17474
+    ports:
+      - "17474:7474"  # HTTP (different port to avoid conflict with parent)
+      - "17687:7687"  # Bolt protocol
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    networks:
+      - data_tier
+      - pmoves_data  # Connect to parent Neo4j for shared knowledge graphs
+    healthcheck:
+      # Healthcheck uses env variable for password
+      test: ["CMD", "sh", "-c", "cypher-shell -u neo4j -p $${NEO4J_LOCAL_PASSWORD} RETURN 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+    restart: unless-stopped
+
+
+  glances:
+    image: nicolargo/glances:latest-full
+    container_name: pmoves-dox-glancer
+    ports:
+      - "61208:61208"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./external/Pmoves-Glancer/glances.conf:/glances/conf/glances.conf
+    environment:
+      - GLANCES_OPT=-C /glances/conf/glances.conf -w
+      - TZ=America/New_York
+    networks:
+      - api_tier
+      - app_tier
+      - bus_tier
     restart: unless-stopped
 
   datavzrd:
@@ -192,6 +269,115 @@ services:
       - app_tier
     restart: unless-stopped
 
+
+  # Phase 9: Internal BoTZ Agents
+
+  cipher:
+    build:
+      context: ./external/PMOVES-BotZ-gateway/sample-servers/mcp-proxy
+    container_name: pmoves-botz-cipher
+    environment:
+      - MCP_COMMAND=python
+      - MCP_ARGS=/app/cipher/app_memory.py
+    ports:
+      - "3025:8000"
+    volumes:
+      - ./external/PMOVES-BoTZ/features/cipher:/app/cipher
+      - cipher-data:/data
+    command: ["/usr/local/bin/fastmcp", "run", "src/main.py:app", "--transport", "streamable-http", "--port", "8000", "--host", "0.0.0.0"]
+    networks:
+      - app_tier
+      - api_tier
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  postman-agent:
+    build:
+      context: ./external/PMOVES-BotZ-gateway/sample-servers/mcp-proxy
+    container_name: pmoves-botz-postman
+    env_file:
+      - ../pmoves/env.shared
+      - .env.local
+    environment:
+      - MCP_COMMAND=npx
+      - MCP_ARGS=@postman/postman-mcp-server@latest --full
+      - POSTMAN_API_KEY=${POSTMAN_API_KEY}
+    ports:
+      - "3026:8000"
+    networks:
+      - app_tier
+      - api_tier
+    restart: unless-stopped
+
+  docling:
+    build:
+      context: ./external/PMOVES-BoTZ/features/docling
+      dockerfile: Dockerfile.docling-mcp
+    container_name: pmoves-botz-docling
+    ports:
+      - "3020:8020"
+    command: ["python", "docling_mcp_server.py", "--transport", "streamable-http", "--port", "8020", "--host", "0.0.0.0"]
+    networks:
+      - app_tier
+      - api_tier
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  tensorzero:
+    image: tensorzero/gateway:latest
+    container_name: pmoves-botz-tensorzero
+    command: ["--config-file", "/app/config/tensorzero.toml"]
+    ports:
+      - "3000:3000"
+    volumes:
+      - ./tensorzero.toml:/app/config/tensorzero.toml
+    env_file:
+      - ../pmoves/env.shared
+      - .env.local
+    environment:
+      - TENSORZERO_PROVIDER_OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - GOOGLE_AI_STUDIO_API_KEY=${GOOGLE_API_KEY}
+      - TENSORZERO_CLICKHOUSE_URL=${TENSORZERO_CLICKHOUSE_URL:-http://tensorzero:tensorzero@tensorzero-clickhouse:8123/default}
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      - app_tier
+      - api_tier
+      - pmoves_data  # Connect to parent PMOVES.AI for ClickHouse
+    restart: unless-stopped
+
+  agent-zero:
+    build:
+      context: ./external/PMOVES-Agent-Zero
+      dockerfile: DockerfileLocal
+    container_name: pmoves-agent-zero
+    ports:
+      - "50051:50051" # Agent Zero API/SSH? Checking ports later
+    volumes:
+      - ./external/PMOVES-Agent-Zero:/app
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      - PROFILE=pmoves_custom
+    networks:
+      - app_tier
+      - api_tier
+      - bus_tier
+    restart: unless-stopped
+
 networks:
   api_tier:
     driver: bridge
@@ -218,18 +404,24 @@ networks:
 
   data_tier:
     driver: bridge
-    name: pmoves_data
+    name: pmoves_dox_data  # Renamed to avoid conflict with parent pmoves_data
     internal: true
     ipam:
       config:
-        - subnet: 172.30.4.0/24
+        - subnet: 172.31.4.0/24  # Changed to avoid conflict with parent pmoves_data (172.30.4.0/24)
 
   monitoring_tier:
     driver: bridge
-    name: pmoves_monitoring
+    name: pmoves_dox_monitoring  # Renamed to avoid conflict
     ipam:
       config:
-        - subnet: 172.30.5.0/24
+        - subnet: 172.31.5.0/24  # Changed to avoid conflict with parent pmoves_monitoring (172.30.5.0/24)
+
+  # External network to connect to parent PMOVES.AI services
+  # (ClickHouse on pmoves_data, pmoves_monitoring)
+  pmoves_data:
+    external: true
+    name: pmoves_data
 
 volumes:
   hf-cache:
@@ -238,3 +430,5 @@ volumes:
   supabase_data:
   nats_data:
   ollama_data:
+  neo4j-data:
+  neo4j-logs:

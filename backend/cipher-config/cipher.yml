@@ -1,23 +1,25 @@
+# Cipher Configuration for PMOVES-DoX (Ollama + qwen3)
 
-# Cipher Configuration for Local Integration (Ollama)
+# MCP servers to use (empty for standalone)
+mcpServers: {}
 
+# LLM Configuration (Ollama)
 llm:
   provider: ollama
-  model: qwen2.5:32b  # Adjust based on user's available models
-  baseURL: http://host.docker.internal:11434 
-  # Using host.docker.internal to access Ollama running on the host machine
+  model: llama3.2:latest
+  maxIterations: 50
+  baseURL: http://ollama:11434  # Use internal Docker DNS
 
+# Embedding Configuration (Ollama with qwen3-embedding:8b)
 embedding:
   type: ollama
-  model: nomic-embed-text
-  baseUrl: http://host.docker.internal:11434
+  model: qwen3-embedding:8b  # 4096d, RTX 5090 optimized
+  baseUrl: http://ollama:11434
+  dimensions: 4096
 
-# Memory Configuration
-memory:
-  # Using SQLite for local/containerized persistence if Postgres not avail
-  storageType: sqlite 
-  
-# Server Configuration
-server:
-  port: 3000
-  host: 0.0.0.0
+# System prompt
+systemPrompt:
+  enabled: true
+  content: |
+    You are an AI memory and reasoning assistant for PMOVES-DoX.
+    You help with document processing, knowledge retrieval, and analysis.

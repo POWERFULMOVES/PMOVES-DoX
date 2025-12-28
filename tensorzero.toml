@@ -1,47 +1,49 @@
+# TensorZero gateway config for PMOVES-DoX
+# Uses OpenAI-compatible API for model routing
+
 [gateway]
-bind_address = "0.0.0.0:3000"
+
+# Observability enabled (connects to parent PMOVES.AI ClickHouse)
+[gateway.observability]
+enabled = true
+async_writes = true
+
+# Disable OTLP traces (we use ClickHouse directly)
+[gateway.export.otlp.traces]
+enabled = false
 
 # -----------------
-# Providers
+# Chat Models
 # -----------------
 
-[providers.google_ai]
-type = "google_ai"
-api_key = "${GOOGLE_AI_API_KEY}" # Env var
+# Gemini Flash (Google AI - primary)
+[models.gemini_flash]
+routing = ["google_ai"]
 
-[providers.ollama_local]
-type = "ollama"
-base_url = "http://host.docker.internal:11434" # Access host Ollama from container
-# If running locally without docker, usage might vary, but TensorZero usually runs as binary/container.
+[models.gemini_flash.providers.google_ai]
+type = "google_ai_studio_gemini"
+model_name = "gemini-1.5-flash"
+
+# Llama 3.2 via Ollama (fallback/local)
+[models.llama_ollama]
+routing = ["ollama_local"]
+
+[models.llama_ollama.providers.ollama_local]
+type = "openai"
+api_base = "http://ollama:11434/v1"
+model_name = "llama3.2"
+api_key_location = "none"
 
 # -----------------
-# Functions
+# Embedding Models
 # -----------------
 
-# 1. Chat (Hybrid: Gemini Flash primary, Llama local secondary)
-[functions.chat]
-type = "chat"
-system_schema = { type = "string" }
-user_schema = { type = "string" }
+# Qwen3 Embedding 8B via Ollama (4096d, RTX 5090 optimized)
+[models.qwen3_embed]
+routing = ["ollama_local"]
 
-[[functions.chat.variants]]
-name = "gemini_flash"
-weight = 0.8
-provider = "google_ai"
-model = "gemini-1.5-flash"
-
-[[functions.chat.variants]]
-name = "ollama_local"
-weight = 0.2
-provider = "ollama_local"
-model = "llama3.2" # Latest efficient local model
-
-# 2. Embedding (Local Ollama)
-[functions.embed]
-type = "embedding"
-
-[[functions.embed.variants]]
-name = "ollama_embed"
-weight = 1.0
-provider = "ollama_local"
-model = "nomic-embed-text" # Best-in-class local embedding
+[models.qwen3_embed.providers.ollama_local]
+type = "openai"
+api_base = "http://ollama:11434/v1"
+model_name = "qwen3-embedding:8b"
+api_key_location = "none"

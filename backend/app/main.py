@@ -18,7 +18,7 @@ import threading
 import re
 from pydantic import BaseModel
 from app.hrm import HRMConfig, HRMMetrics, refine_sort_digits
-from app.api.routers import documents, analysis, system, cipher
+from app.api.routers import documents, analysis, system, cipher, models, graph
 
 app = FastAPI(title="PMOVES-DoX API")
 
@@ -26,6 +26,8 @@ app.include_router(documents.router)
 app.include_router(analysis.router)
 app.include_router(system.router)
 app.include_router(cipher.router)
+app.include_router(models.router, prefix="/models", tags=["models"])
+app.include_router(graph.router)
 
 from app.ingestion.pdf_processor import process_pdf
 from app.ingestion.csv_processor import process_csv
@@ -244,11 +246,6 @@ async def _startup_watch():
         asyncio.create_task(chit_service.connect_nats(nats_url))
     except Exception as e:
         print(f"Failed to initiate NATS connection: {e}")
-
-app.include_router(documents.router)
-app.include_router(analysis.router)
-app.include_router(system.router)
-app.include_router(cipher.router)
 
 @app.get("/")
 async def root():
