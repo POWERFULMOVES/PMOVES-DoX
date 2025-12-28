@@ -50,12 +50,12 @@ def add_memory(req: MemoryRequest):
 @router.get("/memory")
 def search_memory(q: Optional[str] = None, category: Optional[str] = None):
     service = CipherService()
-    return service.search(q or "", category)
+    return service.search_memory(category=category, q=q)
 
 @router.get("/skills")
 def get_skills():
     service = CipherService()
-    return service.list_available_skills()
+    return service.list_skills()
 
 @router.put("/skills/{skill_id}")
 async def toggle_skill(skill_id: str, enabled: bool, db=Depends(get_db_interface)):

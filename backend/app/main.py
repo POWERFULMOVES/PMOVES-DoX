@@ -65,7 +65,8 @@ hf_token = (
 if hf_token and not os.getenv("HUGGINGFACE_HUB_TOKEN"):
     os.environ["HUGGINGFACE_HUB_TOKEN"] = hf_token
 
-app = FastAPI(title="PMOVES-DoX API")
+# NOTE: FastAPI app already created above (line 23) with routers included.
+# Do NOT recreate app here or all routers will be lost!
 
 # Optionally run Alembic migrations on startup
 if os.getenv("AUTO_MIGRATE", "false").lower() == "true":
