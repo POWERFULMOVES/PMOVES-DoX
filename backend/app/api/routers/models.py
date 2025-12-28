@@ -7,11 +7,13 @@ Provides endpoints for querying available models from:
 """
 
 import httpx
+import logging
 from fastapi import APIRouter, HTTPException
 from typing import Dict, List, Any
 from pydantic import BaseModel
 import os
 
+LOGGER = logging.getLogger(__name__)
 router = APIRouter()
 
 # Model service URLs
@@ -74,6 +76,7 @@ async def list_models() -> Dict[str, Any]:
             else:
                 result["services"]["ollama"] = "unavailable"
     except Exception as e:
+        LOGGER.error("Failed to fetch Ollama models from %s: %s", OLLAMA_BASE_URL, e)
         result["services"]["ollama"] = f"error: {str(e)}"
 
     # Fetch TensorZero models
@@ -91,6 +94,7 @@ async def list_models() -> Dict[str, Any]:
             else:
                 result["services"]["tensorzero"] = "unavailable"
     except Exception as e:
+        LOGGER.error("Failed to fetch TensorZero models from %s: %s", TENSORZERO_BASE_URL, e)
         result["services"]["tensorzero"] = f"error: {str(e)}"
 
     return result
@@ -124,7 +128,11 @@ async def test_model(model_name: str, provider: str = "ollama", prompt: str = "H
                     return response.json()
                 else:
                     raise HTTPException(status_code=response.status_code, detail=response.text)
+        except HTTPException:
+            # Re-raise HTTPException as-is
+            raise
         except Exception as e:
+            LOGGER.error("Ollama test inference failed for model %s: %s", model_name, e)
             raise HTTPException(status_code=500, detail=str(e))
 
     elif provider == "tensorzero":
@@ -145,7 +153,11 @@ async def test_model(model_name: str, provider: str = "ollama", prompt: str = "H
                     return response.json()
                 else:
                     raise HTTPException(status_code=response.status_code, detail=response.text)
+        except HTTPException:
+            # Re-raise HTTPException as-is
+            raise
         except Exception as e:
+            LOGGER.error("TensorZero test inference failed for model %s: %s", model_name, e)
             raise HTTPException(status_code=500, detail=str(e))
 
     else:

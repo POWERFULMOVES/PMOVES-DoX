@@ -247,13 +247,6 @@ async def _startup_watch():
     except Exception as e:
         print(f"Failed to initiate NATS connection: {e}")
 
-app.include_router(documents.router)
-app.include_router(analysis.router)
-app.include_router(system.router)
-app.include_router(cipher.router)
-app.include_router(models.router, prefix="/models", tags=["models"])
-app.include_router(graph.router)
-
 @app.get("/")
 async def root():
     return {"message": "PMOVES-DoX API", "status": "running"}
