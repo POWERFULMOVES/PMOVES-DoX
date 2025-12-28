@@ -9,6 +9,13 @@ PMOVES-DoX is a document intelligence platform for extracting, analyzing, and st
 **Main Branch**: `PMOVES.AI-Edition-Hardened` (for PRs)
 **Current Branch**: `feat/integrate-internal-agents`
 
+## Documentation
+
+- **DOCKING_GUIDE.md**: [docs/DOCKING_GUIDE.md](docs/DOCKING_GUIDE.md) - Integration with parent PMOVES.AI
+- **USER_GUIDE.md**: [docs/USER_GUIDE.md](docs/USER_GUIDE.md) - End user documentation
+- **API_REFERENCE.md**: [docs/API_REFERENCE.md](docs/API_REFERENCE.md) - Complete REST API reference
+- **ARCHITECTURE.md**: [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) - Technical architecture details
+
 ## Common Development Commands
 
 ### Backend
