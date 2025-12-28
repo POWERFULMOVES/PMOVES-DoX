@@ -200,6 +200,7 @@ Local-first models
 - Financial statement detection with merged-header normalization and confidence scoring
 
 ### Financial Statement Analysis (🚧 Planned / Coming Soon)
+
 > **Note**: This feature is currently in development.
 
 - Enable `PDF_FINANCIAL_ANALYSIS=true` (default) to run Docling tables through the new complex table processor.

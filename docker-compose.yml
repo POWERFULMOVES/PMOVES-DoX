@@ -360,9 +360,10 @@ services:
       dockerfile: DockerfileLocal
     container_name: pmoves-agent-zero
     ports:
-      - "50051:50051" # Agent Zero API/SSH? Checking ports later
+      - "50051:50051" # Agent Zero MCP/Web UI endpoint
     volumes:
       - ./external/PMOVES-Agent-Zero:/app
+      - agent-zero-data:/data
     deploy:
       resources:
         reservations:
@@ -372,11 +373,26 @@ services:
               capabilities: [gpu]
     environment:
       - PROFILE=pmoves_custom
+      # MCP Server Configuration (docking pattern)
+      - MCP_SERVER_ENABLED=${AGENT_ZERO_MCP_ENABLED:-false}
+      - MCP_SERVER_TOKEN=${AGENT_ZERO_MCP_TOKEN:-}
+      # Standalone mode uses Web UI on WEB_UI_PORT (default 50051)
+      # Docked mode exposes MCP at http://pmoves-agent-zero:50051/mcp/t-{token}/sse
+      - WEB_UI_PORT=50051
+      # TensorZero integration for LLM orchestration
+      - TENSORZERO_API_BASE=http://tensorzero:3000/v1
     networks:
       - app_tier
       - api_tier
       - bus_tier
+    depends_on:
+      - tensorzero
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:50051/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
 networks:
   api_tier:
@@ -432,3 +448,4 @@ volumes:
   ollama_data:
   neo4j-data:
   neo4j-logs:
+  agent-zero-data:
