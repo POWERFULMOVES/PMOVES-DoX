@@ -55,7 +55,7 @@ def search_memory(q: Optional[str] = None, category: Optional[str] = None):
 @router.get("/skills")
 def get_skills():
     service = CipherService()
-    return service.list_available_skills()
+    return service.list_skills()
 
 @router.put("/skills/{skill_id}")
 async def toggle_skill(skill_id: str, enabled: bool, db=Depends(get_db_interface)):
