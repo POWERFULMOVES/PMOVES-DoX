@@ -244,5 +244,55 @@ export const api = {
             console.error("API Error (getA2UIDemo):", error);
             throw error;
         }
+    },
+
+    // --- Model Lab ---
+
+    /**
+     * Retrieves all available models from Ollama and TensorZero.
+     * @returns Promise resolving to models response with ollama, tensorzero, and services status.
+     */
+    getModels: async (): Promise<any> => {
+        try {
+            const res = await getClient().get('/models/');
+            return res.data;
+        } catch (error) {
+            console.error("API Error (getModels):", error);
+            return { ollama: [], tensorzero: [], services: { ollama: 'error', tensorzero: 'error' } };
+        }
+    },
+
+    /**
+     * Tests a model by sending a prompt.
+     * @param modelName - Name of the model to test.
+     * @param provider - "ollama" or "tensorzero".
+     * @param prompt - Test prompt.
+     * @returns Promise resolving to the model response.
+     */
+    testModel: async (modelName: string, provider: string, prompt: string): Promise<any> => {
+        try {
+            const res = await getClient().post(`/models/test/${modelName}?provider=${provider}&prompt=${encodeURIComponent(prompt)}`);
+            return res.data;
+        } catch (error) {
+            console.error("API Error (testModel):", error);
+            throw error;
+        }
+    },
+
+    /**
+     * Gets health status of model services.
+     * @returns Promise resolving to health status object.
+     */
+    getModelHealth: async (): Promise<any> => {
+        try {
+            const res = await getClient().get('/models/health');
+            return res.data;
+        } catch (error) {
+            console.error("API Error (getModelHealth):", error);
+            return {
+                ollama: { status: 'unreachable', url: 'http://ollama:11434' },
+                tensorzero: { status: 'unreachable', url: 'http://tensorzero:3000' }
+            };
+        }
     }
 };
