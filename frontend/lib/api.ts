@@ -170,9 +170,8 @@ export const api = {
      */
     addMemory: async (category: string, content: any): Promise<string> => {
         try {
-            // Mapping to a hypothetical /memory endpoint provided by backend routing
-            // Ensure backend exposes POST /memory
-            const res = await getClient().post('/memory', { category, content });
+            // Cipher memory endpoint (backend: /cipher/memory)
+            const res = await getClient().post('/cipher/memory', { category, content });
             return res.data.id;
         } catch (error) {
             console.error("API Error (addMemory):", error);
@@ -191,7 +190,7 @@ export const api = {
             const params = new URLSearchParams();
             if (query) params.append('q', query);
             if (category) params.append('category', category);
-            const res = await getClient().get(`/memory?${params.toString()}`);
+            const res = await getClient().get(`/cipher/memory?${params.toString()}`);
             return res.data;
         } catch (error) {
             console.error("API Error (searchMemory):", error);
@@ -200,14 +199,15 @@ export const api = {
     },
 
     // --- Skills ---
-    
+
     /**
      * Retrieves all registered skills.
      * @returns Promise resolving to an array of SkillItems.
      */
     getSkills: async (): Promise<SkillItem[]> => {
         try {
-            const res = await getClient().get('/skills');
+            // Cipher skills endpoint (backend: /cipher/skills)
+            const res = await getClient().get('/cipher/skills');
             return res.data;
         } catch (error) {
             console.error("API Error (getSkills):", error);
@@ -223,8 +223,8 @@ export const api = {
      */
     toggleSkill: async (skillId: string, enabled: boolean): Promise<boolean> => {
         try {
-             // Hypothetical endpoint PUT /skills/{id}
-            await getClient().put(`/skills/${skillId}`, { enabled });
+            // Cipher skills endpoint (backend: /cipher/skills/{id})
+            await getClient().put(`/cipher/skills/${skillId}`, { enabled });
             return true;
         } catch (error) {
             console.error("API Error (toggleSkill):", error);

@@ -50,7 +50,7 @@ def add_memory(req: MemoryRequest):
 @router.get("/memory")
 def search_memory(q: Optional[str] = None, category: Optional[str] = None):
     service = CipherService()
-    return service.search(q or "", category)
+    return service.search_memory(category=category, q=q)
 
 @router.get("/skills")
 def get_skills():
