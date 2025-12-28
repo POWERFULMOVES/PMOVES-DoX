@@ -15,7 +15,10 @@ services:
       - ../pmoves/env.shared
       - .env.local
     environment:
+      - DB_BACKEND=supabase
       - DATABASE_URL=postgresql://postgres:postgres@supabase-db:5432/postgres
+      - SUPABASE_URL=http://supabase-rest:3000
+      - SUPABASE_SERVICE_KEY=${PGRST_JWT_SECRET}
       - REDIS_URL=redis://redis:6379
       - NATS_URL=nats://nats:4222
       - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001
