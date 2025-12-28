@@ -199,7 +199,13 @@ def _watch_loop():
     watch_dir = Path(os.getenv("WATCH_DIR", "/app/watch"))
     debounce_ms = int(os.getenv("WATCH_DEBOUNCE_MS", "1000"))
     min_bytes = int(os.getenv("WATCH_MIN_BYTES", "1"))
-    watch_dir.mkdir(parents=True, exist_ok=True)
+    try:
+        watch_dir.mkdir(parents=True, exist_ok=True)
+    except PermissionError:
+        # Fall back to a writable directory if /app is not writable
+        watch_dir = Path("./uploads/watch")
+        watch_dir.mkdir(parents=True, exist_ok=True)
+        print(f"Watch folder: using fallback path {watch_dir}")
     exts = {".pdf", ".csv", ".xlsx", ".xls"}
 
     def ready(p: Path) -> bool:
