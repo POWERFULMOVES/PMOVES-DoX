@@ -65,7 +65,7 @@ export default function GeometryPage() {
 
         // Fetch demo geometry packet from backend
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8484';
-        const response = await fetch(`${API_BASE}/api/v1/cipher/geometry/demo-packet`);
+        const response = await fetch(`${API_BASE}/cipher/geometry/demo-packet`);
         if (!response.ok) {
           throw new Error(`Backend returned ${response.status}: ${response.statusText}`);
         }
