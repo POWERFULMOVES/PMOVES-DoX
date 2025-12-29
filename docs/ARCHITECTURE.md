@@ -833,6 +833,105 @@ allow_origins = [os.getenv("FRONTEND_ORIGIN")]
 
 ## Deployment Models
 
+PMOVES-DoX supports two deployment modes:
+
+### Mode Comparison
+
+| Feature | Standalone | Docked |
+|---------|------------|--------|
+| **Networks** | `pmoves_dox_*` (172.31.x) | Parent `pmoves_*` (172.30.x) |
+| **TensorZero** | Local `:3000` | Parent `tensorzero-gateway:3030` |
+| **NATS** | Local `:4223` | Parent `nats://nats:4222` |
+| **Neo4j** | Local only | Dual-write to parent |
+| **Agent Zero MCP** | Disabled | Enabled (exposes API) |
+| **Use Case** | Development, testing | Production, parent integration |
+
+### Standalone Mode
+
+DoX runs independently with all local services:
+
+```
+┌─────────────────────────────────────────────────────────────┐
+│                         PMOVES-DoX                          │
+│                         172.31.x.0/24                        │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐          │
+│  │  Backend    │ │  Frontend   │ │ Agent Zero  │          │
+│  │  :8484      │ │  :3001      │ │  :50051     │          │
+│  │  (local)    │ │  (local)    │ │  Web UI     │          │
+│  └──────┬──────┘ └─────────────┘ └─────────────┘          │
+│         │                                                   │
+│  ┌──────▼──────┐  ┌─────────────┐  ┌─────────────┐        │
+│  │   NATS      │  │   Neo4j     │  │ TensorZero  │        │
+│  │  :4223      │  │  :17687     │  │  :3000      │        │
+│  │  (local)    │  │  (local)    │  │  (local)    │        │
+│  └─────────────┘  └─────────────┘  └─────────────┘        │
+└─────────────────────────────────────────────────────────────┘
+```
+
+### Docked Mode (PMOVES.AI Integration)
+
+DoX connects to parent services while maintaining local data:
+
+```
+┌─────────────────────────────────────────────────────────────────┐
+│                      PMOVES.AI Parent (172.30.x)                │
+│  ┌─────────────┐ ┌─────────────┐ ┌─────────────┐              │
+│  │ TensorZero  │ │   Neo4j     │ │    NATS     │              │
+│  │  Gateway    │ │ (Parent)    │ │  (Parent)   │              │
+│  │  :3030      │ │  :7687      │ │  :4222      │              │
+│  └──────┬──────┘ └──────┬──────┘ └──────┬──────┘              │
+└─────────┼───────────────┼───────────────┼───────────────────────┘
+          │               │               │
+          │   pmoves_data network (bridge)
+          │               │               │
+┌─────────▼───────┐ ┌────▼──────┐ ┌──────▼───────────────────────┐
+│   PMOVES-DoX    │ │           │ │   DoX Services               │
+│   (172.31.x)    │ │           │ │  ┌─────────────┐             │
+│  ┌───────────┐  │ │   Dual    │ │  │  Backend    │             │
+│  │ Backend   │◄─┼───┬────┬────┼─┼─││  :8484      │ Uses parent │
+│  │ :8484     │  │ │    │    │   │ │└─────────────┘ TensorZero  │
+│  └───────────┘  │ │    │    │   │ └─────────────────────────────┘
+│  ┌───────────┐  │ │    │    │   │ ┌─────────────────────────────┐
+│  │ Neo4j     │◄─┼──┘    │    │   │ │  Agent Zero                │
+│  │ Local     │  │       │    │   │ │  :50051                    │
+│  │ :17687    │  │       │    │   │ │  MCP API enabled           │
+│  └───────────┘  │       │    │   │ └─────────────────────────────┘
+│  ┌───────────┐  │       │    │   │                                │
+│  │ Supabase  │  │       │    │   │ Local data (DoX-only):         │
+│  │ Local     │  │       │    │   │ - Supabase documents           │
+│  │           │  │       │    │   │ - Neo4j knowledge graphs       │
+│  └───────────┘  │       │    │   │ - DoX Agent Zero state        │
+└─────────────────┘       │    │   └────────────────────────────────┘
+                          │    │
+                    Dual-write   │
+                    to parent     │
+                                  │
+                    NATS graceful degradation
+                    (warnings if unavailable)
+```
+
+### Using the Makefile
+
+```bash
+# Standalone mode (default)
+make standalone
+
+# Docked mode (requires parent PMOVES.AI running)
+make docked
+
+# Verify parent networks before docking
+make check-parent
+
+# View logs
+make logs
+
+# Restart services
+make restart
+
+# Clean up
+make clean
+```
+
 ### Development (Local)
 
 ```bash

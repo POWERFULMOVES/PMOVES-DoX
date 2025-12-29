@@ -5,6 +5,32 @@ import os
 import time
 from app.globals import TASKS, START_TIME, DB_BACKEND_META, env_flag, search_index, db, HRM_STATS
 
+
+def is_docked_mode() -> bool:
+    """Detect if DoX is running in docked mode within PMOVES.AI.
+
+    Docked mode is indicated by:
+    1. DOCKED_MODE=true environment variable (explicit)
+    2. NATS_URL pointing to parent NATS (nats://nats:4222 instead of :4223)
+
+    Returns:
+        True if running in docked mode, False for standalone
+    """
+    # Explicit check first
+    if os.getenv("DOCKED_MODE", "").lower() in {"1", "true", "yes"}:
+        return True
+
+    # Check NATS URL - parent uses port 4222, standalone uses 4223
+    nats_url = os.getenv("NATS_URL", "")
+    if nats_url == "nats://nats:4222":
+        return True
+    if nats_url == "nats://nats:4223":
+        return False
+
+    # Default to standalone if not explicitly docked
+    return False
+
+
 router = APIRouter()
 
 try:
@@ -43,7 +69,7 @@ async def config():
         pass
     offline = bool(os.getenv("TRANSFORMERS_OFFLINE") or os.getenv("HF_HUB_OFFLINE"))
     frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
-    
+
     return {
         "vlm_repo": os.getenv("DOCLING_VLM_REPO"),
         "database": DB_BACKEND_META,
@@ -53,6 +79,11 @@ async def config():
         "ollama": ollama,
         "offline": offline,
         "open_pdf_enabled": env_flag("OPEN_PDF_ENABLED", False),
+        "deployment": {
+            "mode": "docked" if is_docked_mode() else "standalone",
+            "nats_url": os.getenv("NATS_URL", "nats://nats:4222"),
+            "tensorzero_url": os.getenv("TENSORZERO_BASE_URL", "http://tensorzero:3000"),
+        },
     }
 
 @router.get("/tasks")

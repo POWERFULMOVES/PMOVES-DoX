@@ -1,7 +1,7 @@
 # PMOVES-DoX Makefile
 # Dual-mode deployment: standalone or docked (within PMOVES.AI)
 
-.PHONY: standalone docked test-standalone test-docked clean help logs build pull
+.PHONY: standalone docked test-standalone test-docked clean help logs build pull check-parent
 
 # Default target
 help:
@@ -22,6 +22,7 @@ help:
 	@echo "  make logs            - Show logs from all services"
 	@echo "  make ps              - Show running containers"
 	@echo "  make restart         - Restart all services"
+	@echo "  make check-parent    - Verify parent networks available (for docked mode)"
 	@echo ""
 	@echo "Service-Specific:"
 	@echo "  make backend-logs    - Show backend service logs"
@@ -54,7 +55,7 @@ standalone:
 	@echo "Starting with PMOVES_MODE=standalone..."
 	PMOVES_MODE=standalone docker compose --env-file .env.local up -d --build
 
-docked:
+docked: check-parent
 	@echo "Starting PMOVES-DoX in DOCKED mode (within PMOVES.AI)..."
 	@test -d ../pmoves || { \
 		echo "Error: Not within PMOVES.AI repository"; \
@@ -78,6 +79,30 @@ docked:
 	@echo ""
 	@echo "Starting with PMOVES_MODE=docked..."
 	PMOVES_MODE=docked docker compose -f docker-compose.yml -f docker-compose.docked.yml --env-file .env.local up -d --build
+
+check-parent:
+	@echo "Verifying parent PMOVES.AI networks..."
+	@echo ""
+	@for network in pmoves_api pmoves_app pmoves_bus pmoves_data; do \
+		docker network inspect $$network >/dev/null 2>&1 || { \
+			echo "❌ Error: Parent network $$network not found"; \
+			echo ""; \
+			echo "Parent PMOVES.AI must be running first."; \
+			echo "Start parent services from PMOVES.AI root:"; \
+			echo "  cd ../pmoves && docker compose up -d"; \
+			echo ""; \
+			exit 1; \
+		}; \
+		echo "  ✓ $$network"; \
+	done
+	@echo ""
+	@echo "✅ All parent networks verified"
+	@echo ""
+	@echo "DoX can now connect to:"
+	@echo "  - pmoves_api:    TensorZero Gateway (:3030)"
+	@echo "  - pmoves_bus:    Parent NATS (:4222)"
+	@echo "  - pmoves_data:   Parent ClickHouse, Neo4j"
+	@echo "  - pmoves_app:    Parent services"
 
 # =============================================================================
 # Testing
@@ -111,7 +136,7 @@ test-standalone:
 	@echo "✅ DoX Agent Zero: http://localhost:50051/health"
 	@echo ""
 	@echo "Testing geometry bus..."
-	@curl -sf http://localhost:8484/api/v1/cipher/geometry/demo-packet > /dev/null || { \
+	@curl -sf http://localhost:3001/api/cipher/geometry/demo-packet > /dev/null || { \
 		echo "⚠️  Geometry endpoint not ready"; \
 	}
 	@echo "✅ Geometry bus available"
@@ -211,8 +236,8 @@ neo4j-logs:
 geometry-test:
 	@echo "Testing geometry bus connectivity..."
 	@echo ""
-	@echo "Fetching demo geometry packet..."
-	@curl -sf http://localhost:8484/api/v1/cipher/geometry/demo-packet | jq '.' || { \
+	@echo "Fetching demo geometry packet (via Next.js proxy)..."
+	@curl -sf http://localhost:3001/api/cipher/geometry/demo-packet | jq '.' || { \
 		echo "❌ Geometry bus not available"; \
 		echo "   Start services with: make standalone"; \
 		exit 1; \

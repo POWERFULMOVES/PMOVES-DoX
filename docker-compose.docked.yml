@@ -26,8 +26,9 @@ services:
       - NEO4J_PARENT_URI=bolt://pmoves-neo4j-1:7687
       - NEO4J_PARENT_USER=neo4j
 
-      # Expose parent network connectivity
-      - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001,http://host.docker.internal:3001
+      # Expose parent network connectivity (include localhost:3001 for browser access)
+      - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001,http://localhost:3001,http://127.0.0.1:3001
+      - DOCKED_MODE=true
     networks:
       - pmoves_api      # Parent API tier
       - pmoves_app      # Parent application tier
@@ -38,6 +39,14 @@ services:
       # Remove local dependencies when docked:
       # - nats (use parent nats://nats:4222)
 
+  frontend:
+    environment:
+      # Connect to parent NATS WebSocket
+      - NEXT_PUBLIC_NATS_WS_URL=ws://localhost:9222
+    networks:
+      - pmoves_api      # For backend proxy
+      - pmoves_app      # Parent app tier access
+
   # DoX Agent Zero: Enable MCP API when docked
   # This allows parent Agent Zero to coordinate with DoX Agent Zero
   agent-zero:
@@ -47,6 +56,7 @@ services:
       - MCP_SERVER_TOKEN=${AGENT_ZERO_MCP_TOKEN}
       # TensorZero integration - use parent gateway
       - TENSORZERO_API_BASE=http://tensorzero-gateway:3030/v1
+      - DOCKED_MODE=true
     networks:
       - pmoves_api      # Parent can reach DoX Agent Zero
       - pmoves_app

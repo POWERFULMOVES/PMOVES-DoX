@@ -20,11 +20,13 @@ services:
       # DB_BACKEND: Set in .env.local (sqlite or supabase), defaults to sqlite
       - DATABASE_URL=postgresql://postgres:postgres@supabase-db:5432/postgres
       - SUPABASE_URL=http://supabase-rest:3000
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      # Map parent env variable names to DoX expected names
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-${SUPABASE_ANON_KEY:-local-dev-anon-key-for-postgrest}}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_SERVICE_ROLE_KEY:-local-dev-service-key-for-postgrest}}
       - REDIS_URL=redis://redis:6379
+      - DB_BACKEND=${DB_BACKEND:-supabase}
       - NATS_URL=nats://nats:4222
-      - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001
+      - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001,http://localhost:3001,http://127.0.0.1:3001
       - PORT=8484
       - OLLAMA_BASE_URL=http://ollama:11434
       - SEARCH_DEVICE=cpu
@@ -406,46 +408,59 @@ services:
       retries: 3
 
 networks:
+  # PMOVES-DoX Standalone Networks (namespaced to avoid conflicts with parent PMOVES.AI)
+  # In docked mode, these are overridden to connect to parent networks
   api_tier:
     driver: bridge
-    name: pmoves_api
+    name: pmoves_dox_api
     ipam:
       config:
-        - subnet: 172.30.1.0/24
+        - subnet: 172.31.1.0/24  # Different from parent's 172.30.1.0/24
 
   app_tier:
     driver: bridge
-    name: pmoves_app
+    name: pmoves_dox_app
     internal: true
     ipam:
       config:
-        - subnet: 172.30.2.0/24
+        - subnet: 172.31.2.0/24  # Different from parent's 172.30.2.0/24
 
   bus_tier:
     driver: bridge
-    name: pmoves_bus
+    name: pmoves_dox_bus
     internal: true
     ipam:
       config:
-        - subnet: 172.30.3.0/24
+        - subnet: 172.31.3.0/24  # Different from parent's 172.30.3.0/24
 
   data_tier:
     driver: bridge
-    name: pmoves_dox_data  # Renamed to avoid conflict with parent pmoves_data
+    name: pmoves_dox_data
     internal: true
     ipam:
       config:
-        - subnet: 172.31.4.0/24  # Changed to avoid conflict with parent pmoves_data (172.30.4.0/24)
+        - subnet: 172.31.4.0/24  # DoX-only data tier
 
   monitoring_tier:
     driver: bridge
-    name: pmoves_dox_monitoring  # Renamed to avoid conflict
+    name: pmoves_dox_monitoring
     ipam:
       config:
-        - subnet: 172.31.5.0/24  # Changed to avoid conflict with parent pmoves_monitoring (172.30.5.0/24)
+        - subnet: 172.31.5.0/24  # DoX-only monitoring tier
 
-  # External network to connect to parent PMOVES.AI services
-  # (ClickHouse on pmoves_data, pmoves_monitoring)
+  # External parent networks (for docked mode - connected via docker-compose.docked.yml)
+  pmoves_api:
+    external: true
+    name: pmoves_api
+
+  pmoves_app:
+    external: true
+    name: pmoves_app
+
+  pmoves_bus:
+    external: true
+    name: pmoves_bus
+
   pmoves_data:
     external: true
     name: pmoves_data
