@@ -200,13 +200,9 @@ services:
   neo4j:
     image: neo4j:5.15-community
     container_name: pmoves-dox-neo4j
-    env_file:
-      - path: ../pmoves/env.shared
-        required: false
-      - .env.local
     environment:
-      # Use env variable for password: NEO4J_LOCAL_PASSWORD from .env.local
-      - NEO4J_AUTH=neo4j/$${NEO4J_LOCAL_PASSWORD}
+      # Minimal Neo4j 5.x community config (no EULA needed for community)
+      - NEO4J_AUTH=neo4j/pmovesNeo4jLocal2025
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=1G
       - NEO4J_dbms_memory_pagecache_size=512m
@@ -222,8 +218,8 @@ services:
       - data_tier
       - pmoves_data  # Connect to parent Neo4j for shared knowledge graphs
     healthcheck:
-      # Healthcheck uses env variable for password (substituted at runtime)
-      test: ["CMD", "sh", "-c", "cypher-shell -u neo4j -p $NEO4J_LOCAL_PASSWORD RETURN 1 || exit 1"]
+      # Healthcheck with hardcoded password matching NEO4J_AUTH
+      test: ["CMD", "sh", "-c", "cypher-shell -u neo4j -p pmovesNeo4jLocal2025 RETURN 1 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
