@@ -201,7 +201,7 @@ services:
       - .env.local
     environment:
       # Use env variable for password: NEO4J_LOCAL_PASSWORD from .env.local
-      - NEO4J_AUTH=neo4j/NEO4J_LOCAL_PASSWORD
+      - NEO4J_AUTH=neo4j/$${NEO4J_LOCAL_PASSWORD}
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=1G
       - NEO4J_dbms_memory_pagecache_size=512m
@@ -313,7 +313,7 @@ services:
     environment:
       - MCP_COMMAND=npx
       - MCP_ARGS=@postman/postman-mcp-server@latest --full
-      - POSTMAN_API_KEY=POSTMAN_API_KEY
+      - POSTMAN_API_KEY=${POSTMAN_API_KEY}
     ports:
       - "3026:8000"
     networks:
@@ -351,9 +351,9 @@ services:
       - ../pmoves/env.shared
       - .env.local
     environment:
-      - TENSORZERO_PROVIDER_OPENROUTER_API_KEY=OPENROUTER_API_KEY
-      - GOOGLE_AI_STUDIO_API_KEY=GOOGLE_API_KEY
-      - TENSORZERO_CLICKHOUSE_URL=http://tensorzero:tensorzero@tensorzero-clickhouse:8123/default
+      - TENSORZERO_PROVIDER_OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - GOOGLE_AI_STUDIO_API_KEY=${GOOGLE_API_KEY}
+      - TENSORZERO_CLICKHOUSE_URL=http://${CLICKHOUSE_USER:-tensorzero}:${CLICKHOUSE_PASSWORD:-tensorzero}@tensorzero-clickhouse:8123/default
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
