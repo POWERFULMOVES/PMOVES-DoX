@@ -1,3 +1,9 @@
+"""System information and configuration API router.
+
+Provides endpoints for health checks, configuration discovery,
+task status monitoring, and system metrics.
+"""
+
 from fastapi import APIRouter, HTTPException, Response
 import csv
 import io
@@ -14,7 +20,7 @@ def is_docked_mode() -> bool:
     2. NATS_URL pointing to parent NATS (nats://nats:4222 instead of :4223)
 
     Returns:
-        True if running in docked mode, False for standalone
+        True if running in docked mode, False for standalone.
     """
     # Explicit check first
     if os.getenv("DOCKED_MODE", "").lower() in {"1", "true", "yes"}:
@@ -40,10 +46,33 @@ except Exception:
 
 @router.get("/")
 async def root():
+    """Root endpoint providing API status message.
+
+    Returns:
+        A dictionary with a message indicating the API name and status.
+    """
     return {"message": "PMOVES-DoX API", "status": "running"}
+
 
 @router.get("/config")
 async def config():
+    """Get system configuration and deployment information.
+
+    Detects GPU availability, Ollama connectivity, and deployment mode
+    (standalone vs docked with parent PMOVES.AI).
+
+    Returns:
+        A dictionary containing:
+        - vlm_repo: VLM model repository for PDF processing
+        - database: Database backend metadata
+        - hf_auth: Whether HuggingFace authentication is configured
+        - frontend_origin: Allowed CORS origins
+        - gpu: GPU availability and device count
+        - ollama: Ollama service availability
+        - offline: Whether offline mode is enabled
+        - open_pdf_enabled: Whether PDF viewer links are enabled
+        - deployment: Deployment mode (standalone/docked) and service URLs
+    """
     # Detect GPU availability if torch is present
     gpu = {"available": False, "device_count": 0, "names": []}
     try:
@@ -88,6 +117,16 @@ async def config():
 
 @router.get("/tasks")
 async def list_tasks():
+    """List all background tasks with status summary.
+
+    Returns:
+        A dictionary containing:
+        - total: Total number of tasks
+        - queued: Number of queued tasks
+        - completed: Number of completed tasks
+        - errored: Number of failed tasks
+        - queued_items: List of queued task details
+    """
     # Return a lightweight summary including counts and queued items
     items = [
         {"id": k, **v} for k, v in TASKS.items()
@@ -105,6 +144,17 @@ async def list_tasks():
 
 @router.get("/tasks/{task_id}")
 async def get_task_status(task_id: str):
+    """Get the status of a specific background task.
+
+    Args:
+        task_id: The unique identifier of the task.
+
+    Returns:
+        Task details including status and result.
+
+    Raises:
+        HTTPException: 404 if the task is not found.
+    """
     task = TASKS.get(task_id)
     if not task:
         raise HTTPException(404, "Task not found")
@@ -112,6 +162,13 @@ async def get_task_status(task_id: str):
 
 @router.get("/health")
 async def health():
+    """Health check endpoint for monitoring.
+
+    Returns:
+        A dictionary containing:
+        - status: Always "ok" if the service is running
+        - uptime_seconds: Service uptime in seconds
+    """
     return {
         "status": "ok",
         "uptime_seconds": int(time.time() - START_TIME),
@@ -119,6 +176,16 @@ async def health():
 
 @router.get("/watch")
 async def watch_status():
+    """Get watch folder configuration and status.
+
+    Returns:
+        A dictionary containing:
+        - enabled: Whether watch folder monitoring is enabled
+        - dir: Directory being watched
+        - debounce_ms: File stability debounce time in milliseconds
+        - min_bytes: Minimum file size to trigger processing
+        - available: Whether watchgod library is available
+    """
     return {
         "enabled": env_flag("WATCH_ENABLED", True),
         "dir": os.getenv("WATCH_DIR", "/app/watch"),
@@ -129,10 +196,22 @@ async def watch_status():
 
 @router.get("/metrics/hrm")
 def hrm_metrics():
+    """Get HRM (Halting Reasoning Module) metrics snapshot.
+
+    Returns:
+        A dictionary with HRM statistics including total runs,
+        average steps, and average latency.
+    """
     return HRM_STATS.snapshot()
 
 @router.get("/metrics")
 def metrics_prometheus():
+    """Get Prometheus-formatted metrics for monitoring systems.
+
+    Returns:
+        A tuple of (metrics_text, status_code, headers) with
+        Prometheus text format metrics.
+    """
     snap = HRM_STATS.snapshot()
     lines = [
         f"pmoves_hrm_total_runs {snap['total_runs']}",
@@ -143,11 +222,30 @@ def metrics_prometheus():
 
 @router.get("/logs")
 async def get_logs(level: str | None = None, code: str | None = None, q: str | None = None, document_id: str | None = None):
+    """Query system logs with optional filters.
+
+    Args:
+        level: Filter by log level (ERROR, WARN, INFO, etc.)
+        code: Filter by error code
+        q: Full-text search query
+        document_id: Filter by associated document ID
+
+    Returns:
+        A dictionary with a "logs" key containing the filtered log entries.
+    """
     logs = db.list_logs(level=level, code=code, q=q, document_id=document_id)
     return {"logs": logs}
 
 @router.get("/logs/export")
 async def export_logs(level: str | None = None):
+    """Export logs as CSV file.
+
+    Args:
+        level: Optional filter by log level.
+
+    Returns:
+        A CSV formatted Response with columns: ts, level, code, component, message.
+    """
     logs = db.list_logs(level=level)
     output = io.StringIO()
     writer = csv.writer(output)
@@ -158,11 +256,31 @@ async def export_logs(level: str | None = None):
 
 @router.get("/apis")
 async def get_apis(method: str | None = None, tag: str | None = None):
+    """List discovered API endpoints from imported collections.
+
+    Args:
+        method: Filter by HTTP method (GET, POST, etc.)
+        tag: Filter by tag/category
+
+    Returns:
+        A dictionary with an "apis" key containing the filtered API list.
+    """
     apis = db.list_apis(method=method, tag=tag)
     return {"apis": apis}
 
 @router.get("/apis/{api_id}")
 async def get_api_detail(api_id: str):
+    """Get detailed information about a specific API endpoint.
+
+    Args:
+        api_id: The unique identifier of the API.
+
+    Returns:
+        Detailed API information including path, method, and parameters.
+
+    Raises:
+        HTTPException: 404 if the API is not found.
+    """
     all_apis = db.list_apis()
     api = next((a for a in all_apis if a["id"] == api_id), None)
     if not api:
@@ -171,5 +289,13 @@ async def get_api_detail(api_id: str):
 
 @router.get("/tags")
 async def get_tags(document_id: str | None = None):
+    """List extracted tags with optional document filtering.
+
+    Args:
+        document_id: Optional filter to tags from a specific document.
+
+    Returns:
+        A dictionary with a "tags" key containing the filtered tag list.
+    """
     tags = db.list_tags(document_id=document_id)
     return {"tags": tags}
