@@ -4,7 +4,9 @@ import { useState, useEffect } from "react";
 import { HyperbolicNavigator } from "@/components/geometry/HyperbolicNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 
-const initialData = {
+const initialData: GeometryData = {
+  spec: "chit.cgp.v0.1",
+  meta: { source: "initial" },
   super_nodes: [
     {
       id: "root",
