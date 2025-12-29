@@ -219,7 +219,7 @@ services:
       - pmoves_data  # Connect to parent Neo4j for shared knowledge graphs
     healthcheck:
       # Healthcheck with hardcoded password matching NEO4J_AUTH
-      test: ["CMD", "sh", "-c", "cypher-shell -u neo4j -p pmovesNeo4jLocal2025 RETURN 1 || exit 1"]
+      test: ["CMD", "cypher-shell", "-u", "neo4j", "-p", "pmovesNeo4jLocal2025", "RETURN", "1"]
       interval: 30s
       timeout: 10s
       retries: 5
