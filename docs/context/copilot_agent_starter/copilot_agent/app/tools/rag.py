@@ -1,0 +1,80 @@
+from __future__ import annotations
+import os, re, json, hashlib
+from typing import List, Tuple
+import numpy as np
+import faiss  # type: ignore
+from sentence_transformers import SentenceTransformer
+
+class RAGIndex:
+    def __init__(self, dim: int = 384, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
+        self.model = SentenceTransformer(model_name)
+        self.index = faiss.IndexFlatIP(dim)
+        self.chunks: List[str] = []
+        self.meta: List[dict] = []
+
+    def _embed(self, texts: List[str]) -> np.ndarray:
+        emb = self.model.encode(texts, normalize_embeddings=True, convert_to_numpy=True)
+        return emb.astype("float32")
+
+    def add(self, chunks: List[str], metas: List[dict]):
+        if not chunks:
+            return
+        emb = self._embed(chunks)
+        self.index.add(emb)
+        self.chunks.extend(chunks)
+        self.meta.extend(metas)
+
+    def search(self, query: str, k: int = 5) -> List[Tuple[str, dict, float]]:
+        q = self._embed([query])
+        D, I = self.index.search(q, k)
+        results = []
+        for score, idx in zip(D[0], I[0]):
+            if idx == -1: 
+                continue
+            results.append((self.chunks[idx], self.meta[idx], float(score)))
+        return results
+
+def simple_split(text: str, chunk_size: int = 800, overlap: int = 100) -> List[str]:
+    chunks = []
+    i = 0
+    while i < len(text):
+        chunks.append(text[i:i+chunk_size])
+        i += (chunk_size - overlap)
+    return chunks
+
+def load_folder(path: str) -> List[tuple[str, dict]]:
+    supported = (".txt", ".md", ".csv", ".json")
+    rows = []
+    for root, _, files in os.walk(path):
+        for f in files:
+            if f.lower().endswith(supported):
+                fp = os.path.join(root, f)
+                try:
+                    txt = open(fp, "r", encoding="utf-8", errors="ignore").read()
+                except Exception:
+                    continue
+                for ch in simple_split(txt):
+                    rows.append((ch, {"file": fp}))
+    return rows
+
+GLOBAL_INDEX = None
+
+def ingest_path(path: str):
+    global GLOBAL_INDEX
+    chunks = load_folder(path)
+    if not chunks:
+        GLOBAL_INDEX = None
+        return 0
+    rag = RAGIndex()
+    rag.add([c for c, _ in chunks], [m for _, m in chunks])
+    GLOBAL_INDEX = rag
+    return len(chunks)
+
+def ask(query: str, k: int = 5):
+    if GLOBAL_INDEX is None:
+        return {"answer": "No index loaded. Please POST /ingest first.", "contexts": []}
+    hits = GLOBAL_INDEX.search(query, k=k)
+    ctx = [{"text": t, "meta": m, "score": s} for t, m, s in hits]
+    # Minimal "answer" without an LLM
+    snippet = " ".join([c["text"][:200] for c in ctx])[:800]
+    return {"answer": snippet if snippet else "No relevant context found.", "contexts": ctx}
