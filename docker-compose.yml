@@ -12,7 +12,8 @@ services:
       - ./backend/data:/app/data
       - hf-cache:/root/.cache/huggingface
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
       # Override default values (env_file provides the actual values)
@@ -74,7 +75,8 @@ services:
         NEXT_PUBLIC_NATS_WS_URL: ws://localhost:9223
     container_name: pmoves-dox-frontend
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
       - API_URL=http://backend:8484
@@ -113,7 +115,8 @@ services:
     image: supabase/postgres:15.1.0.117
     container_name: supabase-db
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
       POSTGRES_PASSWORD: postgres
@@ -132,7 +135,8 @@ services:
     image: postgrest/postgrest:v11.1.0
     container_name: supabase-rest
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
       PGRST_DB_URI: postgres://postgres:postgres@supabase-db:5432/postgres
@@ -197,7 +201,8 @@ services:
     image: neo4j:5.15-community
     container_name: pmoves-dox-neo4j
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
       # Use env variable for password: NEO4J_LOCAL_PASSWORD from .env.local
@@ -308,7 +313,8 @@ services:
       context: ./external/PMOVES-BotZ-gateway/sample-servers/mcp-proxy
     container_name: pmoves-botz-postman
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
       - MCP_COMMAND=npx
@@ -348,7 +354,8 @@ services:
     volumes:
       - ./tensorzero.toml:/app/config/tensorzero.toml
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
       - TENSORZERO_PROVIDER_OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
