@@ -12,6 +12,24 @@ import time
 from app.globals import TASKS, START_TIME, DB_BACKEND_META, env_flag, search_index, db, HRM_STATS
 
 
+async def check_ollama_available(base_url: str) -> bool:
+    """Check if Ollama is available using async HTTP client.
+
+    Args:
+        base_url: The base URL of the Ollama service.
+
+    Returns:
+        True if Ollama is responding, False otherwise.
+    """
+    try:
+        import httpx
+        async with httpx.AsyncClient(timeout=2.0) as client:
+            response = await client.get(f"{base_url.rstrip('/')}/api/tags")
+            return response.status_code == 200
+    except Exception:
+        return False
+
+
 def is_docked_mode() -> bool:
     """Detect if DoX is running in docked mode within PMOVES.AI.
 
@@ -88,14 +106,7 @@ async def config():
         pass
     # Detect Ollama availability
     ollama = {"available": False, "base_url": os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")}
-    try:
-        import httpx  # type: ignore
-        base = ollama["base_url"].rstrip("/")
-        resp = httpx.get(f"{base}/api/tags", timeout=2.0)
-        if resp.status_code == 200:
-            ollama["available"] = True
-    except Exception:
-        pass
+    ollama["available"] = await check_ollama_available(ollama["base_url"])
     offline = bool(os.getenv("TRANSFORMERS_OFFLINE") or os.getenv("HF_HUB_OFFLINE"))
     frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
 

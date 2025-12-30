@@ -17,7 +17,7 @@ services:
       # Use parent TensorZero Gateway instead of local
       - TENSORZERO_BASE_URL=http://tensorzero-gateway:3030
       - OPENAI_BASE_URL=http://tensorzero-gateway:3030/openai/v1
-      - TENSORZERO_CLICKHOUSE_URL=http://tensorzero:tensorzero@tensorzero-clickhouse:8123/default
+      - TENSORZERO_CLICKHOUSE_URL=http://${CLICKHOUSE_USER:-tensorzero}:${CLICKHOUSE_PASSWORD:-tensorzero}@tensorzero-clickhouse:8123/default
 
       # Use parent NATS for cross-service messaging
       - NATS_URL=nats://nats:4222

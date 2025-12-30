@@ -89,10 +89,8 @@ export default function GeometryPage() {
 
     fetchGeometryData();
 
-    // Optional: Set up periodic refresh for live geometry updates
-    const interval = setInterval(fetchGeometryData, 30000); // Refresh every 30s
-
-    return () => clearInterval(interval);
+    // Note: Real-time geometry updates are handled via NATS WebSocket connection
+    // in HyperbolicNavigator component. No polling needed.
   }, []);
 
   return (

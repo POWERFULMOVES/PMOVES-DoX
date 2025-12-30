@@ -32,11 +32,6 @@ import httpx
 Chunk = Dict[str, Any]
 
 
-def _normalize(v: np.ndarray) -> np.ndarray:
-    norms = np.linalg.norm(v, axis=1, keepdims=True) + 1e-12
-    return v / norms
-
-
 @dataclass
 class SearchResult:
     """Result from a vector similarity search.

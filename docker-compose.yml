@@ -18,7 +18,7 @@ services:
     environment:
       # Override default values (env_file provides the actual values)
       # DB_BACKEND: Set in .env.local (sqlite or supabase), defaults to sqlite
-      - DATABASE_URL=postgresql://postgres:postgres@supabase-db:5432/postgres
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
       - SUPABASE_URL=http://supabase-rest:3000
       # Map parent env variable names to DoX expected names
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-${SUPABASE_ANON_KEY:-local-dev-anon-key-for-postgrest}}
@@ -121,7 +121,7 @@ services:
         required: false
       - .env.local
     environment:
-      POSTGRES_PASSWORD: postgres
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
       POSTGRES_DB: postgres
     networks:
       - data_tier
@@ -141,7 +141,7 @@ services:
         required: false
       - .env.local
     environment:
-      PGRST_DB_URI: postgres://postgres:postgres@supabase-db:5432/postgres
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
       PGRST_DB_SCHEMA: public,storage,graphql_public
       PGRST_DB_ANON_ROLE: anon
       # Serve API at /rest/v1 prefix for Supabase Python client compatibility
@@ -157,7 +157,7 @@ services:
   cipher-service:
     container_name: pmoves-dox-cipher
     build:
-      context: ../PMOVES-BoTZ/features/cipher/pmoves_cipher
+      context: ./external/PMOVES-BoTZ/features/cipher/pmoves_cipher
       dockerfile: Dockerfile
     # Internal service: No ports exposed to host. Reachable via http://cipher-service:3000 on app_tier
     networks:
@@ -168,7 +168,7 @@ services:
       - OLLAMA_BASE_URL=http://ollama:11434
       - SEARCH_DEVICE=cpu
     volumes:
-      - ../PMOVES-BoTZ/features/cipher/pmoves_cipher/memAgent/cipher.yml:/app/memAgent/cipher.yml
+      - ./external/PMOVES-BoTZ/features/cipher/pmoves_cipher/memAgent/cipher.yml:/app/memAgent/cipher.yml
       - cipher-data:/app/.cipher
     depends_on:
       - ollama
@@ -204,7 +204,7 @@ services:
     container_name: pmoves-dox-neo4j
     environment:
       # Minimal Neo4j 5.x community config (no EULA needed for community)
-      - NEO4J_AUTH=neo4j/pmovesNeo4jLocal2025
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-pmovesNeo4jLocal2025}
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=1G
       - NEO4J_dbms_memory_pagecache_size=512m
@@ -220,8 +220,8 @@ services:
       - data_tier
       - pmoves_data  # Connect to parent Neo4j for shared knowledge graphs
     healthcheck:
-      # Healthcheck with hardcoded password matching NEO4J_AUTH
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p pmovesNeo4jLocal2025 'RETURN 1'"]
+      # Healthcheck uses password from NEO4J_AUTH env var (defaults to pmovesNeo4jLocal2025)
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-pmovesNeo4jLocal2025} 'RETURN 1'"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -327,7 +327,7 @@ services:
 
   docling:
     build:
-      context: ../PMOVES-BoTZ/features/docling
+      context: ./external/PMOVES-BoTZ/features/docling
       dockerfile: Dockerfile.docling-mcp
     container_name: pmoves-botz-docling
     ports:
