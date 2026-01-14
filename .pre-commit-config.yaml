@@ -1,0 +1,68 @@
+# Pre-commit hooks configuration
+# Install: pip install pre-commit && pre-commit install
+# Run manually: pre-commit run --all-files
+# https://pre-commit.com
+
+repos:
+  # Secret detection
+  - repo: https://github.com/Yelp/detect-secrets
+    rev: v1.4.0
+    hooks:
+      - id: detect-secrets
+        args: ['--baseline', '.secrets.baseline']
+        exclude: package-lock.json
+
+  # General file checks
+  - repo: https://github.com/pre-commit/pre-commit-hooks
+    rev: v4.5.0
+    hooks:
+      - id: trailing-whitespace
+        exclude: '\.md$'
+      - id: end-of-file-fixer
+        exclude: '\.md$'
+      - id: check-yaml
+        args: ['--unsafe']  # Allow custom tags
+      - id: check-json
+      - id: check-added-large-files
+        args: ['--maxkb=1000']
+      - id: check-merge-conflict
+      - id: detect-private-key
+
+  # Python linting
+  - repo: https://github.com/astral-sh/ruff-pre-commit
+    rev: v0.1.9
+    hooks:
+      - id: ruff
+        args: ['--fix', '--exit-non-zero-on-fix']
+        types_or: [python, pyi]
+      - id: ruff-format
+        types_or: [python, pyi]
+
+  # TypeScript/JavaScript linting
+  - repo: https://github.com/pre-commit/mirrors-eslint
+    rev: v8.56.0
+    hooks:
+      - id: eslint
+        files: \.[jt]sx?$
+        types: [file]
+        additional_dependencies:
+          - eslint@8.56.0
+          - typescript
+          - '@typescript-eslint/parser'
+          - '@typescript-eslint/eslint-plugin'
+
+  # Docker-compose validation
+  - repo: https://github.com/IamTheFij/docker-pre-commit
+    rev: v3.0.1
+    hooks:
+      - id: docker-compose-check
+
+# CI skip configuration
+ci:
+  autofix_prs: true
+  autoupdate_schedule: weekly
+  skip:
+    - docker-compose-check  # Requires docker in CI
+
+# Default stages
+default_stages: [commit]

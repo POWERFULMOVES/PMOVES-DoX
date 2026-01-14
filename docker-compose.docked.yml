@@ -1,0 +1,145 @@
+# PMOVES-DoX Docked Mode Configuration
+# For integration with PMOVES.AI parent infrastructure
+#
+# Network: pmoves_dox_* at 172.31.x.x (avoids parent conflicts)
+# Ports: Offset from standard (Backend:8484, NATS:4223, Neo4j:17687)
+#
+# Usage:
+#   cp .env.example .env
+#   # Edit .env with production credentials
+#   docker compose -f docker-compose.docked.yml up -d
+
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.gpu
+    container_name: pmoves-dox-backend-docked
+    environment:
+      # Core configuration
+      - FRONTEND_ORIGIN=${FRONTEND_ORIGIN:-http://localhost:8092}
+      - PORT=${PORT:-8484}
+      - DOCKED_MODE=true
+
+      # Database (Supabase in docked mode)
+      - DB_BACKEND=${DB_BACKEND:-supabase}
+      - SUPABASE_URL=${SUPABASE_URL}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_SCHEMA=${SUPABASE_SCHEMA:-public}
+      - SUPABASE_DUAL_WRITE=${SUPABASE_DUAL_WRITE:-false}
+
+      # Message bus
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
+
+      # LLM services
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - TENSORZERO_URL=${TENSORZERO_URL:-http://tensorzero-gateway:3000}
+      - LANGEXTRACT_MODEL=${LANGEXTRACT_MODEL:-}
+      - LANGEXTRACT_API_KEY=${LANGEXTRACT_API_KEY:-}
+      - LANGEXTRACT_PROVIDER=${LANGEXTRACT_PROVIDER:-}
+
+      # Model downloads
+      - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
+      - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
+
+      # Feature flags
+      - AUTO_MIGRATE=${AUTO_MIGRATE:-true}
+      - HRM_ENABLED=${HRM_ENABLED:-true}
+      - HRM_MMAX=${HRM_MMAX:-6}
+      - HRM_MMIN=${HRM_MMIN:-2}
+      - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-true}
+
+      # XML processing
+      - XML_XPATH_MAP=${XML_XPATH_MAP:-}
+      - XML_XPATH_MAP_FILE=${XML_XPATH_MAP_FILE:-}
+    ports:
+      - "${DOX_BACKEND_PORT:-8484}:${PORT:-8484}"
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/artifacts:/app/artifacts
+      - ./samples:/app/samples
+      - ./watch:/app/watch
+      - hf-cache:/root/.cache/huggingface
+    networks:
+      - pmoves-dox-docked
+      - pmoves-ai-network
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    healthcheck:
+      test: ["CMD", "wget", "-qO", "-", "http://127.0.0.1:${PORT:-8484}/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+      dockerfile: Dockerfile
+    container_name: pmoves-dox-frontend-docked
+    environment:
+      - NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE:-http://localhost:8484}
+      - NEXT_PUBLIC_WS_URL=${NEXT_PUBLIC_WS_URL:-ws://localhost:4223}
+      - PORT=${FRONTEND_PORT:-3001}
+    ports:
+      - "${DOX_FRONTEND_PORT:-3001}:${FRONTEND_PORT:-3001}"
+    networks:
+      - pmoves-dox-docked
+    depends_on:
+      backend:
+        condition: service_healthy
+    restart: unless-stopped
+
+  # Optional: Local NATS for development/testing
+  nats:
+    image: nats:2.10-alpine
+    container_name: pmoves-dox-nats
+    profiles: ["nats"]
+    command: ["--jetstream", "--store_dir=/data"]
+    ports:
+      - "${DOX_NATS_PORT:-4223}:4222"
+      - "${DOX_NATS_MONITOR_PORT:-8223}:8222"
+    volumes:
+      - nats-data:/data
+    networks:
+      - pmoves-dox-docked
+    restart: unless-stopped
+
+  # Optional: Local Neo4j for knowledge graph
+  neo4j:
+    image: neo4j:5-community
+    container_name: pmoves-dox-neo4j
+    profiles: ["neo4j"]
+    environment:
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD}
+      - NEO4J_PLUGINS=["apoc"]
+    ports:
+      - "${DOX_NEO4J_BOLT_PORT:-17687}:7687"
+      - "${DOX_NEO4J_HTTP_PORT:-17474}:7474"
+    volumes:
+      - neo4j-data:/data
+    networks:
+      - pmoves-dox-docked
+    restart: unless-stopped
+
+networks:
+  pmoves-dox-docked:
+    name: pmoves-dox-docked
+    ipam:
+      config:
+        - subnet: 172.31.0.0/16
+  # External network for parent PMOVES.AI connection
+  pmoves-ai-network:
+    external: true
+    name: ${PMOVES_AI_NETWORK:-pmoves-ai-net}
+
+volumes:
+  hf-cache:
+  nats-data:
+  neo4j-data:
