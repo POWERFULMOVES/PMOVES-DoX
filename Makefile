@@ -130,18 +130,22 @@ test-standalone:
 	@echo "✅ Frontend: http://localhost:3001"
 	@echo ""
 	@echo "Testing DoX Agent Zero..."
-	@curl -sf http://localhost:50051/health > /dev/null || { \
+	@WARNINGS=0; \
+	curl -sf http://localhost:50051/health > /dev/null || { \
 		echo "⚠️  DoX Agent Zero health check failed (may still be starting)"; \
-	}
-	@echo "✅ DoX Agent Zero: http://localhost:50051/health"
+		WARNINGS=1; \
+	}; \
+	if [ $$WARNINGS -eq 0 ]; then echo "✅ DoX Agent Zero: http://localhost:50051/health"; fi
 	@echo ""
 	@echo "Testing geometry bus..."
-	@curl -sf http://localhost:3001/api/cipher/geometry/demo-packet > /dev/null || { \
+	@WARNINGS=0; \
+	curl -sf http://localhost:3001/api/cipher/geometry/demo-packet > /dev/null || { \
 		echo "⚠️  Geometry endpoint not ready"; \
-	}
-	@echo "✅ Geometry bus available"
+		WARNINGS=1; \
+	}; \
+	if [ $$WARNINGS -eq 0 ]; then echo "✅ Geometry bus available"; fi
 	@echo ""
-	@echo "✅ All standalone tests PASSED"
+	@echo "✅ All standalone tests completed (check warnings above if any)"
 
 test-docked:
 	@echo "Testing docked deployment..."

@@ -21,7 +21,7 @@ services:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
       - SUPABASE_URL=http://supabase-rest:3000
       # Map parent env variable names to DoX expected names
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-${SUPABASE_ANON_KEY:-local-dev-anon-key-for-postgrest}}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-local-dev-anon-key-for-postgrest}
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_SERVICE_ROLE_KEY:-local-dev-service-key-for-postgrest}}
       - REDIS_URL=redis://redis:6379
       - DB_BACKEND=${DB_BACKEND:-supabase}
