@@ -1,7 +1,7 @@
-import { defineConfig } from 'vitest/config'
-import react from '@vitejs/plugin-react'
-import { resolve } from 'path'
- 
+import { defineConfig } from 'vitest/config';
+import react from '@vitejs/plugin-react';
+import { resolve } from 'path';
+
 export default defineConfig({
   plugins: [react()],
   test: {
@@ -9,7 +9,13 @@ export default defineConfig({
     globals: true,
     setupFiles: [],
     alias: {
-      '@': resolve(__dirname, './')
-    }
+      '@': resolve(__dirname, './'),
+    },
+    // Silence the CJS deprecation warning
+    server: {
+      deps: {
+        inline: ['d3', '@testing-library/react'],
+      },
+    },
   },
-})
+});
