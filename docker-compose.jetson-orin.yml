@@ -1,0 +1,90 @@
+services:
+  backend:
+    build:
+      context: ./backend
+      dockerfile: Dockerfile.jetson.orin
+      # Optionally override BASE_IMAGE for your JetPack/L4T version
+      # args:
+      #   BASE_IMAGE: nvcr.io/nvidia/l4t-ml:r35.4.1-py3
+    environment:
+      - FRONTEND_ORIGIN=http://localhost:3000
+      - PORT=8000
+      - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
+      - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - AUTO_MIGRATE=${AUTO_MIGRATE:-false}
+      - HRM_ENABLED=${HRM_ENABLED:-false}
+      - HRM_MMAX=${HRM_MMAX:-6}
+      - HRM_MMIN=${HRM_MMIN:-2}
+      - XML_XPATH_MAP=${XML_XPATH_MAP:-}
+      - XML_XPATH_MAP_FILE=${XML_XPATH_MAP_FILE:-}
+      - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-false}
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    runtime: nvidia
+    ports:
+      - "8000:8000"
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/artifacts:/app/artifacts
+      - ./samples:/app/samples
+      - ./watch:/app/watch
+    restart: unless-stopped
+
+  frontend:
+    build:
+      context: ./frontend
+    environment:
+      - NEXT_PUBLIC_API_BASE=http://localhost:8000
+      - PORT=3000
+    ports:
+      - "3000:3000"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  ollama:
+    image: ollama/ollama:latest
+    profiles: ["ollama"]
+    volumes:
+      - ollama:/root/.ollama
+    environment:
+      - NVIDIA_VISIBLE_DEVICES=all
+      - NVIDIA_DRIVER_CAPABILITIES=compute,utility
+    runtime: nvidia
+    restart: unless-stopped
+
+  datavzrd:
+    build:
+      context: ./tools/datavzrd
+      dockerfile: Dockerfile
+    profiles: ["tools"]
+    environment:
+      - VIZ_FILE=
+    volumes:
+      - ./backend/artifacts:/app/artifacts
+    ports:
+      - "5173:5173"
+    depends_on:
+      - backend
+    restart: unless-stopped
+
+  schemavzrd:
+    build:
+      context: ./tools/schemavzrd
+      dockerfile: Dockerfile
+    profiles: ["tools"]
+    environment:
+      - DB_URL=${DB_URL:-}
+      - OUTPUT_DIR=/app/out/schema
+    volumes:
+      - ./backend/artifacts:/app/out
+    ports:
+      - "5174:5174"
+    restart: unless-stopped
+
+networks:
+  default:
+    name: pmoves-dox-net
+volumes:
+  ollama:

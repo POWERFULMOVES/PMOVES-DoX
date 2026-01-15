@@ -12,40 +12,37 @@ services:
       - ./backend/data:/app/data
       - hf-cache:/root/.cache/huggingface
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
-      - DB_BACKEND=supabase
-      - DATABASE_URL=postgresql://postgres:postgres@supabase-db:5432/postgres
-      - SUPABASE_URL=${SUPABASE_URL:-http://supabase-rest:3000}
-      - SUPABASE_SERVICE_KEY=${PGRST_JWT_SECRET}
+      # Override default values (env_file provides the actual values)
+      # DB_BACKEND: Set in .env.local (sqlite or supabase), defaults to sqlite
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
+      - SUPABASE_URL=http://supabase-rest:3000
+      # Map parent env variable names to DoX expected names
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-local-dev-anon-key-for-postgrest}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_SERVICE_ROLE_KEY:-local-dev-service-key-for-postgrest}}
       - REDIS_URL=redis://redis:6379
-      - NATS_URL=${NATS_URL:-nats://nats:4222}
-      - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001
-      - PORT=${BACKEND_PORT:-8484}
-      - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
-      - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
-      - AUTO_MIGRATE=${AUTO_MIGRATE:-false}
-      - HRM_ENABLED=${HRM_ENABLED:-false}
-      - HRM_MMAX=${HRM_MMAX:-6}
-      - HRM_MMIN=${HRM_MMIN:-2}
-      - XML_XPATH_MAP=${XML_XPATH_MAP:-}
-      - XML_XPATH_MAP_FILE=${XML_XPATH_MAP_FILE:-}
-      - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-false}
-      - LANGEXTRACT_API_KEY=${GOOGLE_API_KEY}
+      - DB_BACKEND=${DB_BACKEND:-supabase}
+      - NATS_URL=nats://nats:4222
+      - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001,http://localhost:3001,http://127.0.0.1:3001
+      - PORT=8484
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - SEARCH_DEVICE=cpu
+      - OPEN_PDF_ENABLED=true
       # Use TensorZero gateway as OpenAI-compatible endpoint
-      - OPENAI_BASE_URL=${TENSORZERO_URL:-http://tensorzero-gateway:3000}/openai/v1
-      - TENSORZERO_BASE_URL=${TENSORZERO_URL:-http://tensorzero-gateway:3000}
-      - OPENAI_API_KEY=tensorzero
+      - OPENAI_BASE_URL=http://tensorzero-gateway:3000/openai/v1
+      - TENSORZERO_BASE_URL=http://tensorzero-gateway:3000
+      - OPENAI_API_KEY=${OPENAI_API_KEY:-tensorzero}
+      # TensorZero Embeddings (for SearchIndex - uses GPU Orchestrator)
+      - TENSORZERO_EMBEDDING_MODEL=qwen3_embedding_8b_local
       # Neo4j Knowledge Graph - Local (DoX container)
       - NEO4J_LOCAL_URI=bolt://neo4j:7687
       - NEO4J_LOCAL_USER=neo4j
-      - NEO4J_LOCAL_PASSWORD=${NEO4J_LOCAL_PASSWORD}
       # Neo4j Knowledge Graph - Parent (PMOVES.AI shared)
       - NEO4J_PARENT_URI=bolt://pmoves-neo4j-1:7687
       - NEO4J_PARENT_USER=neo4j
-      - NEO4J_PARENT_PASSWORD=${NEO4J_PARENT_PASSWORD}
     ports:
       - "8484:8484"
     networks:
@@ -80,7 +77,8 @@ services:
         NEXT_PUBLIC_NATS_WS_URL: ws://localhost:9223
     container_name: pmoves-dox-frontend
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
       - API_URL=http://backend:8484
@@ -118,9 +116,13 @@ services:
   supabase-db:
     image: supabase/postgres:15.1.0.117
     container_name: supabase-db
+    env_file:
+      - path: ../pmoves/env.shared
+        required: false
+      - .env.local
     environment:
       POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
-      POSTGRES_DB: ${POSTGRES_DB:-postgres}
+      POSTGRES_DB: postgres
     networks:
       - data_tier
     volumes:
@@ -134,11 +136,16 @@ services:
   supabase-rest:
     image: postgrest/postgrest:v11.1.0
     container_name: supabase-rest
+    env_file:
+      - path: ../pmoves/env.shared
+        required: false
+      - .env.local
     environment:
       PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
       PGRST_DB_SCHEMA: public,storage,graphql_public
       PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${PGRST_JWT_SECRET}
+      # Serve API at /rest/v1 prefix for Supabase Python client compatibility
+      PGRST_SERVER_PORT_PATH: /rest/v1
     ports:
       - "54321:3000"
     networks:
@@ -150,7 +157,7 @@ services:
   cipher-service:
     container_name: pmoves-dox-cipher
     build:
-      context: ../PMOVES-BoTZ/features/cipher/pmoves_cipher
+      context: ./external/PMOVES-BoTZ/features/cipher/pmoves_cipher
       dockerfile: Dockerfile
     # Internal service: No ports exposed to host. Reachable via http://cipher-service:3000 on app_tier
     networks:
@@ -158,9 +165,10 @@ services:
     environment:
       - CIPHER_API_PREFIX=""
       - NODE_ENV=production
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - OLLAMA_BASE_URL=http://ollama:11434
+      - SEARCH_DEVICE=cpu
     volumes:
-      - ./backend/cipher-config/cipher.yml:/app/memAgent/cipher.yml
+      - ./external/PMOVES-BoTZ/features/cipher/pmoves_cipher/memAgent/cipher.yml:/app/memAgent/cipher.yml
       - cipher-data:/app/.cipher
     depends_on:
       - ollama
@@ -195,8 +203,8 @@ services:
     image: neo4j:5.15-community
     container_name: pmoves-dox-neo4j
     environment:
-      # Use env variable for password: NEO4J_LOCAL_PASSWORD must be set in .env.local
-      - NEO4J_AUTH=neo4j/${NEO4J_LOCAL_PASSWORD}
+      # Minimal Neo4j 5.x community config (no EULA needed for community)
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-pmovesNeo4jLocal2025}
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=1G
       - NEO4J_dbms_memory_pagecache_size=512m
@@ -212,8 +220,8 @@ services:
       - data_tier
       - pmoves_data  # Connect to parent Neo4j for shared knowledge graphs
     healthcheck:
-      # Healthcheck uses env variable for password
-      test: ["CMD", "sh", "-c", "cypher-shell -u neo4j -p $${NEO4J_LOCAL_PASSWORD} RETURN 1"]
+      # Healthcheck uses password from NEO4J_AUTH env var (defaults to pmovesNeo4jLocal2025)
+      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-pmovesNeo4jLocal2025} 'RETURN 1'"]
       interval: 30s
       timeout: 10s
       retries: 5
@@ -262,7 +270,7 @@ services:
     container_name: schemavzrd
     profiles: ["tools"]
     environment:
-      - DB_URL=${DB_URL:-}
+      - DB_URL=
       - OUTPUT_DIR=/app/out/schema
     volumes:
       - ./backend/artifacts:/app/out
@@ -303,7 +311,8 @@ services:
       context: ./external/PMOVES-BotZ-gateway/sample-servers/mcp-proxy
     container_name: pmoves-botz-postman
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
       - MCP_COMMAND=npx
@@ -343,12 +352,13 @@ services:
     volumes:
       - ./tensorzero.toml:/app/config/tensorzero.toml
     env_file:
-      - ../pmoves/env.shared
+      - path: ../pmoves/env.shared
+        required: false
       - .env.local
     environment:
       - TENSORZERO_PROVIDER_OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - GOOGLE_AI_STUDIO_API_KEY=${GOOGLE_API_KEY}
-      - TENSORZERO_CLICKHOUSE_URL=${TENSORZERO_CLICKHOUSE_URL:-http://tensorzero:tensorzero@tensorzero-clickhouse:8123/default}
+      - TENSORZERO_CLICKHOUSE_URL=http://${CLICKHOUSE_USER:-tensorzero}:${CLICKHOUSE_PASSWORD:-tensorzero}@tensorzero-clickhouse:8123/default
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -377,8 +387,8 @@ services:
     environment:
       - PROFILE=pmoves_custom
       # MCP Server Configuration (docking pattern)
-      - MCP_SERVER_ENABLED=${AGENT_ZERO_MCP_ENABLED:-false}
-      - MCP_SERVER_TOKEN=${AGENT_ZERO_MCP_TOKEN:-}
+      - MCP_SERVER_ENABLED=false
+      - MCP_SERVER_TOKEN=
       # Standalone mode uses Web UI on WEB_UI_PORT (default 50051)
       # Docked mode exposes MCP at http://pmoves-agent-zero:50051/mcp/t-{token}/sse
       - WEB_UI_PORT=50051
@@ -398,46 +408,59 @@ services:
       retries: 3
 
 networks:
+  # PMOVES-DoX Standalone Networks (namespaced to avoid conflicts with parent PMOVES.AI)
+  # In docked mode, these are overridden to connect to parent networks
   api_tier:
     driver: bridge
-    name: pmoves_api
+    name: pmoves_dox_api
     ipam:
       config:
-        - subnet: 172.30.1.0/24
+        - subnet: 172.31.1.0/24  # Different from parent's 172.30.1.0/24
 
   app_tier:
     driver: bridge
-    name: pmoves_app
+    name: pmoves_dox_app
     internal: true
     ipam:
       config:
-        - subnet: 172.30.2.0/24
+        - subnet: 172.31.2.0/24  # Different from parent's 172.30.2.0/24
 
   bus_tier:
     driver: bridge
-    name: pmoves_bus
+    name: pmoves_dox_bus
     internal: true
     ipam:
       config:
-        - subnet: 172.30.3.0/24
+        - subnet: 172.31.3.0/24  # Different from parent's 172.30.3.0/24
 
   data_tier:
     driver: bridge
-    name: pmoves_dox_data  # Renamed to avoid conflict with parent pmoves_data
+    name: pmoves_dox_data
     internal: true
     ipam:
       config:
-        - subnet: 172.31.4.0/24  # Changed to avoid conflict with parent pmoves_data (172.30.4.0/24)
+        - subnet: 172.31.4.0/24  # DoX-only data tier
 
   monitoring_tier:
     driver: bridge
-    name: pmoves_dox_monitoring  # Renamed to avoid conflict
+    name: pmoves_dox_monitoring
     ipam:
       config:
-        - subnet: 172.31.5.0/24  # Changed to avoid conflict with parent pmoves_monitoring (172.30.5.0/24)
+        - subnet: 172.31.5.0/24  # DoX-only monitoring tier
 
-  # External network to connect to parent PMOVES.AI services
-  # (ClickHouse on pmoves_data, pmoves_monitoring)
+  # External parent networks (for docked mode - connected via docker-compose.docked.yml)
+  pmoves_api:
+    external: true
+    name: pmoves_api
+
+  pmoves_app:
+    external: true
+    name: pmoves_app
+
+  pmoves_bus:
+    external: true
+    name: pmoves_bus
+
   pmoves_data:
     external: true
     name: pmoves_data

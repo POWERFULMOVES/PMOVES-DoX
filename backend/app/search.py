@@ -1,3 +1,14 @@
+"""Vector search index for PMOVES-DoX.
+
+Provides semantic search across documents, APIs, logs, and tags using
+Ollama embeddings (primary) or SentenceTransformer fallback.
+Supports both FAISS-accelerated and numpy-based vector search.
+
+Classes:
+    SearchResult: Search result with score, text, and metadata
+    SearchIndex: Vector search engine with rebuild and query methods
+"""
+
 from __future__ import annotations
 
 import os
@@ -15,22 +26,37 @@ try:
 except Exception:  # pragma: no cover
     faiss = None  # type: ignore
 
-from sentence_transformers import SentenceTransformer
+import httpx
 
 
 Chunk = Dict[str, Any]
 
 
-def _normalize(v: np.ndarray) -> np.ndarray:
-    norms = np.linalg.norm(v, axis=1, keepdims=True) + 1e-12
-    return v / norms
-
-
 @dataclass
 class SearchResult:
+    """Result from a vector similarity search.
+
+    Attributes:
+        score: Similarity score (higher is more similar)
+        text: Matching text content
+        meta: Metadata including source type, artifact_id, etc.
+    """
     score: float
     text: str
     meta: Dict[str, Any]
+
+
+def _normalize(v: np.ndarray) -> np.ndarray:
+    """L2-normalize a vector or matrix of vectors.
+
+    Args:
+        v: Input vectors as numpy array.
+
+    Returns:
+        Normalized vectors with unit L2 norm.
+    """
+    norms = np.linalg.norm(v, axis=1, keepdims=True) + 1e-12
+    return v / norms
 
 
 LOGGER = logging.getLogger(__name__)
@@ -39,21 +65,60 @@ LOGGER = logging.getLogger(__name__)
 class SearchIndex:
     """Lightweight vector index across PDFs (markdown), APIs, logs, and tags.
 
-    - Embeddings: sentence-transformers (config: SEARCH_MODEL or default all-MiniLM-L6-v2)
+    - Embeddings: Ollama (qwen3-embedding:8b via GPU) or SentenceTransformer fallback
     - Vector store: FAISS (IP) if available, else numpy linear scan fallback
+
+    Environment Variables:
+    - OLLAMA_BASE_URL: Ollama service URL (default: http://ollama:11434)
+    - OLLAMA_EMBEDDING_MODEL: Model name (default: qwen3-embedding:8b)
+    - SEARCH_MODEL: sentence-transformers fallback model (default: all-MiniLM-L6-v2)
+    - SEARCH_DEVICE: "cuda", "cpu", or "auto" (for sentence_transformers fallback only)
+
+    Attributes:
+        db: Database instance for chunk retrieval
+        ollama_base_url: Ollama service URL
+        ollama_model: Ollama embedding model name
+        faiss_index: FAISS index or numpy array fallback
+        ids: List of chunk IDs indexed
+        payloads: List of chunk payloads indexed
     """
 
     def __init__(self, db):
+        """Initialize the search index.
+
+        Args:
+            db: Database instance for chunk retrieval.
+        """
         self.db = db
-        self.model_name = os.getenv("SEARCH_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
+
+        # Ollama configuration (primary - GPU-accelerated via Ollama)
+        self.ollama_base_url = os.getenv(
+            "OLLAMA_BASE_URL",
+            "http://ollama:11434"
+        )
+        self.ollama_model = os.getenv(
+            "OLLAMA_EMBEDDING_MODEL",
+            "qwen3-embedding:8b"
+        )
+
+        # SentenceTransformer configuration (fallback)
+        self.st_model_name = os.getenv("SEARCH_MODEL", "sentence-transformers/all-MiniLM-L6-v2")
         self.device = self._resolve_device()
-        self.model: Optional[SentenceTransformer] = None
+        self.model: Optional[Any] = None  # SentenceTransformer fallback
+
         self.faiss_index = None
         self.ids: List[str] = []
         self.payloads: List[Chunk] = []
         self._loaded = False
+        self._http_client: Optional[httpx.Client] = None
+        self._use_ollama = True  # Flag to track if Ollama is available
 
     def _resolve_device(self) -> str:
+        """Resolve the device for SentenceTransformer embeddings.
+
+        Returns:
+            "cuda" if available and requested, "cpu" otherwise.
+        """
         requested = os.getenv("SEARCH_DEVICE")
         if requested:
             return requested
@@ -66,8 +131,87 @@ class SearchIndex:
         return "cpu"
 
     def _load_model(self):
+        """Load SentenceTransformer fallback model."""
+        if self.model is None and not self._use_ollama:
+            from sentence_transformers import SentenceTransformer
+            self.model = SentenceTransformer(self.st_model_name, device=self.device)
+
+    def _get_http_client(self) -> httpx.Client:
+        """Get or create HTTP client for Ollama API calls."""
+        if self._http_client is None:
+            timeout = httpx.Timeout(300.0, connect=10.0)  # 5 min timeout for embedding generation
+            self._http_client = httpx.Client(timeout=timeout)
+        return self._http_client
+
+    def _encode_ollama(self, texts: List[str]) -> np.ndarray:
+        """Encode texts using Ollama embeddings API.
+
+        Ollama provides an OpenAI-compatible /v1/embeddings endpoint.
+        Uses qwen3-embedding:8b model with GPU acceleration.
+        """
+        client = self._get_http_client()
+        embeddings = []
+
+        # Process in batches to avoid payload limits
+        batch_size = 32
+        for i in range(0, len(texts), batch_size):
+            batch = texts[i:i + batch_size]
+            try:
+                response = client.post(
+                    f"{self.ollama_base_url}/v1/embeddings",
+                    json={
+                        "model": self.ollama_model,
+                        "input": batch
+                    },
+                    headers={"Content-Type": "application/json"}
+                )
+                response.raise_for_status()
+                result = response.json()
+
+                # Handle OpenAI-compatible response format
+                if "data" in result:
+                    data = result["data"]
+                    if isinstance(data, list):
+                        # Sort by index to ensure correct order
+                        data_sorted = sorted(data, key=lambda x: x.get("index", 0))
+                        batch_embeddings = [item["embedding"] for item in data_sorted]
+                        embeddings.extend(batch_embeddings)
+                    else:
+                        # Single embedding response
+                        embeddings.append(data["embedding"])
+                else:
+                    LOGGER.warning("Unexpected Ollama response format: %s", result)
+                    raise ValueError("Unexpected response format from Ollama")
+
+            except httpx.HTTPStatusError as e:
+                LOGGER.error("Ollama HTTP error %s: %s", e.response.status_code, e.response.text)
+                # Fall back to SentenceTransformer on HTTP errors
+                self._use_ollama = False
+                self._load_model()
+                return self._encode_sentence_transformers(texts)
+            except Exception as e:
+                LOGGER.warning("Ollama embedding failed: %s. Falling back to SentenceTransformer.", e)
+                self._use_ollama = False
+                self._load_model()
+                return self._encode_sentence_transformers(texts)
+
+        if not embeddings:
+            raise RuntimeError("Failed to get embeddings from Ollama")
+
+        return np.array(embeddings, dtype=np.float32)
+
+    def _encode_sentence_transformers(self, texts: List[str]) -> np.ndarray:
+        """Encode texts using SentenceTransformer (fallback when Ollama unavailable)."""
         if self.model is None:
-            self.model = SentenceTransformer(self.model_name, device=self.device)
+            self._load_model()
+        return self.model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+
+    def _encode(self, texts: List[str]) -> np.ndarray:
+        """Encode texts using Ollama (primary) or SentenceTransformer (fallback)."""
+        if self._use_ollama:
+            return self._encode_ollama(texts)
+        else:
+            return self._encode_sentence_transformers(texts)
 
     def _gather_chunks(self) -> List[Chunk]:
         chunks: List[Chunk] = []
@@ -162,6 +306,14 @@ class SearchIndex:
         return chunks
 
     def rebuild(self) -> Dict[str, Any]:
+        """Rebuild the search index from all available content.
+
+        Gathers chunks from PDFs, APIs, logs, and tags, generates embeddings,
+        and builds a new FAISS or numpy index.
+
+        Returns:
+            Dictionary with items count, backend type, and embedding provider.
+        """
         self._load_model()
         chunks = self._gather_chunks()
         if not chunks:
@@ -173,7 +325,7 @@ class SearchIndex:
             return {"items": 0}
 
         texts = [c["text"] for c in chunks]
-        emb = self.model.encode(texts, convert_to_numpy=True, show_progress_bar=False)
+        emb = self._encode(texts)
         emb = _normalize(emb.astype("float32"))
 
         self.ids = [c["id"] for c in chunks]
@@ -191,7 +343,11 @@ class SearchIndex:
         self._sync_remote_embeddings(chunks, emb)
 
         self._loaded = True
-        return {"items": len(chunks), "backend": "faiss" if faiss is not None else "numpy"}
+        return {
+            "items": len(chunks),
+            "backend": "faiss" if faiss is not None else "numpy",
+            "embedding_provider": "ollama" if self._use_ollama else "sentence_transformers"
+        }
 
     def _sync_remote_embeddings(self, chunks: List[Chunk], embeddings: np.ndarray) -> None:
         store = getattr(self.db, "store_search_chunks", None)
@@ -221,13 +377,22 @@ class SearchIndex:
             LOGGER.warning("Failed to sync search embeddings to remote store: %s", exc)
 
     def search(self, query: str, k: int = 10) -> List[SearchResult]:
+        """Search for similar chunks using vector similarity.
+
+        Args:
+            query: Search query text.
+            k: Maximum number of results to return.
+
+        Returns:
+            List of SearchResult objects sorted by similarity score.
+        """
         if not self._loaded:
             self.rebuild()
         if not query.strip() or not self.payloads:
             return []
 
         self._load_model()
-        q = self.model.encode([query], convert_to_numpy=True)
+        q = self._encode([query])
         q = _normalize(q.astype("float32"))
 
         if faiss is not None and isinstance(self.faiss_index, faiss.Index):  # type: ignore
@@ -253,7 +418,7 @@ class SearchIndex:
         """Retrieve all embedding vectors for chunks belonging to a document."""
         if not self._loaded:
             self.rebuild()
-            
+
         vectors: List[List[float]] = []
         for i, ch in enumerate(self.payloads):
             meta = ch.get("meta") or {}
@@ -265,7 +430,7 @@ class SearchIndex:
                     vec = self.faiss_index.reconstruct(i)
                 elif isinstance(self.faiss_index, np.ndarray):
                     vec = self.faiss_index[i]
-                
+
                 if vec is not None:
                     vectors.append(vec.tolist())
         return vectors

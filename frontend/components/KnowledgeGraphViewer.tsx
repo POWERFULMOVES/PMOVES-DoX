@@ -11,12 +11,28 @@ import { Network, Loader2, AlertCircle, RefreshCw } from "lucide-react";
  * @property label - Display text for the node (entity text)
  * @property type - Entity type (PERSON, ORG, LOC, DATE, etc.)
  * @property title - Tooltip text showing full entity info
+ * @property x - X coordinate (added by D3 force simulation)
+ * @property y - Y coordinate (added by D3 force simulation)
+ * @property vx - X velocity (added by D3 force simulation)
+ * @property vy - Y velocity (added by D3 force simulation)
+ * @property fx - Fixed X position (optional, for pinning nodes)
+ * @property fy - Fixed Y position (optional, for pinning nodes)
+ * @property index - Node index in the simulation (added by D3)
+ *
+ * D3 force simulation compatible - D3 will populate x, y, vx, vy, index at runtime.
  */
 interface GraphNode {
   id: string;
   label: string;
   type: string;
   title?: string;
+  x?: number;
+  y?: number;
+  vx?: number;
+  vy?: number;
+  fx?: number | null;
+  fy?: number | null;
+  index?: number;
 }
 
 /**
@@ -26,12 +42,20 @@ interface GraphNode {
  * @property to - Target node ID
  * @property weight - Relationship strength (0-1, affects line thickness)
  * @property title - Tooltip text describing the relationship
+ * @property source - Source node (added by D3 force simulation at runtime)
+ * @property target - Target node (added by D3 force simulation at runtime)
+ * @property index - Edge index in the simulation (added by D3)
+ *
+ * D3 force simulation compatible - D3 will populate source, target, index at runtime.
  */
 interface GraphEdge {
   from: string;
   to: string;
   weight?: number;
   title?: string;
+  source: GraphNode | string | number;
+  target: GraphNode | string | number;
+  index?: number;
 }
 
 /**
@@ -176,6 +200,13 @@ export default function KnowledgeGraphViewer({
     const widthAttr = svgRef.current.clientWidth || width;
     const heightAttr = svgRef.current.clientHeight || height;
 
+    // Prepare edges: convert from/to to source/target for D3 forceLink
+    const edges = graphData.edges.map((edge) => ({
+      ...edge,
+      source: edge.from,
+      target: edge.to,
+    }));
+
     // Add zoom behavior
     const zoom = d3
       .zoom<SVGSVGElement, unknown>()
@@ -209,7 +240,7 @@ export default function KnowledgeGraphViewer({
       .force(
         "link",
         d3
-          .forceLink<GraphNode, GraphEdge>(graphData.edges)
+          .forceLink<GraphNode, GraphEdge>(edges)
           .id((d) => d.id)
           .distance(100)
       )
@@ -221,7 +252,7 @@ export default function KnowledgeGraphViewer({
     const link = g
       .append("g")
       .selectAll("line")
-      .data(graphData.edges)
+      .data(edges)
       .join("line")
       .attr("stroke", "#999")
       .attr("stroke-opacity", 0.6)
@@ -280,10 +311,22 @@ export default function KnowledgeGraphViewer({
     // Update positions on tick
     simulationRef.current.on("tick", () => {
       link
-        .attr("x1", (d) => (d.source as GraphNode).x!)
-        .attr("y1", (d) => (d.source as GraphNode).y!)
-        .attr("x2", (d) => (d.target as GraphNode).x!)
-        .attr("y2", (d) => (d.target as GraphNode).y!);
+        .attr("x1", (d) => {
+          const s = d.source as GraphNode | string;
+          return typeof s === "string" ? 0 : (s.x ?? 0);
+        })
+        .attr("y1", (d) => {
+          const s = d.source as GraphNode | string;
+          return typeof s === "string" ? 0 : (s.y ?? 0);
+        })
+        .attr("x2", (d) => {
+          const t = d.target as GraphNode | string;
+          return typeof t === "string" ? 0 : (t.x ?? 0);
+        })
+        .attr("y2", (d) => {
+          const t = d.target as GraphNode | string;
+          return typeof t === "string" ? 0 : (t.y ?? 0);
+        });
 
       node.attr("transform", (d) => `translate(${d.x},${d.y})`);
     });

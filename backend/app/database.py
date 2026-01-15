@@ -1,3 +1,23 @@
+"""SQLite database models and operations for PMOVES-DoX.
+
+This module provides SQLModel-based database schemas for documents,
+artifacts, evidence, facts, and other application data. It includes
+both core tables (Artifact, Evidence, Fact) and extended tables
+(Document, APIEndpoint, LogEntry, etc.) for advanced features.
+
+Classes:
+    Artifact: Uploaded file metadata
+    Evidence: Extracted content chunks with coordinates
+    Fact: Structured data extracted from evidence
+    SummaryRow: Generated summaries with scope/style
+    Document: Extended document metadata
+    APIEndpoint: Discovered API endpoint definitions
+    LogEntry: System and application logs
+    TagRow: Extracted tags from documents
+    Database: Core database operations (SQLite)
+    ExtendedDatabase: Extended database with additional methods
+"""
+
 import os
 import json
 import uuid
@@ -9,6 +29,18 @@ from sqlmodel import SQLModel, Field, create_engine, Session, select, delete, te
 
 
 class Artifact(SQLModel, table=True):
+    """Uploaded file metadata.
+
+    Attributes:
+        id: Unique artifact identifier
+        filename: Original filename
+        filepath: Path to stored file
+        filetype: File extension or MIME type
+        report_week: Optional reporting week identifier
+        status: Processing status (queued, processing, completed, error)
+        source_url: URL if file was downloaded
+        extra_json: Additional metadata as JSON string
+    """
     id: str = Field(primary_key=True)
     filename: str
     filepath: str
@@ -20,6 +52,17 @@ class Artifact(SQLModel, table=True):
 
 
 class Evidence(SQLModel, table=True):
+    """Extracted content chunk from a document.
+
+    Attributes:
+        id: Unique evidence identifier
+        artifact_id: Parent artifact reference
+        locator: Page/section reference (e.g., "page 5")
+        preview: Text preview of the content
+        content_type: MIME type of original content
+        coordinates_json: Bounding box coordinates as JSON
+        full_data_json: Complete extracted data as JSON
+    """
     id: str = Field(primary_key=True)
     artifact_id: str
     locator: Optional[str] = None
@@ -30,6 +73,16 @@ class Evidence(SQLModel, table=True):
 
 
 class Fact(SQLModel, table=True):
+    """Structured metric extracted from document evidence.
+
+    Attributes:
+        id: Unique fact identifier
+        artifact_id: Parent artifact reference
+        report_week: Optional reporting week identifier
+        entity: Named entity associated with the metric
+        metrics_json: Metric data as JSON string
+        evidence_id: Source evidence reference
+    """
     id: str = Field(primary_key=True)
     artifact_id: str
     report_week: Optional[str] = None
@@ -39,6 +92,20 @@ class Fact(SQLModel, table=True):
 
 
 class SummaryRow(SQLModel, table=True):
+    """Generated document summary with configurable scope and style.
+
+    Attributes:
+        id: Unique summary identifier
+        scope: Summary scope (workspace, document, custom)
+        scope_key: Scope-specific key for grouping
+        style: Summary style (bullet, detailed, executive)
+        provider: LLM provider used for generation
+        prompt: Optional custom prompt used
+        summary_text: Generated summary content
+        artifact_ids_json: Referenced artifact IDs as JSON
+        evidence_ids_json: Referenced evidence IDs as JSON
+        created_at: ISO timestamp of generation
+    """
     __tablename__ = "summaries"
 
     id: str = Field(primary_key=True)
@@ -54,9 +121,22 @@ class SummaryRow(SQLModel, table=True):
 
 
 class Database:
-    """SQLite-backed database with a similar interface as the prior in-memory DB."""
+    """SQLite-backed database with SQLModel ORM.
+
+    Provides CRUD operations for artifacts, evidence, facts, and summaries.
+    Handles schema migrations for backward compatibility.
+
+    Attributes:
+        db_url: SQLAlchemy database URL
+        engine: SQLAlchemy engine instance
+    """
 
     def __init__(self, db_path: Optional[str] = None):
+        """Initialize the SQLite database.
+
+        Args:
+            db_path: Path to SQLite file. Defaults to DB_PATH env var or "db.sqlite3".
+        """
         db_path = db_path or os.getenv("DB_PATH", "db.sqlite3")
         self.db_url = f"sqlite:///{db_path}"
         self.engine = create_engine(self.db_url, echo=False)
@@ -83,6 +163,14 @@ class Database:
                 conn.exec_driver_sql("ALTER TABLE artifact ADD COLUMN extra_json TEXT")
 
     def add_artifact(self, artifact: Dict) -> str:
+        """Add a new artifact to the database.
+
+        Args:
+            artifact: Dictionary containing artifact metadata.
+
+        Returns:
+            The artifact ID.
+        """
         payload = dict(artifact)
         extras = payload.pop("extras", None) or payload.pop("metadata", None)
         if extras is not None:

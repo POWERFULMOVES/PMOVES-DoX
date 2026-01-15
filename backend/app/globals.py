@@ -1,3 +1,24 @@
+"""Global state and configuration for PMOVES-DoX backend.
+
+This module initializes all singleton services and global constants used
+throughout the application. It must be imported before other app modules
+to ensure proper initialization order.
+
+Globals:
+    UPLOAD_DIR: Directory for uploaded files
+    ARTIFACTS_DIR: Directory for processed artifacts
+    db: Database instance (SQLite or Supabase)
+    DB_BACKEND_META: Metadata about the database backend
+    qa_engine: Question-answering engine instance
+    search_index: Vector search index instance
+    summary_service: Document summarization service
+    HRM_ENABLED: Whether Halting Reasoning Module is enabled
+    HRM_CFG: HRM configuration parameters
+    HRM_STATS: HRM metrics collector
+    TASKS: In-memory task registry for background jobs
+    START_TIME: Application startup timestamp
+"""
+
 import os
 import time
 from pathlib import Path
@@ -43,6 +64,16 @@ IMAGE_SUFFIXES = {".png", ".jpg", ".jpeg", ".tif", ".tiff", ".bmp"}
 MEDIA_SUFFIXES = AUDIO_SUFFIXES | VIDEO_SUFFIXES
 
 def env_flag(name: str, default: bool = False) -> bool:
+    """Parse an environment variable as a boolean flag.
+
+    Args:
+        name: Environment variable name to look up.
+        default: Default value if variable is not set.
+
+    Returns:
+        True if the variable is set to "1", "true", "yes", or "on" (case-insensitive).
+        False if set to any other value or not set (uses default).
+    """
     val = os.getenv(name)
     if val is None:
         return default
