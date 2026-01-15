@@ -47,6 +47,7 @@ class SummaryGenerateRequest(BaseModel):
     format: str = "paragraph"
     style: str | None = None
     scope: str | None = None
+    force_refresh: bool = False
 
 class ConvertRequest(BaseModel):
     document_id: str | None = None
@@ -272,7 +273,7 @@ async def generate_summary(req: SummaryGenerateRequest):
         style=style,
         scope=scope,
         artifact_ids=req.artifact_ids,
-        # Provider could be passed if req had it, currently defaulting to configured default
+        force_refresh=req.force_refresh,
     )
     return result
 

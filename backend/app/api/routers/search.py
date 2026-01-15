@@ -8,12 +8,11 @@ router = APIRouter()
 class SearchRequest(BaseModel):
     q: str
     k: int = 5
-    threshold: float = 0.0
     types: list[str] | None = None
 
 @router.post("/search")
 async def search_documents(req: SearchRequest):
-    results = search_index.search(req.q, k=req.k, threshold=req.threshold)
+    results = search_index.search(req.q, k=req.k)
     return {"results": results}
 
 @router.post("/search/rebuild")
