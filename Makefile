@@ -1,7 +1,7 @@
 # PMOVES-DoX Makefile
 # Dual-mode deployment: standalone or docked (within PMOVES.AI)
 
-.PHONY: standalone docked test-standalone test-docked clean help logs build pull check-parent
+.PHONY: standalone docked test-standalone test-docked clean help logs build pull check-parent ensure-standalone-networks
 
 # Default target
 help:
@@ -36,7 +36,19 @@ help:
 # Mode Selection
 # =============================================================================
 
-standalone:
+# Create dummy external networks for standalone mode (these are normally provided by parent PMOVES.AI)
+ensure-standalone-networks:
+	@echo "Ensuring external networks exist for standalone mode..."
+	@for network in pmoves_api pmoves_app pmoves_bus pmoves_data; do \
+		docker network inspect $$network >/dev/null 2>&1 || { \
+			echo "  Creating dummy network: $$network"; \
+			docker network create $$network >/dev/null; \
+		}; \
+	done
+	@echo "✅ External networks ready"
+	@echo ""
+
+standalone: ensure-standalone-networks
 	@echo "Starting PMOVES-DoX in STANDALONE mode..."
 	@echo ""
 	@echo "DoX Services (all local):"
@@ -108,7 +120,7 @@ check-parent:
 # Testing
 # =============================================================================
 
-test-standalone:
+test-standalone: ensure-standalone-networks
 	@echo "Testing standalone deployment..."
 	@echo ""
 	PMOVES_MODE=standalone docker compose --env-file .env.local up -d --build

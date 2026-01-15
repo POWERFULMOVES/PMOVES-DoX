@@ -235,7 +235,7 @@ services:
       - "61208:61208"
     volumes:
       - /var/run/docker.sock:/var/run/docker.sock:ro
-      - ./external/Pmoves-Glancer/glances.conf:/glances/conf/glances.conf
+      - ./external/Pmoves-Glancer/conf/glances.conf:/glances/conf/glances.conf
     environment:
       - GLANCES_OPT=-C /glances/conf/glances.conf -w
       - TZ=America/New_York
