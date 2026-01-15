@@ -158,7 +158,7 @@ services:
     environment:
       - CIPHER_API_PREFIX=""
       - NODE_ENV=production
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
     volumes:
       - ./backend/cipher-config/cipher.yml:/app/memAgent/cipher.yml
       - cipher-data:/app/.cipher
