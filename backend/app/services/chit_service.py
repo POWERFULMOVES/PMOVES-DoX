@@ -115,7 +115,8 @@ class ChitService:
         Creates the GEOMETRY stream if it doesn't exist. Silently ignores
         errors if the stream already exists.
         """
-        if not self.js: return
+        if not self.js:
+            return
 
         try:
             await self.js.add_stream(name="GEOMETRY", subjects=["tokenism.cgp.>", "geometry.>"])
