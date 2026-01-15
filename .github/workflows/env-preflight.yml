@@ -31,7 +31,7 @@ jobs:
           MISSING=""
 
           # Extract env vars from docker-compose.yml and check if documented
-          for var in $(grep -oE '\$\{[A-Z_]+' docker-compose.yml | sed 's/\${//' | sort -u); do
+          for var in $(grep -oE '\$\{[A-Z0-9_]+' docker-compose.yml | sed 's/\${//' | sort -u); do
             if ! grep -q "^${var}=" .env.example 2>/dev/null; then
               # Skip common vars that may have defaults
               case "$var" in

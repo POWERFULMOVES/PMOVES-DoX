@@ -62,6 +62,7 @@ jobs:
         run: |
           # Ensure no .env files with actual values are committed
           if [ -f ".env" ] && grep -qE "^[A-Z_]+=[^$\{].+" .env 2>/dev/null; then
-            echo "WARNING: .env file found with values - ensure this is intentional"
+            echo "ERROR: .env file found with values - this should not be committed"
+            exit 1
           fi
           echo "Secret check completed"

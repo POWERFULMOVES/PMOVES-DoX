@@ -39,7 +39,7 @@ from app.ingestion.web_ingestion import ingest_web_url
 from app.ingestion.media_transcriber import transcribe_media
 from app.ingestion.image_ocr import extract_text_from_image
 from app.database_factory import init_database
-from app.config import is_docked_mode, get_deployment_info
+from app.config import get_deployment_info
 from app.qa_engine import QAEngine
 from app.extraction.langextract_adapter import run_langextract, write_visualization
 from app.chr_pipeline import run_chr, pca_plot

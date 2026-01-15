@@ -117,7 +117,7 @@ services:
     container_name: pmoves-dox-neo4j
     profiles: ["neo4j"]
     environment:
-      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD}
+      - NEO4J_AUTH=${NEO4J_USER:-neo4j}/${NEO4J_PASSWORD:-changeme}
       - NEO4J_PLUGINS=["apoc"]
     ports:
       - "${DOX_NEO4J_BOLT_PORT:-17687}:7687"

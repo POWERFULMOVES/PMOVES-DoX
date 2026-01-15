@@ -71,8 +71,7 @@ test-frontend:
 
 smoke:
 	@echo "Running smoke tests..."
-	cd backend && python -m pip install -r ../smoke/requirements.txt -q
-	python smoke/smoke_backend.py
+	cd backend && python -m pip install -r ../smoke/requirements.txt -q && cd .. && python smoke/smoke_backend.py
 
 lint: lint-backend lint-frontend
 

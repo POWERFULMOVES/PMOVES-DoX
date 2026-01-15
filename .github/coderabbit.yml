@@ -46,20 +46,3 @@ language_settings:
 # Custom instructions for the reviewer
 chat:
   auto_reply: true
-
-# Security focus areas
-security:
-  # Check for hardcoded secrets
-  check_hardcoded_secrets: true
-  # Verify environment variable substitution
-  check_env_substitution: true
-  # Flag credential patterns in docker-compose
-  check_docker_credentials: true
-
-# Review categories to focus on
-review_focus:
-  - security
-  - best_practices
-  - error_handling
-  - performance
-  - documentation
