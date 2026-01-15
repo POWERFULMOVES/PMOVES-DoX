@@ -1,0 +1,48 @@
+# CodeRabbit Configuration
+# AI-powered code review automation
+# https://docs.coderabbit.ai/configuration
+
+reviews:
+  # Enable automatic reviews on PRs
+  auto_review:
+    enabled: true
+    drafts: false
+    base_branches:
+      - main
+      - PMOVES.AI-Edition-Hardened
+      - feat/supabase-integration
+
+  # Review settings
+  profile: "chill"  # chill | assertive | thorough
+  request_changes_workflow: false
+  high_level_summary: true
+  poem: false
+
+# Path filters - exclude from review
+path_filters:
+  - "!**/node_modules/**"
+  - "!**/venv/**"
+  - "!**/__pycache__/**"
+  - "!**/dist/**"
+  - "!**/build/**"
+  - "!**/.next/**"
+  - "!**/coverage/**"
+  - "!**/*.lock"
+  - "!**/package-lock.json"
+  - "!**/*.min.js"
+  - "!**/*.bundle.js"
+
+# Language-specific settings
+language_settings:
+  python:
+    enabled: true
+  typescript:
+    enabled: true
+  javascript:
+    enabled: true
+  yaml:
+    enabled: true
+
+# Custom instructions for the reviewer
+chat:
+  auto_reply: true

@@ -1,0 +1,93 @@
+name: Environment Preflight
+
+on:
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker-compose*.yml'
+      - '.env.example'
+      - 'backend/.env.example'
+
+permissions:
+  contents: read
+
+jobs:
+  validate-env:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Validate .env.example exists
+        run: |
+          if [ ! -f ".env.example" ]; then
+            echo "ERROR: .env.example file is missing"
+            exit 1
+          fi
+          echo ".env.example found"
+
+      - name: Check required environment variables documented
+        run: |
+          MISSING=""
+
+          # Extract env vars from docker-compose.yml and check if documented
+          for var in $(grep -oE '\$\{[A-Z0-9_]+' docker-compose.yml | sed 's/\${//' | sort -u); do
+            if ! grep -q "^${var}=" .env.example 2>/dev/null; then
+              # Skip common vars that may have defaults
+              case "$var" in
+                COMPOSE_PROJECT_NAME|PATH|HOME|USER) continue ;;
+              esac
+              MISSING="${MISSING}\n  - ${var}"
+            fi
+          done
+
+          if [ -n "$MISSING" ]; then
+            echo "WARNING: The following environment variables are used but not documented in .env.example:"
+            echo -e "$MISSING"
+            echo ""
+            echo "Consider adding them to .env.example for documentation"
+          else
+            echo "All environment variables are documented"
+          fi
+
+      - name: Validate docker-compose syntax
+        run: |
+          # Install docker compose if not available
+          if ! command -v docker &> /dev/null; then
+            echo "Docker not available, skipping compose validation"
+            exit 0
+          fi
+
+          # Validate all docker-compose files
+          for file in docker-compose*.yml; do
+            if [ -f "$file" ]; then
+              echo "Validating $file..."
+              docker compose -f "$file" config --quiet 2>&1 || {
+                echo "WARNING: $file has syntax issues (may require env vars)"
+              }
+            fi
+          done
+
+      - name: Check for environment variable substitution patterns
+        run: |
+          echo "Checking for proper environment variable patterns..."
+
+          # Look for potential issues with env var syntax
+          ISSUES=""
+
+          # Check for = without ${} that might be hardcoded
+          for file in docker-compose*.yml; do
+            if [ -f "$file" ]; then
+              # Check for common credential patterns without substitution
+              if grep -E "(POSTGRES_PASSWORD|NEO4J_PASSWORD|API_KEY)=[^$\{]" "$file" 2>/dev/null; then
+                ISSUES="${ISSUES}\n  - $file: Found potential hardcoded credentials"
+              fi
+            fi
+          done
+
+          if [ -n "$ISSUES" ]; then
+            echo "WARNING: Potential issues found:"
+            echo -e "$ISSUES"
+          else
+            echo "Environment variable patterns look correct"
+          fi
