@@ -28,8 +28,16 @@ const mockCamera = {
   updateProjectionMatrix: vi.fn(),
 };
 
+const mockGeometry = {
+  setAttribute: vi.fn(),
+  setIndex: vi.fn(),
+  computeVertexNormals: vi.fn(),
+  dispose: vi.fn(),
+};
+
 const mockMesh = {
   rotation: { z: 0 },
+  geometry: mockGeometry,
 };
 
 const mockControls = {
@@ -46,6 +54,8 @@ vi.mock('three', () => ({
   AmbientLight: vi.fn(),
   DirectionalLight: vi.fn(() => ({ position: { set: vi.fn() } })),
   PlaneGeometry: vi.fn(),
+  BufferGeometry: vi.fn(() => mockGeometry),
+  Float32BufferAttribute: vi.fn(),
   MeshPhongMaterial: vi.fn(),
   Mesh: vi.fn(() => mockMesh),
   Color: vi.fn(),
@@ -54,6 +64,26 @@ vi.mock('three', () => ({
 
 vi.mock('three/examples/jsm/controls/OrbitControls.js', () => ({
   OrbitControls: vi.fn(() => mockControls),
+}));
+
+// Mock nats-context
+vi.mock('@/lib/nats-context', () => ({
+  useNats: vi.fn(() => ({
+    connection: null,
+    isConnected: false,
+    error: null,
+    reconnectAttempt: 0,
+    publish: vi.fn(),
+    lastMessage: null,
+  })),
+}));
+
+// Mock nats.ws StringCodec
+vi.mock('nats.ws', () => ({
+  StringCodec: vi.fn(() => ({
+    decode: vi.fn((data) => new TextDecoder().decode(data)),
+    encode: vi.fn((str) => new TextEncoder().encode(str)),
+  })),
 }));
 
 // Mock requestAnimationFrame
@@ -138,11 +168,11 @@ describe('Manifold3D', () => {
     expect(mockScene.add).toHaveBeenCalled();
   });
 
-  it('creates initial PlaneGeometry mesh', async () => {
+  it('creates initial BufferGeometry mesh', async () => {
     render(<Manifold3D width={800} height={600} params={null} />);
 
     const THREE = await import('three');
-    expect(THREE.PlaneGeometry).toHaveBeenCalled();
+    expect(THREE.BufferGeometry).toHaveBeenCalled();
     expect(THREE.Mesh).toHaveBeenCalled();
   });
 

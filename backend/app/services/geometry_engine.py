@@ -1,11 +1,21 @@
 """
 Geometry Engine service for PMOVES-DoX.
-Calculates geometric properties (curvature, epsilon) of data manifolds 
+Calculates geometric properties (curvature, epsilon) of data manifolds
 and generates CHIT configurations for the visualization engine.
+
+Hyperbolicity Computation:
+- Uses the 4-point Gromov product condition to measure delta-hyperbolicity
+- Set EXACT_DELTA=true to enable exact computation (O(N^4), slow for large datasets)
+- Default mode uses faster proxy heuristics based on centroid-distance variance
 """
 import numpy as np
+import os
+import itertools
 from typing import List, Dict, Any, Optional, Tuple
 import json
+import logging
+
+logger = logging.getLogger(__name__)
 
 class GeometryEngine:
     """
@@ -67,13 +77,110 @@ class GeometryEngine:
             # High epsilon = chaotic.
             epsilon = min(1.0, shape_ratio)
 
+            # Check if exact delta computation is requested
+            use_exact = os.getenv("EXACT_DELTA", "").lower() in {"1", "true", "yes"}
+
+            if use_exact and len(embeddings) >= 4:
+                exact_delta = self.compute_exact_delta(embeddings)
+                logger.info(f"Exact delta-hyperbolicity: {exact_delta:.4f}")
+                # Use exact delta if computed successfully
+                if exact_delta > 0:
+                    # Adjust curvature based on exact delta
+                    # Lower delta = more hyperbolic
+                    if exact_delta < 0.1:
+                        k = -3.0 - (0.1 - exact_delta) * 20
+                    elif exact_delta < 0.3:
+                        k = -1.0 - (0.3 - exact_delta) * 6.67
+                    else:
+                        k = shape_ratio * 2 if shape_ratio < 0.3 else k
+
+                    return {
+                        "delta": exact_delta,
+                        "delta_proxy": shape_ratio,
+                        "curvature_k": k,
+                        "epsilon": epsilon
+                    }
+
             return {
-                "delta": shape_ratio, # Using ratio as proxy for delta
+                "delta": shape_ratio,  # Using ratio as proxy for delta
                 "curvature_k": k,
                 "epsilon": epsilon
             }
-        except Exception:
+        except Exception as e:
+            logger.error(f"analyze_curvature error: {e}")
             return {"delta": 0.0, "curvature_k": 0.0, "epsilon": 0.0}
+
+    def compute_exact_delta(
+        self,
+        embeddings: List[List[float]],
+        sample_size: int = 100
+    ) -> float:
+        """
+        Compute exact delta-hyperbolicity via the 4-point Gromov product condition.
+
+        The 4-point condition states that for any four points x, y, z, w in a
+        delta-hyperbolic space:
+            (x|z)_w >= min((x|y)_w, (y|z)_w) - delta
+
+        where (x|y)_w = 0.5 * (d(w,x) + d(w,y) - d(x,y)) is the Gromov product.
+
+        This is an O(N^4) algorithm, so we sample for large datasets.
+
+        Args:
+            embeddings: List of embedding vectors.
+            sample_size: Maximum number of points to sample (default: 100).
+
+        Returns:
+            Delta value (lower = more hyperbolic, 0 = tree metric).
+        """
+        if len(embeddings) < 4:
+            return 0.0
+
+        data = np.array(embeddings)
+        n = len(data)
+
+        # Sample if dataset is too large
+        if n > sample_size:
+            indices = np.random.choice(n, sample_size, replace=False)
+            data = data[indices]
+            n = sample_size
+            logger.info(f"Exact delta: sampling {sample_size} points from {len(embeddings)}")
+
+        # Precompute all pairwise distances
+        # dist_matrix[i,j] = ||data[i] - data[j]||
+        diff = data[:, np.newaxis, :] - data[np.newaxis, :, :]
+        dist_matrix = np.sqrt(np.sum(diff ** 2, axis=2))
+
+        # Compute delta via 4-point condition
+        max_delta = 0.0
+
+        # For efficiency, we iterate over all 4-tuples
+        # Using combination iteration to avoid duplicates
+        for w in range(n):
+            for x, y, z in itertools.combinations(range(n), 3):
+                if w in (x, y, z):
+                    continue
+
+                # Gromov products at basepoint w
+                # (x|y)_w = 0.5 * (d(w,x) + d(w,y) - d(x,y))
+                gp_xy_w = 0.5 * (dist_matrix[w, x] + dist_matrix[w, y] - dist_matrix[x, y])
+                gp_xz_w = 0.5 * (dist_matrix[w, x] + dist_matrix[w, z] - dist_matrix[x, z])
+                gp_yz_w = 0.5 * (dist_matrix[w, y] + dist_matrix[w, z] - dist_matrix[y, z])
+
+                # 4-point condition: (x|z)_w >= min((x|y)_w, (y|z)_w) - delta
+                # Rearranging: delta >= min((x|y)_w, (y|z)_w) - (x|z)_w
+                # We want the maximum delta that makes this hold
+
+                # Check all three orderings
+                deltas = [
+                    min(gp_xy_w, gp_yz_w) - gp_xz_w,
+                    min(gp_xy_w, gp_xz_w) - gp_yz_w,
+                    min(gp_xz_w, gp_yz_w) - gp_xy_w,
+                ]
+                local_delta = max(deltas)
+                max_delta = max(max_delta, local_delta)
+
+        return max_delta
 
     def compute_zeta_spectrum(self, embeddings: List[List[float]]) -> Tuple[List[float], List[float]]:
         """
