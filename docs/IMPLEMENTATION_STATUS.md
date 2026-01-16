@@ -1,13 +1,61 @@
 # PMOVESCHIT Implementation Status
 
-**Last Updated:** December 2025
-**Related PR:** #343 (GEOMETRY BUS Integration)
+**Last Updated:** January 16, 2026
+**Related PRs:** #56-61 (Geometry Intelligence), #42, #44 (Standalone alignment)
 
 ---
 
 ## Overview
 
 This document tracks the implementation status of PMOVESCHIT (Cymatic-Holographic Information Transfer) components across the PMOVES.AI ecosystem.
+
+---
+
+## PMOVES-DoX Geometry Status (January 2026)
+
+### Implementation Complete ✅
+
+All 5 phases of Geometric Intelligence have been implemented:
+
+| Phase | Feature | Status | Tests |
+|-------|---------|--------|-------|
+| Phase 1 | GeometryEngine curvature analysis | ✅ Complete | 28 tests |
+| Phase 2 | CHIT config generation | ✅ Complete | 14 tests |
+| Phase 3 | Dynamic Zeta spectrum | ✅ Complete | 18 tests |
+| Phase 4 | NATS context provider | ✅ Complete | 12 tests |
+| Phase 5 | Frontend integration | ✅ Complete | 18 tests |
+
+**Total: 90 tests passing**
+
+### Backend Services
+
+| Service | File | Status |
+|---------|------|--------|
+| GeometryEngine | `app/services/geometry_engine.py` | ✅ Production |
+| ChitService | `app/services/chit_service.py` | ✅ Production |
+| Cipher Router | `app/api/routers/cipher.py` | ✅ Production |
+
+### Frontend Visualizers
+
+| Component | File | Status |
+|-----------|------|--------|
+| HyperbolicNavigator | `components/geometry/HyperbolicNavigator.tsx` | ✅ Complete |
+| Manifold3D | `components/geometry/Manifold3D.tsx` | ✅ Complete (Three.js) |
+| ZetaVisualizer | `components/geometry/ZetaVisualizer.tsx` | ✅ Complete (Canvas) |
+| Geometry Page | `app/geometry/page.tsx` | ✅ Complete |
+
+### API Endpoints
+
+| Endpoint | Method | Status |
+|----------|--------|--------|
+| `/cipher/geometry/simulate` | POST | ✅ Active |
+| `/cipher/geometry/demo-packet` | GET | ✅ Active |
+
+### Security Status
+
+- **Dependabot Alerts:** 0 open (as of Jan 16, 2026)
+- **PRs Merged:** #53, #54 (npm), #56-61 (geometry)
+- **Branch:** `PMOVES.AI-Edition-Hardened` (production-ready)
 
 ---
 
@@ -76,8 +124,8 @@ The CHIT system is built on five mathematical foundations:
 | `tokenism.geometry.event.v1` | Publish | CGP Publisher | ✅ Active |
 | `geometry.packet.encoded.v1` | Publish | Hi-RAG v2 | ✅ Active |
 | `geometry.packet.decoded.v1` | Subscribe | Flute-Gateway | ✅ Active |
-| `geometry.visualization.request.v1` | Publish | Hyperdim | ⏳ Planned |
-| `geometry.visualization.ready.v1` | Subscribe | Hyperdim | ⏳ Planned |
+| `geometry.visualization.request.v1` | Publish | Hyperdim | ✅ Active |
+| `geometry.visualization.ready.v1` | Subscribe | Hyperdim | ✅ Active |
 | `evoswarm.population.v1` | Pub/Sub | Swarm Attribution | ✅ Active |
 
 ### Service Integration
@@ -87,7 +135,7 @@ The CHIT system is built on five mathematical foundations:
 | Hi-RAG Gateway v2 | `/geometry/event` endpoint | ✅ Active |
 | Flute-Gateway | Voice attribution via CHIT | ✅ Active |
 | Consciousness Service | CGP mapper | ⚠️ Partial |
-| Hyperdimensions Visualizer | Three.js renderer | ⏳ Planned |
+| Hyperdimensions Visualizer | Three.js renderer | ✅ Complete (PMOVES-DoX) |
 
 ---
 
@@ -217,10 +265,12 @@ curl -X POST http://localhost:8086/geometry/event \
 
 ## Roadmap
 
-### Q1 2026
-- [ ] Implement Python decoder v0.2
+### Q1 2026 (Updated Jan 16)
+- [x] ~~Implement Python decoder v0.2~~ → GeometryEngine handles decoding
+- [x] ~~Complete Hyperdimensions visualizer integration~~ → Three.js Manifold3D complete
+- [x] PMOVES-DoX geometry page (`/geometry`) with all visualizers
+- [x] NATS WebSocket integration for real-time geometry updates
 - [ ] Define Shape Store location (Supabase + Qdrant)
-- [ ] Complete Hyperdimensions visualizer integration
 
 ### Q2 2026
 - [ ] Multi-modal decoder (DECODER_MULTI)
