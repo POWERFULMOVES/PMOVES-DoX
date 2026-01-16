@@ -256,6 +256,95 @@ class TestGetSurfaceFnCode:
         assert "x: u" in fn or "x: (input.u" in fn
 
 
+class TestComputeZetaSpectrum:
+    """Tests for GeometryEngine.compute_zeta_spectrum()."""
+
+    def test_empty_embeddings_returns_defaults(self):
+        """Empty embeddings return default zeta zeros."""
+        engine = GeometryEngine()
+
+        frequencies, amplitudes = engine.compute_zeta_spectrum([])
+
+        # Should return first 3 default zeta zeros
+        assert len(frequencies) == 3
+        assert len(amplitudes) == 3
+        # First frequency should be near 14.13 (first zeta zero)
+        assert 14.0 < frequencies[0] < 15.0
+
+    def test_single_embedding_returns_defaults(self):
+        """Single embedding returns default values."""
+        engine = GeometryEngine()
+
+        frequencies, amplitudes = engine.compute_zeta_spectrum([[1, 2, 3]])
+
+        assert len(frequencies) == 3
+        assert len(amplitudes) == 3
+
+    def test_valid_embeddings_compute_frequencies(self):
+        """Valid embeddings compute dynamic frequencies."""
+        engine = GeometryEngine()
+
+        # Create embeddings with clear variance structure
+        np.random.seed(42)
+        embeddings = np.random.randn(20, 8).tolist()  # 20 samples, 8 dimensions
+
+        frequencies, amplitudes = engine.compute_zeta_spectrum(embeddings)
+
+        # Should compute frequencies from eigenvalues
+        assert len(frequencies) >= 1
+        assert len(amplitudes) == len(frequencies)
+        # All frequencies should be positive
+        assert all(f > 0 for f in frequencies)
+        # All amplitudes should be in (0, 1]
+        assert all(0 < a <= 1 for a in amplitudes)
+
+    def test_frequencies_near_zeta_zeros(self):
+        """Computed frequencies should be near zeta zero range (14-34)."""
+        engine = GeometryEngine()
+
+        np.random.seed(123)
+        embeddings = np.random.randn(30, 10).tolist()
+
+        frequencies, amplitudes = engine.compute_zeta_spectrum(embeddings)
+
+        # Frequencies should be in the zeta-like range
+        for f in frequencies:
+            assert 10.0 < f < 40.0, f"Frequency {f} outside expected range"
+
+    def test_amplitudes_decay(self):
+        """Amplitudes should generally decay (first > later)."""
+        engine = GeometryEngine()
+
+        np.random.seed(456)
+        embeddings = np.random.randn(50, 16).tolist()
+
+        frequencies, amplitudes = engine.compute_zeta_spectrum(embeddings)
+
+        if len(amplitudes) >= 3:
+            # First amplitude should typically be largest
+            # (allowing some variance due to eigenvalue modulation)
+            avg_first = amplitudes[0]
+            avg_last = sum(amplitudes[-2:]) / 2
+            assert avg_first >= avg_last * 0.5, "Amplitudes should roughly decay"
+
+    def test_2d_embeddings_work(self):
+        """2D embeddings (like point coordinates) should work."""
+        engine = GeometryEngine()
+
+        # Simulate CGP point coordinates
+        embeddings = [
+            [50, 50, 0.9, 0.95],
+            [-40, 60, 0.8, 0.85],
+            [-20, -80, 0.7, 0.80],
+            [30, 30, 0.6, 0.90],
+        ]
+
+        frequencies, amplitudes = engine.compute_zeta_spectrum(embeddings)
+
+        assert len(frequencies) >= 1
+        assert len(amplitudes) >= 1
+
+
 class TestGlobalInstance:
     """Tests for the global geometry_engine instance."""
 
@@ -268,5 +357,7 @@ class TestGlobalInstance:
         """Global instance should have expected methods."""
         assert hasattr(geometry_engine, "analyze_curvature")
         assert hasattr(geometry_engine, "generate_chit_config")
+        assert hasattr(geometry_engine, "compute_zeta_spectrum")
         assert callable(geometry_engine.analyze_curvature)
         assert callable(geometry_engine.generate_chit_config)
+        assert callable(geometry_engine.compute_zeta_spectrum)
