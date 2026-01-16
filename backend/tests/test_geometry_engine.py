@@ -305,7 +305,7 @@ class TestComputeZetaSpectrum:
         np.random.seed(123)
         embeddings = np.random.randn(30, 10).tolist()
 
-        frequencies, amplitudes = engine.compute_zeta_spectrum(embeddings)
+        frequencies, _amplitudes = engine.compute_zeta_spectrum(embeddings)
 
         # Frequencies should be in the zeta-like range
         for f in frequencies:
@@ -318,7 +318,7 @@ class TestComputeZetaSpectrum:
         np.random.seed(456)
         embeddings = np.random.randn(50, 16).tolist()
 
-        frequencies, amplitudes = engine.compute_zeta_spectrum(embeddings)
+        _frequencies, amplitudes = engine.compute_zeta_spectrum(embeddings)
 
         if len(amplitudes) >= 3:
             # First amplitude should typically be largest
