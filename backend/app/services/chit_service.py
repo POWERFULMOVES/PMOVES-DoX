@@ -3,26 +3,40 @@
 This module provides integration with the NATS Geometry Bus for handling
 CHIT Geometry Packets (CGP). It supports both standalone mode (local NATS)
 and docked mode (parent PMOVES.AI NATS) with graceful degradation.
+
+ML Embeddings Configuration:
+- Set CHIT_USE_LOCAL_EMBEDDINGS=true to enable local SentenceTransformer embeddings
+- Embeddings are loaded lazily on first use to minimize startup time
+- Falls back to search_index embeddings if local model unavailable
 """
 
 import json
 import logging
 import asyncio
 import os
-from typing import Dict, Any, Optional, Callable
+from typing import Dict, Any, Optional, Callable, List
 import nats
 from nats.js.api import StreamConfig, RetentionPolicy
 
-# Attempt to import NLP/ML libraries, but fail gracefully if not installed
+# Check for NumPy
+try:
+    import numpy as np
+    HAS_NUMPY = True
+except ImportError:
+    HAS_NUMPY = False
+
+# Check for SentenceTransformers (loaded lazily)
+HAS_SENTENCE_TRANSFORMERS = False
 try:
     from sentence_transformers import SentenceTransformer
-    import numpy as np
-    import faiss
-    HAS_ML = True
+    HAS_SENTENCE_TRANSFORMERS = True
 except ImportError:
-    HAS_ML = False
+    pass
 
 logger = logging.getLogger(__name__)
+
+# Default model for local embeddings
+DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
 
 
 class ChitService:
@@ -46,13 +60,68 @@ class ChitService:
         """
         self.nc = None
         self.js = None
-        self.model = None
+        self._model = None  # Lazy-loaded embedding model
         self._nats_available = False
+        self._use_local_embeddings = os.getenv("CHIT_USE_LOCAL_EMBEDDINGS", "").lower() in {"1", "true", "yes"}
+        self._embedding_model_name = os.getenv("CHIT_EMBEDDING_MODEL", DEFAULT_EMBEDDING_MODEL)
 
-        # Load embedding model lazily if needed for geometry-only decoding
-        if HAS_ML:
-             # self.model = SentenceTransformer('all-MiniLM-L6-v2')
-             pass
+    def _get_embedding_model(self):
+        """Lazy-load the SentenceTransformer model on first use.
+
+        Returns:
+            SentenceTransformer model instance, or None if unavailable.
+        """
+        if self._model is not None:
+            return self._model
+
+        if not self._use_local_embeddings:
+            logger.debug("Local embeddings disabled (set CHIT_USE_LOCAL_EMBEDDINGS=true to enable)")
+            return None
+
+        if not HAS_SENTENCE_TRANSFORMERS:
+            logger.warning("sentence-transformers not installed, cannot use local embeddings")
+            return None
+
+        try:
+            logger.info(f"Loading embedding model: {self._embedding_model_name}")
+            self._model = SentenceTransformer(self._embedding_model_name)
+            logger.info(f"Embedding model loaded successfully")
+            return self._model
+        except Exception as e:
+            logger.error(f"Failed to load embedding model: {e}")
+            return None
+
+    def generate_embeddings(self, texts: List[str]) -> List[List[float]]:
+        """Generate embeddings for a list of texts using local model.
+
+        Falls back to empty list if model unavailable. For production use,
+        prefer the search_index embeddings from the main application.
+
+        Args:
+            texts: List of text strings to embed.
+
+        Returns:
+            List of embedding vectors, or empty list if unavailable.
+        """
+        model = self._get_embedding_model()
+        if model is None or not HAS_NUMPY:
+            return []
+
+        try:
+            embeddings = model.encode(texts, convert_to_numpy=True)
+            return embeddings.tolist()
+        except Exception as e:
+            logger.error(f"Failed to generate embeddings: {e}")
+            return []
+
+    @property
+    def has_local_embeddings(self) -> bool:
+        """Check if local embedding generation is available.
+
+        Returns:
+            True if local embeddings can be generated, False otherwise.
+        """
+        return self._use_local_embeddings and HAS_SENTENCE_TRANSFORMERS
 
     def _is_docked_mode(self) -> bool:
         """Check if running in docked mode within PMOVES.AI.
