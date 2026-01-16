@@ -15,8 +15,11 @@ from app.services.chit_service import chit_service
 from app.services.geometry_engine import geometry_engine
 import os
 import json
+import logging
 import numpy as np
 from app.globals import search_index
+
+logger = logging.getLogger(__name__)
 from app.database_factory import get_db_interface
 
 router = APIRouter(prefix="/cipher", tags=["cipher", "memory", "skills", "a2ui"])
@@ -80,11 +83,12 @@ async def simulate_geometry_event(cgp: Dict[str, Any] = Body(...)):
     2. Point coordinate distributions
     3. Falls back to default zeta zeros if insufficient data
     """
-    decoded = chit_service.decode_cgp(cgp)
+    # Validate CGP structure (decode for validation, result not needed)
+    _ = chit_service.decode_cgp(cgp)
 
     # Extract embeddings from CGP for zeta spectrum computation
     # Use constellation spectra and point coordinates as proxy embeddings
-    embeddings = []
+    raw_embeddings = []
     super_nodes = cgp.get("super_nodes", [])
 
     for node in super_nodes:
@@ -93,7 +97,7 @@ async def simulate_geometry_event(cgp: Dict[str, Any] = Body(...)):
             # Use spectrum as embedding if available
             spectrum = const.get("spectrum", [])
             if spectrum and len(spectrum) >= 2:
-                embeddings.append(spectrum)
+                raw_embeddings.append(spectrum)
 
             # Also use point coordinates as 2D embeddings
             points = const.get("points", [])
@@ -102,7 +106,25 @@ async def simulate_geometry_event(cgp: Dict[str, Any] = Body(...)):
                 y = pt.get("y", 0)
                 proj = pt.get("proj", 0.5)
                 conf = pt.get("conf", 0.5)
-                embeddings.append([x, y, proj, conf])
+                raw_embeddings.append([x, y, proj, conf])
+
+    # Normalize embeddings to consistent dimension (pad/truncate to avoid ragged arrays)
+    target_dim = 4  # Use 4D as minimum for point embeddings
+    if raw_embeddings:
+        max_dim = max(len(e) for e in raw_embeddings)
+        target_dim = max(target_dim, max_dim)
+        embeddings = []
+        for e in raw_embeddings:
+            if len(e) < target_dim:
+                # Pad with zeros
+                embeddings.append(e + [0.0] * (target_dim - len(e)))
+            elif len(e) > target_dim:
+                # Truncate
+                embeddings.append(e[:target_dim])
+            else:
+                embeddings.append(e)
+    else:
+        embeddings = []
 
     # Compute dynamic zeta spectrum from embeddings
     frequencies, amplitudes = geometry_engine.compute_zeta_spectrum(embeddings)
@@ -222,7 +244,7 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
         embeddings.append(outlier3.tolist())
 
         # Medium distance points (intermediate hierarchy levels)
-        for i in range(4):
+        for _ in range(4):
             mid = np.random.randn(dim) * 3.0
             embeddings.append(mid.tolist())
     else:
@@ -258,7 +280,7 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
         asyncio.create_task(chit_service.publish_manifold_update(analysis))
     except Exception as e:
         # Non-blocking - log but don't fail the request
-        pass
+        logger.warning(f"Failed to publish manifold update to NATS: {e}")
 
     # 7. Return Link and metrics
     return {

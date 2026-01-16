@@ -130,6 +130,9 @@ export default function Manifold3D({ width, height, params, onParamsUpdate }: Pr
     const meshRef = useRef<THREE.Mesh | null>(null);
     const controlsRef = useRef<OrbitControls | null>(null);
     const reqRef = useRef<number>(0);
+    // Store callback in ref to avoid recreating subscription on callback change
+    const onParamsUpdateRef = useRef(onParamsUpdate);
+    onParamsUpdateRef.current = onParamsUpdate;
 
     // NATS connection for real-time updates
     const { connection } = useNats();
@@ -159,7 +162,8 @@ export default function Manifold3D({ width, height, params, onParamsUpdate }: Pr
                     if (payload.parameters || payload.curvature_k !== undefined) {
                         const newParams = payload.parameters || payload;
                         setLocalParams(prev => ({ ...prev, ...newParams }));
-                        onParamsUpdate?.(newParams);
+                        // Use ref to call callback without causing subscription churn
+                        onParamsUpdateRef.current?.(newParams);
                     }
                 } catch (err) {
                     console.error("Manifold3D: Failed to parse NATS message", err);
@@ -170,7 +174,7 @@ export default function Manifold3D({ width, height, params, onParamsUpdate }: Pr
         return () => {
             sub.unsubscribe();
         };
-    }, [connection, onParamsUpdate]);
+    }, [connection]); // Removed onParamsUpdate from deps - using ref instead
 
     // Extract params with defaults
     const curvature_k = localParams?.curvature_k ?? 0;
@@ -233,12 +237,29 @@ export default function Manifold3D({ width, height, params, onParamsUpdate }: Pr
 
         return () => {
             cancelAnimationFrame(reqRef.current);
+            // Dispose controls
+            if (controlsRef.current) {
+                controlsRef.current.dispose();
+                controlsRef.current = null;
+            }
+            // Dispose mesh geometry and material
+            if (meshRef.current) {
+                meshRef.current.geometry.dispose();
+                if (meshRef.current.material instanceof THREE.Material) {
+                    meshRef.current.material.dispose();
+                }
+                meshRef.current = null;
+            }
+            // Dispose renderer and remove from DOM
             if (rendererRef.current && mountRef.current) {
                 if (mountRef.current.contains(rendererRef.current.domElement)) {
                     mountRef.current.removeChild(rendererRef.current.domElement);
                 }
                 rendererRef.current.dispose();
+                rendererRef.current = null;
             }
+            sceneRef.current = null;
+            cameraRef.current = null;
         };
     }, []);
 

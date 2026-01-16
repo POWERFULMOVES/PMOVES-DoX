@@ -25,6 +25,24 @@ try:
 except ImportError:
     HAS_NUMPY = False
 
+
+def _convert_numpy_types(obj: Any) -> Any:
+    """Convert numpy types to Python native types for JSON serialization."""
+    if HAS_NUMPY:
+        if isinstance(obj, np.ndarray):
+            return obj.tolist()
+        if isinstance(obj, (np.integer, np.int32, np.int64)):
+            return int(obj)
+        if isinstance(obj, (np.floating, np.float32, np.float64)):
+            return float(obj)
+        if isinstance(obj, np.bool_):
+            return bool(obj)
+    if isinstance(obj, dict):
+        return {k: _convert_numpy_types(v) for k, v in obj.items()}
+    if isinstance(obj, (list, tuple)):
+        return [_convert_numpy_types(item) for item in obj]
+    return obj
+
 # Check for SentenceTransformers (loaded lazily)
 HAS_SENTENCE_TRANSFORMERS = False
 try:
@@ -190,9 +208,9 @@ class ChitService:
         try:
             await self.js.add_stream(name="GEOMETRY", subjects=["tokenism.cgp.>", "geometry.>"])
             logger.info("Created GEOMETRY stream.")
-        except Exception:
-            # Stream likely exists
-            pass
+        except Exception as e:
+            # Stream likely exists (e.g., already created by another process)
+            logger.debug(f"GEOMETRY stream creation skipped (may already exist): {e}")
 
     async def subscribe_geometry_events(self, handle_message: Callable) -> None:
         """Subscribe to published CHIT Geometry Packets (CGPs).
@@ -312,13 +330,18 @@ class ChitService:
             return False
 
         try:
+            # Convert numpy types to native Python types for JSON serialization
+            safe_params = _convert_numpy_types(params)
             payload = json.dumps({
                 "type": "manifold_update",
-                "parameters": params
+                "parameters": safe_params
             }).encode()
             await self.nc.publish("geometry.event.manifold_update", payload)
-            logger.info(f"Published manifold update: curvature_k={params.get('curvature_k')}")
+            logger.info(f"Published manifold update: curvature_k={safe_params.get('curvature_k')}")
             return True
+        except (TypeError, ValueError) as e:
+            logger.error(f"Failed to serialize manifold update: {e}")
+            return False
         except Exception as e:
             logger.error(f"Failed to publish manifold update: {e}")
             return False

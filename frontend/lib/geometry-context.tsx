@@ -1,6 +1,6 @@
 "use client";
 
-import React, { createContext, useContext, useState, useCallback, ReactNode } from 'react';
+import React, { createContext, useContext, useState, useCallback, useEffect, useMemo, ReactNode } from 'react';
 
 /**
  * Shared state for synchronizing 2D (HyperbolicNavigator) and 3D (Manifold3D) views.
@@ -49,6 +49,16 @@ export function GeometryProvider({ children, initialParams }: GeometryProviderPr
         epsilon: initialParams?.epsilon ?? 0.1,
     });
 
+    // Sync manifoldParams when initialParams prop changes (e.g., after data fetch)
+    useEffect(() => {
+        if (initialParams) {
+            setManifoldParamsState(prev => ({
+                curvature_k: initialParams.curvature_k ?? prev.curvature_k,
+                epsilon: initialParams.epsilon ?? prev.epsilon,
+            }));
+        }
+    }, [initialParams]);
+
     const setManifoldParams = useCallback((params: { curvature_k?: number; epsilon?: number }) => {
         setManifoldParamsState(prev => ({
             ...prev,
@@ -62,7 +72,8 @@ export function GeometryProvider({ children, initialParams }: GeometryProviderPr
         setSelectedPoint(null);
     }, []);
 
-    const value: GeometryContextType = {
+    // Memoize context value to prevent unnecessary re-renders
+    const value = useMemo<GeometryContextType>(() => ({
         selectedNode,
         selectedConstellation,
         selectedPoint,
@@ -74,7 +85,15 @@ export function GeometryProvider({ children, initialParams }: GeometryProviderPr
         setViewMode,
         setManifoldParams,
         clearSelection,
-    };
+    }), [
+        selectedNode,
+        selectedConstellation,
+        selectedPoint,
+        viewMode,
+        manifoldParams,
+        setManifoldParams,
+        clearSelection,
+    ]);
 
     return (
         <GeometryContext.Provider value={value}>

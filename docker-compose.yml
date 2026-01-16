@@ -385,15 +385,16 @@ services:
               count: all
               capabilities: [gpu]
     environment:
-      - PROFILE=pmoves_custom
+      PROFILE: pmoves_custom
       # MCP Server Configuration (docking pattern)
-      - MCP_SERVER_ENABLED=false
-      - MCP_SERVER_TOKEN=
-      # Standalone mode uses Web UI on WEB_UI_PORT (default 50051)
-      # Docked mode exposes MCP at http://pmoves-agent-zero:50051/mcp/t-{token}/sse
-      - WEB_UI_PORT=50051
+      # Enable MCP server so UI instance can connect to API MCP instance
+      MCP_SERVER_ENABLED: "${AGENT_ZERO_MCP_ENABLED:-true}"
+      MCP_SERVER_TOKEN: "${AGENT_ZERO_MCP_TOKEN:-pmoves-dox-mcp-token}"
+      # Web UI available on WEB_UI_PORT (runs alongside MCP server)
+      # MCP endpoint: http://pmoves-agent-zero:50051/mcp/t-{token}/sse
+      WEB_UI_PORT: "50051"
       # TensorZero integration for LLM orchestration
-      - TENSORZERO_API_BASE=http://tensorzero:3000/v1
+      TENSORZERO_API_BASE: http://tensorzero:3000/v1
     networks:
       - app_tier
       - api_tier

@@ -79,11 +79,9 @@ export function HyperbolicNavigator({ data, className, width = 800, height = 600
     setVizData(data);
   }, [data]);
 
-  // Sync initial manifold params
+  // Sync initial manifold params (always sync, including null/undefined)
   useEffect(() => {
-    if (initialManifoldParams) {
-      setManifoldParams(initialManifoldParams);
-    }
+    setManifoldParams(initialManifoldParams || null);
   }, [initialManifoldParams]);
 
   // NATS Subscription

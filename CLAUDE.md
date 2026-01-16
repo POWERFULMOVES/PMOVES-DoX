@@ -254,13 +254,14 @@ Artifacts  Pages/       Chunks with         Structured   FAISS/NumPy
 
 **Agent Zero Docking Pattern**:
 - Agent Zero is a general AI assistant with Linux environment control, tool execution, and MCP server integration
-- **Standalone mode** (default): Runs with Web UI on port 50051
-  - Access: `http://localhost:50051`
-  - Used for local development and testing
-  - MCP server disabled by default
-- **Docked mode** (PMOVES.AI/Tokenism integration): Exposes MCP API for parent systems
-  - Enable: `AGENT_ZERO_MCP_ENABLED=true` + `AGENT_ZERO_MCP_TOKEN=<token>`
-  - MCP endpoint: `http://pmoves-agent-zero:50051/mcp/t-{token}/sse` (SSE transport)
+- **Default mode**: MCP server ENABLED with Web UI available
+  - Web UI: `http://localhost:50051`
+  - MCP endpoint: `http://pmoves-agent-zero:50051/mcp/t-pmoves-dox-mcp-token/sse`
+  - Default token: `pmoves-dox-mcp-token` (override with `AGENT_ZERO_MCP_TOKEN`)
+- **Standalone mode** (MCP disabled): Set `AGENT_ZERO_MCP_ENABLED=false`
+  - Only Web UI accessible, no MCP API
+- **Docked mode** (PMOVES.AI/Tokenism integration): Uses custom token
+  - Set `AGENT_ZERO_MCP_TOKEN=<your-secure-token>`
   - Parent systems can call Agent Zero tools via MCP protocol
   - Tools available: `send_message`, `finish_chat`
 - **Configuration**:

@@ -106,7 +106,7 @@ class GeometryEngine:
                 "curvature_k": k,
                 "epsilon": epsilon
             }
-        except Exception as e:
+        except (ValueError, TypeError, np.linalg.LinAlgError) as e:
             logger.error(f"analyze_curvature error: {e}")
             return {"delta": 0.0, "curvature_k": 0.0, "epsilon": 0.0}
 
@@ -241,7 +241,8 @@ class GeometryEngine:
 
             return frequencies.tolist(), amplitudes.tolist()
 
-        except Exception:
+        except (ValueError, TypeError, np.linalg.LinAlgError) as e:
+            logger.debug(f"compute_zeta_spectrum fallback to defaults: {e}")
             return default_frequencies[:3], default_amplitudes[:3]
 
     def generate_chit_config(self, analysis: Dict[str, float]) -> Dict[str, Any]:

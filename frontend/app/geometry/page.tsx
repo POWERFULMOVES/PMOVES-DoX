@@ -1,7 +1,7 @@
 "use client";
 
 import { useState, useEffect } from "react";
-import { HyperbolicNavigator } from "@/components/geometry/HyperbolicNavigator";
+import { HyperbolicNavigator, ManifoldParams } from "@/components/geometry/HyperbolicNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
 import { GeometryProvider } from "@/lib/geometry-context";
 
@@ -53,10 +53,7 @@ interface GeometryData {
   super_nodes: SuperNode[];
 }
 
-interface ManifoldParams {
-  curvature_k: number;
-  epsilon: number;
-}
+// ManifoldParams imported from HyperbolicNavigator
 
 interface ManifoldMetadata {
   shape: string;
@@ -107,17 +104,18 @@ export default function GeometryPage() {
         if (manifoldResponse.ok) {
           const manifoldData = await manifoldResponse.json();
           if (manifoldData.metrics) {
+            // Use consistent epsilon default (0.1) across both states
+            const epsilon = manifoldData.metrics.epsilon ?? 0.1;
             setManifoldParams({
               curvature_k: manifoldData.metrics.curvature_k ?? 0,
-              epsilon: manifoldData.metrics.epsilon ?? 0.1
+              epsilon
             });
             setManifoldMeta({
               shape: manifoldData.shape || 'Unknown',
               curvature_k: manifoldData.metrics.curvature_k ?? 0,
-              epsilon: manifoldData.metrics.epsilon ?? 0,
+              epsilon,
               delta: manifoldData.metrics.delta ?? 0
             });
-            console.log('Manifold params loaded:', manifoldData.metrics);
           }
         }
       } catch (err) {
