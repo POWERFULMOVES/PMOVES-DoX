@@ -80,3 +80,16 @@ We use the **Pmoves-hyperdimensions** tool (`/hyperdimensions`) to visualize the
 **Rule of Thumb:**
 
 *   If the user asks "What does this look like?", do **not** show a list. Show a **Shape**.
+
+---
+
+## 5. Demo & Testing
+
+For a complete demonstration walkthrough with metrics to watch and test validation:
+
+**See: [GEOMETRY_DEMO_GUIDE.md](GEOMETRY_DEMO_GUIDE.md)**
+
+- 95 tests validate geometric intelligence
+- Live demo script (5-6 minutes)
+- Troubleshooting guide
+- API endpoint examples
