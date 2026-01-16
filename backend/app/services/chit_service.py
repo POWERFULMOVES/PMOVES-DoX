@@ -206,6 +206,114 @@ class ChitService:
             "raw_cgp": cgp
         }
 
+    async def publish_cgp(self, cgp: Dict[str, Any], subject: str = "tokenism.cgp.ready.v1") -> bool:
+        """Publish a CHIT Geometry Packet to the NATS bus.
+
+        Args:
+            cgp: The CHIT Geometry Packet to publish.
+            subject: NATS subject to publish to (default: tokenism.cgp.ready.v1).
+
+        Returns:
+            True if published successfully, False otherwise.
+        """
+        if not self._nats_available or not self.nc:
+            logger.warning("Cannot publish CGP: NATS not available")
+            return False
+
+        try:
+            payload = json.dumps(cgp).encode()
+            await self.nc.publish(subject, payload)
+            logger.info(f"Published CGP to {subject}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to publish CGP: {e}")
+            return False
+
+    async def publish_manifold_update(self, params: Dict[str, Any]) -> bool:
+        """Publish a manifold parameter update for real-time visualization.
+
+        Args:
+            params: Manifold parameters (curvature_k, epsilon, etc.).
+
+        Returns:
+            True if published successfully, False otherwise.
+        """
+        if not self._nats_available or not self.nc:
+            logger.debug("Cannot publish manifold update: NATS not available")
+            return False
+
+        try:
+            payload = json.dumps({
+                "type": "manifold_update",
+                "parameters": params
+            }).encode()
+            await self.nc.publish("geometry.event.manifold_update", payload)
+            logger.info(f"Published manifold update: curvature_k={params.get('curvature_k')}")
+            return True
+        except Exception as e:
+            logger.error(f"Failed to publish manifold update: {e}")
+            return False
+
+    def create_cgp_from_document(
+        self,
+        document_id: str,
+        sections: list,
+        curvature_result: Dict[str, Any]
+    ) -> Dict[str, Any]:
+        """Create a CGP from document structure and curvature analysis.
+
+        Args:
+            document_id: Document identifier.
+            sections: List of document sections with text and metadata.
+            curvature_result: Result from GeometryEngine.analyze_curvature().
+
+        Returns:
+            A CHIT Geometry Packet dictionary.
+        """
+        constellations = []
+
+        for i, section in enumerate(sections[:10]):  # Limit to 10 sections
+            points = []
+            chunks = section.get("chunks", [])
+
+            for j, chunk in enumerate(chunks[:20]):  # Limit to 20 chunks per section
+                points.append({
+                    "id": f"p_{i}_{j}",
+                    "x": (j % 5) * 30 - 60,
+                    "y": (j // 5) * 30 - 60,
+                    "proj": chunk.get("relevance", 0.5),
+                    "conf": chunk.get("confidence", 0.8),
+                    "text": chunk.get("text", "")[:100]  # Truncate long text
+                })
+
+            if points:
+                constellations.append({
+                    "id": f"const_{i}",
+                    "anchor": [1, 0, 0],
+                    "summary": section.get("title", f"Section {i+1}"),
+                    "spectrum": [0.5] * 5,
+                    "radial_minmax": [0, 1],
+                    "points": points
+                })
+
+        return {
+            "spec": "chit.cgp.v0.1",
+            "meta": {
+                "source": f"pmoves-dox.document.{document_id}",
+                "curvature_k": curvature_result.get("curvature_k", 0),
+                "delta": curvature_result.get("delta", 0),
+                "epsilon": curvature_result.get("epsilon", 0)
+            },
+            "super_nodes": [{
+                "id": f"doc_{document_id[:8]}",
+                "label": f"Document {document_id[:8]}",
+                "x": 0,
+                "y": 0,
+                "r": 200,
+                "constellations": constellations
+            }]
+        }
+
 
 # Global singleton
 chit_service = ChitService()

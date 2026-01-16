@@ -1,8 +1,10 @@
 "use client";
 
-import React, { useEffect, useRef, useMemo, useCallback } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import * as THREE from 'three';
 import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
+import { useNats } from '@/lib/nats-context';
+import { StringCodec } from 'nats.ws';
 
 interface ManifoldParams {
     curvature_k?: number;
@@ -15,6 +17,7 @@ interface Props {
     width: number;
     height: number;
     params: ManifoldParams | null;
+    onParamsUpdate?: (params: ManifoldParams) => void;
 }
 
 /**
@@ -119,7 +122,7 @@ function generateManifoldGeometry(
     return geometry;
 }
 
-export default function Manifold3D({ width, height, params }: Props) {
+export default function Manifold3D({ width, height, params, onParamsUpdate }: Props) {
     const mountRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
     const sceneRef = useRef<THREE.Scene | null>(null);
@@ -128,9 +131,50 @@ export default function Manifold3D({ width, height, params }: Props) {
     const controlsRef = useRef<OrbitControls | null>(null);
     const reqRef = useRef<number>(0);
 
+    // NATS connection for real-time updates
+    const { connection } = useNats();
+    const [localParams, setLocalParams] = useState<ManifoldParams>(params || {});
+
+    // Sync props to local state
+    useEffect(() => {
+        if (params) {
+            setLocalParams(prev => ({ ...prev, ...params }));
+        }
+    }, [params]);
+
+    // NATS subscription for manifold updates
+    useEffect(() => {
+        if (!connection) return;
+
+        const sc = StringCodec();
+        const sub = connection.subscribe("geometry.event.manifold_update");
+        console.log("Manifold3D: Subscribed to geometry.event.manifold_update");
+
+        (async () => {
+            for await (const m of sub) {
+                try {
+                    const payload = JSON.parse(sc.decode(m.data));
+                    console.log("Manifold3D: Received manifold update", payload);
+
+                    if (payload.parameters || payload.curvature_k !== undefined) {
+                        const newParams = payload.parameters || payload;
+                        setLocalParams(prev => ({ ...prev, ...newParams }));
+                        onParamsUpdate?.(newParams);
+                    }
+                } catch (err) {
+                    console.error("Manifold3D: Failed to parse NATS message", err);
+                }
+            }
+        })();
+
+        return () => {
+            sub.unsubscribe();
+        };
+    }, [connection, onParamsUpdate]);
+
     // Extract params with defaults
-    const curvature_k = params?.curvature_k ?? 0;
-    const epsilon = params?.epsilon ?? 0.1;
+    const curvature_k = localParams?.curvature_k ?? 0;
+    const epsilon = localParams?.epsilon ?? 0.1;
 
     // Initialize Three.js
     useEffect(() => {

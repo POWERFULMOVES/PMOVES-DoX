@@ -252,7 +252,15 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
     # 5. Compute zeta spectrum from embeddings
     frequencies, amplitudes = geometry_engine.compute_zeta_spectrum(embeddings)
 
-    # 6. Return Link and metrics
+    # 6. Publish manifold update to NATS for real-time visualization
+    try:
+        import asyncio
+        asyncio.create_task(chit_service.publish_manifold_update(analysis))
+    except Exception as e:
+        # Non-blocking - log but don't fail the request
+        pass
+
+    # 7. Return Link and metrics
     return {
         "status": "ok",
         "shape": config.get("meta", {}).get("inferred_shape"),

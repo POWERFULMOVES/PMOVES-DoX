@@ -3,6 +3,7 @@
 import { useState, useEffect } from "react";
 import { HyperbolicNavigator } from "@/components/geometry/HyperbolicNavigator";
 import { ErrorBoundary } from "@/components/ErrorBoundary";
+import { GeometryProvider } from "@/lib/geometry-context";
 
 const initialData: GeometryData = {
   spec: "chit.cgp.v0.1",
@@ -57,9 +58,17 @@ interface ManifoldParams {
   epsilon: number;
 }
 
+interface ManifoldMetadata {
+  shape: string;
+  curvature_k: number;
+  epsilon: number;
+  delta: number;
+}
+
 export default function GeometryPage() {
   const [geometryData, setGeometryData] = useState<GeometryData>(initialData);
   const [manifoldParams, setManifoldParams] = useState<ManifoldParams | null>(null);
+  const [manifoldMeta, setManifoldMeta] = useState<ManifoldMetadata | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -102,6 +111,12 @@ export default function GeometryPage() {
               curvature_k: manifoldData.metrics.curvature_k ?? 0,
               epsilon: manifoldData.metrics.epsilon ?? 0.1
             });
+            setManifoldMeta({
+              shape: manifoldData.shape || 'Unknown',
+              curvature_k: manifoldData.metrics.curvature_k ?? 0,
+              epsilon: manifoldData.metrics.epsilon ?? 0,
+              delta: manifoldData.metrics.delta ?? 0
+            });
             console.log('Manifold params loaded:', manifoldData.metrics);
           }
         }
@@ -120,36 +135,52 @@ export default function GeometryPage() {
     // in HyperbolicNavigator component. No polling needed.
   }, []);
 
+  // Determine shape badge color
+  const getShapeBadgeColor = (shape: string) => {
+    if (shape.includes('Hyperbolic')) return 'bg-purple-500/20 text-purple-300 border-purple-500/50';
+    if (shape.includes('Spherical')) return 'bg-orange-500/20 text-orange-300 border-orange-500/50';
+    return 'bg-slate-500/20 text-slate-300 border-slate-500/50';
+  };
+
   return (
-    <div className="flex flex-col h-screen bg-slate-950 text-white">
-        <header className="p-4 border-b border-slate-800 flex justify-between items-center">
-            <div>
-                <h1 className="text-xl font-bold">Geometric Intelligence / Shape Discovery</h1>
-                <p className="text-sm text-slate-400">
-                    CHIT Protocol: Hyperbolic Knowledge Navigation
-                </p>
-            </div>
-            <div className="flex items-center gap-4 text-sm">
-                {loading && <span className="text-blue-400">Loading geometry data...</span>}
-                {error && <span className="text-red-400">Error: {error}</span>}
-                {!loading && !error && (
-                    <span className="text-green-400">
-                        {geometryData.super_nodes.length} super nodes
-                    </span>
-                )}
-            </div>
-        </header>
-        <main className="flex-1 p-4 relative">
-             <ErrorBoundary>
-                 <HyperbolicNavigator
-                    data={geometryData}
-                    width={1200}
-                    height={800}
-                    className="w-full h-full shadow-2xl shadow-blue-900/20"
-                    initialManifoldParams={manifoldParams}
-                 />
-             </ErrorBoundary>
-        </main>
-    </div>
+    <GeometryProvider initialParams={manifoldParams || undefined}>
+      <div className="flex flex-col h-screen bg-slate-950 text-white">
+          <header className="p-4 border-b border-slate-800 flex justify-between items-center">
+              <div>
+                  <h1 className="text-xl font-bold">Geometric Intelligence / Shape Discovery</h1>
+                  <p className="text-sm text-slate-400">
+                      CHIT Protocol: Hyperbolic Knowledge Navigation
+                  </p>
+              </div>
+              <div className="flex items-center gap-4 text-sm">
+                  {loading && <span className="text-blue-400">Loading geometry data...</span>}
+                  {error && <span className="text-red-400">Error: {error}</span>}
+                  {!loading && !error && (
+                      <>
+                          <span className="text-green-400">
+                              {geometryData.super_nodes.length} super nodes
+                          </span>
+                          {manifoldMeta && (
+                              <span className={`px-2 py-1 rounded border text-xs font-mono ${getShapeBadgeColor(manifoldMeta.shape)}`}>
+                                  {manifoldMeta.shape} (K={manifoldMeta.curvature_k.toFixed(2)})
+                              </span>
+                          )}
+                      </>
+                  )}
+              </div>
+          </header>
+          <main className="flex-1 p-4 relative">
+               <ErrorBoundary>
+                   <HyperbolicNavigator
+                      data={geometryData}
+                      width={1200}
+                      height={800}
+                      className="w-full h-full shadow-2xl shadow-blue-900/20"
+                      initialManifoldParams={manifoldParams}
+                   />
+               </ErrorBoundary>
+          </main>
+      </div>
+    </GeometryProvider>
   );
 }
