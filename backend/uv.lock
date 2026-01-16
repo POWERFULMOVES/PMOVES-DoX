@@ -4021,8 +4021,6 @@ dependencies = [
     { name = "google-cloud-aiplatform" },
     { name = "google-generativeai" },
     { name = "httpx" },
-    { name = "ipykernel" },
-    { name = "jupyter" },
     { name = "langextract" },
     { name = "matplotlib" },
     { name = "nats-py" },
@@ -4053,6 +4051,8 @@ dev = [
 
 [package.dev-dependencies]
 dev = [
+    { name = "ipykernel" },
+    { name = "jupyter" },
     { name = "pytest" },
 ]
 
@@ -4068,8 +4068,6 @@ requires-dist = [
     { name = "google-cloud-aiplatform", specifier = ">=1.38.0" },
     { name = "google-generativeai", specifier = ">=0.4.0" },
     { name = "httpx", specifier = ">=0.26.0" },
-    { name = "ipykernel", specifier = ">=6.29.0" },
-    { name = "jupyter", specifier = ">=1.0.0" },
     { name = "langextract", specifier = ">=0.1.0" },
     { name = "matplotlib", specifier = ">=3.8.0" },
     { name = "nats-py", specifier = ">=2.8.0" },
@@ -4094,7 +4092,11 @@ requires-dist = [
 ]
 
 [package.metadata.requires-dev]
-dev = [{ name = "pytest", specifier = ">=7.4.0,<8.0.0" }]
+dev = [
+    { name = "ipykernel", specifier = ">=6.29.0" },
+    { name = "jupyter", specifier = ">=1.0.0" },
+    { name = "pytest", specifier = ">=7.4.0,<8.0.0" },
+]
 
 [[package]]
 name = "polyfactory"

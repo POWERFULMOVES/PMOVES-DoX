@@ -30,8 +30,9 @@ neo4j>=5.0.0
 torch>=2.2.0
 accelerate>=0.27.0
 bitsandbytes>=0.43.0; sys_platform != "win32" 
-ipykernel>=6.29.0
-jupyter>=1.0.0
+# Dev-only dependencies (moved to avoid nbconvert vulnerability in prod image)
+# ipykernel>=6.29.0
+# jupyter>=1.0.0
 nats-py>=2.8.0
 google-generativeai>=0.4.0
 google-cloud-aiplatform>=1.38.0
