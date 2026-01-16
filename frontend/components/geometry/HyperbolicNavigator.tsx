@@ -36,6 +36,13 @@ interface CGPSuperNode {
   constellations: CGPConstellation[];
 }
 
+export interface ManifoldParams {
+  curvature_k?: number;
+  epsilon?: number;
+  surfaceFn?: string;
+  t?: number;
+}
+
 export interface HyperbolicNavigatorProps {
   data: {
     super_nodes: CGPSuperNode[];
@@ -43,6 +50,7 @@ export interface HyperbolicNavigatorProps {
   className?: string;
   width?: number;
   height?: number;
+  initialManifoldParams?: ManifoldParams | null;
 }
 
 
@@ -57,19 +65,26 @@ const Manifold3D = dynamic(() => import('./Manifold3D'), {
 
 
 // --- Main Navigator Component ---
-export function HyperbolicNavigator({ data, className, width = 800, height = 600 }: HyperbolicNavigatorProps) {
+export function HyperbolicNavigator({ data, className, width = 800, height = 600, initialManifoldParams }: HyperbolicNavigatorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const [selectedNode, setSelectedNode] = useState<string | null>(null);
   const { connection } = useNats();
   const [vizData, setVizData] = useState(data);
-  const [manifoldParams, setManifoldParams] = useState<any>(null);
+  const [manifoldParams, setManifoldParams] = useState<ManifoldParams | null>(initialManifoldParams || null);
   const [viewMode, setViewMode] = useState<'navigator' | 'manifold'>('navigator');
 
   // Sync prop data
   useEffect(() => {
     setVizData(data);
   }, [data]);
+
+  // Sync initial manifold params
+  useEffect(() => {
+    if (initialManifoldParams) {
+      setManifoldParams(initialManifoldParams);
+    }
+  }, [initialManifoldParams]);
 
   // NATS Subscription
   useEffect(() => {

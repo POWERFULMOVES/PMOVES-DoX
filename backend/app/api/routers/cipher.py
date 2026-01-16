@@ -74,9 +74,39 @@ async def simulate_geometry_event(cgp: Dict[str, Any] = Body(...)):
     """
     Simulate receiving a CHIT Geometry Packet (CGP).
     Decodes it and returns the A2UI SurfaceUpdate to visualize it.
+
+    Zeta frequencies are dynamically computed from:
+    1. Constellation point spectra (if available)
+    2. Point coordinate distributions
+    3. Falls back to default zeta zeros if insufficient data
     """
     decoded = chit_service.decode_cgp(cgp)
-    
+
+    # Extract embeddings from CGP for zeta spectrum computation
+    # Use constellation spectra and point coordinates as proxy embeddings
+    embeddings = []
+    super_nodes = cgp.get("super_nodes", [])
+
+    for node in super_nodes:
+        constellations = node.get("constellations", [])
+        for const in constellations:
+            # Use spectrum as embedding if available
+            spectrum = const.get("spectrum", [])
+            if spectrum and len(spectrum) >= 2:
+                embeddings.append(spectrum)
+
+            # Also use point coordinates as 2D embeddings
+            points = const.get("points", [])
+            for pt in points:
+                x = pt.get("x", 0)
+                y = pt.get("y", 0)
+                proj = pt.get("proj", 0.5)
+                conf = pt.get("conf", 0.5)
+                embeddings.append([x, y, proj, conf])
+
+    # Compute dynamic zeta spectrum from embeddings
+    frequencies, amplitudes = geometry_engine.compute_zeta_spectrum(embeddings)
+
     return {
         "surfaceUpdate": {
             "surfaceId": "main-surface",
@@ -89,7 +119,7 @@ async def simulate_geometry_event(cgp: Dict[str, Any] = Body(...)):
                             "width": 800,
                             "height": 600,
                             "data": {
-                                "super_nodes": cgp.get("super_nodes", [])
+                                "super_nodes": super_nodes
                             }
                         }
                     }
@@ -101,8 +131,8 @@ async def simulate_geometry_event(cgp: Dict[str, Any] = Body(...)):
                             "className": "w-full h-[150px] mt-4",
                             "width": 800,
                             "height": 150,
-                            "frequencies": [14.13, 21.02, 25.01, 30.42, 32.93, 37.58, 40.91, 43.32],
-                            "amplitudes": [0.8, 0.6, 0.5, 0.3, 0.2, 0.1, 0.4, 0.7]
+                            "frequencies": frequencies,
+                            "amplitudes": amplitudes
                         }
                     }
                 }
@@ -110,7 +140,12 @@ async def simulate_geometry_event(cgp: Dict[str, Any] = Body(...)):
         },
         "beginRendering": {
             "surfaceId": "main-surface",
-            "root": "geo-nav-1" # Note: renderer only does root. Ideally this structure handles lists.
+            "root": "geo-nav-1"
+        },
+        "meta": {
+            "computed_zeta": True,
+            "embedding_count": len(embeddings),
+            "frequency_count": len(frequencies)
         }
     }
 
@@ -161,14 +196,35 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
     
     if document_id == "demo":
         # Simulate a tree-like structure (Hyperbolic) for demo
-        # Centroid + branching noise
+        # High variance in distances to centroid = hyperbolic geometry
+        # Mix of tight center points and far outliers
         np.random.seed(42)
-        # Create 4 clusters expanding outward (tree-like)
-        for i in range(5): 
-            base = np.random.rand(128) # 128-dim
-            for j in range(10):
-                # Add increasing noise to simulate divergence/hierarchy
-                embeddings.append(base + np.random.normal(0, 0.5 * (i+1), 128))
+        dim = 64  # Lower dim for clearer variance
+
+        # Tight center cluster (very close to origin)
+        center = np.zeros(dim)
+        for _ in range(8):
+            embeddings.append((center + np.random.normal(0, 0.01, dim)).tolist())
+
+        # Far outliers at varying distances (tree branches)
+        # Outlier 1: Very far
+        outlier1 = np.ones(dim) * 15.0
+        embeddings.append(outlier1.tolist())
+
+        # Outlier 2: Far in opposite direction
+        outlier2 = np.ones(dim) * -12.0
+        embeddings.append(outlier2.tolist())
+
+        # Outlier 3: Different direction
+        outlier3 = np.zeros(dim)
+        outlier3[:32] = 10.0
+        outlier3[32:] = -10.0
+        embeddings.append(outlier3.tolist())
+
+        # Medium distance points (intermediate hierarchy levels)
+        for i in range(4):
+            mid = np.random.randn(dim) * 3.0
+            embeddings.append(mid.tolist())
     else:
         # Fetch real embeddings
         embeddings = search_index.get_embeddings_for_document(document_id)
@@ -193,10 +249,17 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
     except Exception as e:
         raise HTTPException(500, f"Failed to save manifold config: {e}")
         
-    # 5. Return Link
+    # 5. Compute zeta spectrum from embeddings
+    frequencies, amplitudes = geometry_engine.compute_zeta_spectrum(embeddings)
+
+    # 6. Return Link and metrics
     return {
         "status": "ok",
         "shape": config.get("meta", {}).get("inferred_shape"),
         "metrics": analysis,
+        "zeta_spectrum": {
+            "frequencies": frequencies,
+            "amplitudes": amplitudes
+        },
         "url": "http://localhost:8000/hyperdimensions?load=chit_manifold.json"
     }

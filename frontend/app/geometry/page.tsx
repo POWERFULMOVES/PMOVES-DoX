@@ -52,8 +52,14 @@ interface GeometryData {
   super_nodes: SuperNode[];
 }
 
+interface ManifoldParams {
+  curvature_k: number;
+  epsilon: number;
+}
+
 export default function GeometryPage() {
   const [geometryData, setGeometryData] = useState<GeometryData>(initialData);
+  const [manifoldParams, setManifoldParams] = useState<ManifoldParams | null>(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -63,20 +69,41 @@ export default function GeometryPage() {
         setLoading(true);
         setError(null);
 
-        // Fetch demo geometry packet from backend
         const API_BASE = process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8484';
-        const response = await fetch(`${API_BASE}/cipher/geometry/demo-packet`);
-        if (!response.ok) {
-          throw new Error(`Backend returned ${response.status}: ${response.statusText}`);
+
+        // Fetch demo geometry packet and manifold params in parallel
+        const [cgpResponse, manifoldResponse] = await Promise.all([
+          fetch(`${API_BASE}/cipher/geometry/demo-packet`),
+          fetch(`${API_BASE}/cipher/geometry/visualize_manifold`, {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ document_id: 'demo' })
+          })
+        ]);
+
+        if (!cgpResponse.ok) {
+          throw new Error(`CGP endpoint returned ${cgpResponse.status}: ${cgpResponse.statusText}`);
         }
 
-        const data = await response.json();
+        const cgpData = await cgpResponse.json();
 
-        // Validate data has expected structure
-        if (data.super_nodes && Array.isArray(data.super_nodes)) {
-          setGeometryData(data);
+        // Validate CGP data has expected structure
+        if (cgpData.super_nodes && Array.isArray(cgpData.super_nodes)) {
+          setGeometryData(cgpData);
         } else {
           console.warn('Invalid geometry data structure, using initial data');
+        }
+
+        // Parse manifold params from visualize_manifold response
+        if (manifoldResponse.ok) {
+          const manifoldData = await manifoldResponse.json();
+          if (manifoldData.metrics) {
+            setManifoldParams({
+              curvature_k: manifoldData.metrics.curvature_k ?? 0,
+              epsilon: manifoldData.metrics.epsilon ?? 0.1
+            });
+            console.log('Manifold params loaded:', manifoldData.metrics);
+          }
         }
       } catch (err) {
         console.error('Failed to fetch geometry data:', err);
@@ -119,6 +146,7 @@ export default function GeometryPage() {
                     width={1200}
                     height={800}
                     className="w-full h-full shadow-2xl shadow-blue-900/20"
+                    initialManifoldParams={manifoldParams}
                  />
              </ErrorBoundary>
         </main>

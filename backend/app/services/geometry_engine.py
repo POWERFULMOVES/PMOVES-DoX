@@ -4,7 +4,7 @@ Calculates geometric properties (curvature, epsilon) of data manifolds
 and generates CHIT configurations for the visualization engine.
 """
 import numpy as np
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Tuple
 import json
 
 class GeometryEngine:
@@ -74,6 +74,68 @@ class GeometryEngine:
             }
         except Exception:
             return {"delta": 0.0, "curvature_k": 0.0, "epsilon": 0.0}
+
+    def compute_zeta_spectrum(self, embeddings: List[List[float]]) -> Tuple[List[float], List[float]]:
+        """
+        Derive Riemann Zeta-like frequencies from embedding covariance eigenvalues.
+
+        The eigenvalues of the covariance matrix capture the principal variance
+        directions of the embedding space. We map these to frequencies near the
+        first non-trivial zeta zeros (14.13, 21.02, 25.01, ...) for visualization.
+
+        Args:
+            embeddings: List of embedding vectors
+
+        Returns:
+            Tuple of (frequencies, amplitudes) for ZetaVisualizer
+        """
+        # Default zeta zeros (first non-trivial zeros of Riemann zeta function)
+        default_frequencies = [14.134725, 21.022040, 25.010858, 30.424876, 32.935062]
+        default_amplitudes = [0.8, 0.6, 0.5, 0.4, 0.3]
+
+        if not embeddings or len(embeddings) < 2:
+            return default_frequencies[:3], default_amplitudes[:3]
+
+        try:
+            matrix = np.array(embeddings)
+
+            # Handle 1D case (single feature)
+            if matrix.ndim == 1 or matrix.shape[1] == 1:
+                return default_frequencies[:3], default_amplitudes[:3]
+
+            # Compute covariance matrix
+            cov = np.cov(matrix.T)
+
+            # Handle scalar covariance (2 samples)
+            if np.isscalar(cov) or cov.ndim == 0:
+                return default_frequencies[:3], default_amplitudes[:3]
+
+            # Get eigenvalues (sorted ascending)
+            eigenvalues = np.linalg.eigvalsh(cov)
+
+            # Take top eigenvalues (largest variance directions)
+            top_eigenvalues = eigenvalues[-8:][::-1]  # Reverse to get descending order
+
+            # Normalize eigenvalues to [0, 1] range
+            ev_max = np.max(np.abs(top_eigenvalues)) + 1e-9
+            normalized_ev = np.abs(top_eigenvalues) / ev_max
+
+            # Map to zeta-like frequencies: base_freq + eigenvalue_contribution
+            # First zeta zero is ~14.13, spacing is roughly 5-7 between zeros
+            base_freq = 14.13
+            frequencies = base_freq + normalized_ev * 20  # Scale to spread across 14-34 range
+
+            # Amplitudes decay with index (higher eigenvalues = stronger signal)
+            n = len(frequencies)
+            amplitudes = 1.0 / (1.0 + np.arange(n) * 0.3)
+
+            # Modulate amplitudes by normalized eigenvalue magnitude
+            amplitudes = amplitudes * (0.5 + 0.5 * normalized_ev)
+
+            return frequencies.tolist(), amplitudes.tolist()
+
+        except Exception:
+            return default_frequencies[:3], default_amplitudes[:3]
 
     def generate_chit_config(self, analysis: Dict[str, float]) -> Dict[str, Any]:
         """
