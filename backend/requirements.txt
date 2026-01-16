@@ -35,3 +35,7 @@ jupyter>=1.0.0
 nats-py>=2.8.0
 google-generativeai>=0.4.0
 google-cloud-aiplatform>=1.38.0
+# Security updates (Dependabot alerts)
+aiohttp>=3.13.3
+urllib3>=2.6.3
+filelock>=3.20.3
