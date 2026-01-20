@@ -3,12 +3,13 @@ PMOVES.AI Service Registry Integration Template
 
 Service discovery using the PMOVES service registry with fallback chain:
 1. Environment variables (static overrides)
-2. Supabase service catalog (dynamic, runtime)
-3. NATS service announcements (real-time, cached)
-4. Docker DNS (development fallback)
+2. Docker DNS (development fallback)
+
+Note: Future versions may add Supabase service catalog and NATS announcement
+lookups. For now, use environment variables for production overrides.
 
 Usage:
-    from service_registry import get_service_url, ServiceInfo
+    from pmoves_registry import get_service_url, ServiceInfo
 
     # Simple URL resolution
     url = await get_service_url("hirag-v2")
@@ -108,6 +109,28 @@ def _get_env_url(slug: str) -> str | None:
     return None
 
 
+def _get_env_health_url(slug: str) -> str | None:
+    """
+    Check for dedicated health endpoint environment variable.
+
+    Args:
+        slug: Service slug (e.g., "hirag-v2")
+
+    Returns:
+        Health URL from environment or None
+    """
+    env_var_patterns = [
+        slug.upper().replace("-", "_") + "_HEALTH_URL",
+        slug.upper().replace("-", "") + "_HEALTH_URL",
+    ]
+
+    for pattern in env_var_patterns:
+        if url := os.getenv(pattern):
+            return url
+
+    return None
+
+
 def _fallback_dns_url(slug: str, default_port: int) -> str:
     """
     Generate fallback URL using Docker DNS.
@@ -146,11 +169,15 @@ async def get_service_info(
     """
     # 1. Check environment variable override
     if env_url := _get_env_url(slug):
+        # Check for dedicated health URL, otherwise append /healthz
+        health_url = _get_env_health_url(slug)
+        if not health_url:
+            health_url = f"{env_url.rstrip('/')}/healthz"
         return ServiceInfo(
             slug=slug,
             name=f"{slug} (from env)",
-            description=f"Service URL from environment variable",
-            health_check_url=env_url,
+            description="Service URL from environment variable",
+            health_check_url=health_url,
             default_port=default_port,
             tier=ServiceTier.API,  # Default tier
         )
@@ -160,8 +187,8 @@ async def get_service_info(
     return ServiceInfo(
         slug=slug,
         name=f"{slug} (fallback)",
-        description=f"Service resolved via Docker DNS fallback",
-        health_check_url=fallback_url,
+        description="Service resolved via Docker DNS fallback",
+        health_check_url=f"{fallback_url}/healthz",
         default_port=default_port,
         tier=ServiceTier.API,
     )

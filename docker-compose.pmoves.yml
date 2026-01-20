@@ -98,9 +98,10 @@ x-env-tier-ui: &env-tier-ui
     - TIER=ui
 
 # Health check template
+# Note: Services using this anchor should set SERVICE_PORT environment variable
 x-pmoves-healthcheck: &pmoves-healthcheck
   healthcheck:
-    test: ["CMD", "curl", "-f", "http://localhost:8080/healthz"]
+    test: ["CMD-SHELL", "curl -f http://localhost:$${SERVICE_PORT:-8080}/healthz || exit 1"]
     interval: 30s
     timeout: 5s
     retries: 3

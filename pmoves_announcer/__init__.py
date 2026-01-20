@@ -5,7 +5,7 @@ NATS service discovery announcer for all PMOVES services.
 Publishes service announcements to the services.announce.v1 subject.
 
 Usage:
-    from service_announcer import ServiceAnnouncer, announce_service
+    from pmoves_announcer import ServiceAnnouncer, announce_service
 
     # Create announcement
     announcer = ServiceAnnouncer(

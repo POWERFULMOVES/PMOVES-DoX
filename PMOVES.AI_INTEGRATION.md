@@ -11,7 +11,8 @@ The PMOVES.AI integration template has been applied to DoX Agent Service.
 Edit the following files with your service-specific values:
 
 - `env.shared` - Base environment configuration
-- `env.tier-agent` - AGENT tier specific configuration
+- `env.tier-agent` - AGENT tier-specific configuration (dotenv format for Docker Compose)
+- `env.tier-agent.sh` - AGENT tier-specific configuration (shell format for manual sourcing)
 - `chit/secrets_manifest_v2.yaml` - Add your service's required secrets
 
 ### 2. Update Docker Compose
@@ -74,14 +75,15 @@ nats sub "services.announce.v1"
 - **Slug:** dox
 - **Tier:** agent
 - **Port:** 8052
-- **Health Check:** http://localhost:8052/healthz
-- **NATS Enabled:** False
+- **Health Check:** `http://localhost:8052/healthz`
+- **NATS Enabled:** True
 - **GPU Enabled:** False
 
 ## Files Created
 
 - `env.shared` - Base PMOVES.AI environment
-- `env.tier-agent` - Tier-specific environment
+- `env.tier-agent` - Tier-specific environment (dotenv format)
+- `env.tier-agent.sh` - Tier-specific environment (shell format)
 - `chit/secrets_manifest_v2.yaml` - CHIT secrets configuration
 - `pmoves_health/` - Health check module
 - `pmoves_announcer/` - NATS service announcer

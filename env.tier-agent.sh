@@ -1,3 +1,4 @@
+#!/usr/bin/env bash
 # PMOVES.AI Tier Environment: Agent
 # For Agent and Orchestrator services (Agent Zero, Archon, etc.)
 # Source after env.shared: source env.shared && source env.tier-agent.sh

@@ -56,13 +56,28 @@ class DependencyCheck:
 
 
 class DatabaseCheck(DependencyCheck):
-    """Health check for database connections."""
+    """Health check for database connections.
+
+    Wraps a synchronous database connection test function and runs it
+    in a thread pool to avoid blocking the event loop.
+    """
 
     def __init__(self, connect_fn: Callable, **kwargs):
+        """Initialize database health check.
+
+        Args:
+            connect_fn: Callable that returns True if database is connected.
+            **kwargs: Additional options (required: bool).
+        """
         super().__init__("database", kwargs.get("required", True))
         self.connect_fn = connect_fn
 
     async def check(self) -> bool:
+        """Check database connectivity.
+
+        Returns:
+            True if database connection succeeds, False otherwise.
+        """
         try:
             return await asyncio.to_thread(self.connect_fn)
         except Exception:
@@ -70,14 +85,28 @@ class DatabaseCheck(DependencyCheck):
 
 
 class HTTPCheck(DependencyCheck):
-    """Health check for HTTP endpoints."""
+    """Health check for HTTP endpoints.
+
+    Makes a GET request to the specified URL and checks for 200 OK response.
+    """
 
     def __init__(self, url: str, **kwargs):
+        """Initialize HTTP health check.
+
+        Args:
+            url: URL to check (typically a /healthz endpoint).
+            **kwargs: Additional options (name: str, required: bool).
+        """
         name = kwargs.get("name", "service")
         super().__init__(name, kwargs.get("required", True))
         self.url = url
 
     async def check(self) -> bool:
+        """Check HTTP endpoint availability.
+
+        Returns:
+            True if endpoint returns 200 OK, False otherwise.
+        """
         try:
             import httpx
             async with httpx.AsyncClient(timeout=2.0) as client:
@@ -88,18 +117,35 @@ class HTTPCheck(DependencyCheck):
 
 
 class NATSCheck(DependencyCheck):
-    """Health check for NATS connection."""
+    """Health check for NATS connection.
+
+    Attempts to connect to NATS server and verifies connectivity.
+    """
 
     def __init__(self, nats_url: str, **kwargs):
+        """Initialize NATS health check.
+
+        Args:
+            nats_url: NATS server URL (e.g., nats://nats:4222).
+            **kwargs: Additional options (required: bool).
+        """
         super().__init__("nats", kwargs.get("required", True))
         self.nats_url = nats_url
 
     async def check(self) -> bool:
+        """Check NATS connectivity.
+
+        Returns:
+            True if NATS is reachable, False otherwise.
+        """
         try:
             from nats.aio.client import Client as NATS
-            nc = await NATS.connect(self.nats_url, connect_timeout=2)
+            nc = NATS()  # Instantiate client first
+            await nc.connect(self.nats_url, connect_timeout=2)
             await nc.close()
             return True
+        except (ConnectionRefusedError, TimeoutError):
+            return False
         except Exception:
             return False
 
@@ -186,14 +232,26 @@ _health_checker = HealthChecker()
 
 
 def health_check(checks: List[DependencyCheck] = None):
-    """Decorator to add health checks to a function."""
+    """Decorator to add health checks to a function.
+
+    Registers health checks ONCE at decoration time, not on each request.
+    This prevents duplicate check registrations.
+
+    Args:
+        checks: List of DependencyCheck instances to register.
+
+    Returns:
+        Decorated function with health checks registered.
+    """
     def decorator(func: Callable):
+        # Register checks ONCE at decoration time (not per-request)
+        if checks:
+            local_checks = list(checks)  # Defensive copy to avoid mutation
+            for check in local_checks:
+                _health_checker.add_check(check)
+
         @wraps(func)
         async def wrapper(*args, **kwargs):
-            checker = _health_checker
-            if checks:
-                for check in checks:
-                    checker.add_check(check)
             return await func(*args, **kwargs)
         return wrapper
     return decorator
