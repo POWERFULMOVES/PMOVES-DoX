@@ -46,6 +46,15 @@ class QAEngine:
                 evidence_ids.append(fact.get("evidence_id"))
         
         if not values:
+            # Try Ollama fallback if no structured metrics found
+            ollama_ans = self._try_ollama(question)
+            if ollama_ans:
+                return {
+                    "answer": ollama_ans,
+                    "evidence": [],
+                    "metric": None
+                }
+
             return {
                 "answer": f"No data found for {target_metric}.",
                 "evidence": [],
@@ -75,3 +84,35 @@ class QAEngine:
             "average": avg,
             "count": len(values)
         }
+
+    def _try_ollama(self, question: str) -> Any:
+        """Fallback to Ollama LLM for questions without structured metric matches."""
+        import os
+        import requests
+        base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+        model = os.getenv("OLLAMA_MODEL", "llama3.1")
+
+        # Simple context retrieval from facts (naive RAG)
+        facts = self.db.get_facts()
+        context_lines = []
+        for f in facts[:20]:  # Limit context
+            ent = f.get("entity", "Unknown")
+            mets = f.get("metrics", {})
+            if mets:
+                context_lines.append(f"{ent}: {mets}")
+
+        context_str = "\n".join(context_lines)
+        prompt = f"Answer the question based on the context below.\n\nContext:\n{context_str}\n\nQuestion: {question}"
+
+        payload = {
+            "model": model,
+            "prompt": prompt,
+            "stream": False,
+        }
+        try:
+            resp = requests.post(f"{base_url.rstrip('/')}/api/generate", json=payload, timeout=20)
+            if resp.ok:
+                return resp.json().get("response", "").strip()
+        except Exception:
+            pass
+        return None

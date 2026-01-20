@@ -376,12 +376,13 @@ class SearchIndex:
         except Exception as exc:  # pragma: no cover - remote sync should not break local search
             LOGGER.warning("Failed to sync search embeddings to remote store: %s", exc)
 
-    def search(self, query: str, k: int = 10) -> List[SearchResult]:
+    def search(self, query: str, k: int = 10, threshold: float = 0.0) -> List[SearchResult]:
         """Search for similar chunks using vector similarity.
 
         Args:
             query: Search query text.
             k: Maximum number of results to return.
+            threshold: Minimum similarity score to include in results (default: 0.0).
 
         Returns:
             List of SearchResult objects sorted by similarity score.
@@ -409,6 +410,8 @@ class SearchIndex:
         out: List[SearchResult] = []
         for score, idx in zip(scores.tolist(), idxs.tolist()):
             if idx < 0 or idx >= len(self.payloads):
+                continue
+            if score < threshold:
                 continue
             ch = self.payloads[idx]
             out.append(SearchResult(score=float(score), text=ch["text"], meta=ch["meta"]))
