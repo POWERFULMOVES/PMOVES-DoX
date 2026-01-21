@@ -146,12 +146,29 @@ class SupabaseDatabase:
 
     def add_api(self, api: Dict) -> None:
         payload = api.copy()
+        # Handle tags_json -> tags mapping (SQLite uses tags_json, Supabase uses tags)
+        if "tags_json" in payload:
+            tags_value = payload.pop("tags_json")
+            if tags_value is not None:
+                # tags_json is stored as JSON string, parse it for JSONB column
+                if isinstance(tags_value, str):
+                    try:
+                        payload["tags"] = json.loads(tags_value)
+                    except json.JSONDecodeError:
+                        payload["tags"] = []
+                else:
+                    payload["tags"] = tags_value
         if isinstance(payload.get("tags"), list):
             payload["tags"] = payload["tags"]
         self._run(self._table("api_endpoints").upsert(payload, on_conflict="id"), operation="add_api")
 
     def add_log(self, log: Dict) -> None:
         payload = log.copy()
+        # Handle attrs_json -> attrs mapping (SQLite uses attrs_json, Supabase uses attrs)
+        if "attrs_json" in payload:
+            attrs_value = payload.pop("attrs_json")
+            if attrs_value is not None:
+                payload["attrs"] = attrs_value
         if isinstance(payload.get("attrs"), (dict, list)):
             payload["attrs"] = payload["attrs"]
         self._run(self._table("log_entries").upsert(payload, on_conflict="id"), operation="add_log")
