@@ -1,7 +1,7 @@
 # PMOVES-DoX Makefile
 # Dual-mode deployment: standalone or docked (within PMOVES.AI)
 
-.PHONY: standalone docked test-standalone test-docked clean help logs build pull check-parent ensure-standalone-networks
+.PHONY: standalone docked test-standalone test-docked clean help logs build pull check-parent ensure-standalone-networks env-bootstrap
 
 # Default target
 help:
@@ -31,6 +31,18 @@ help:
 	@echo ""
 	@echo "Geometry / CHIT:"
 	@echo "  make geometry-test   - Test geometry bus connectivity"
+	@echo ""
+	@echo "Environment:"
+	@echo "  make env-bootstrap   - Copy credentials from parent PMOVES.AI"
+
+# =============================================================================
+# Environment Bootstrap
+# =============================================================================
+
+env-bootstrap:
+	@echo "Bootstrapping environment from parent PMOVES.AI..."
+	@chmod +x ./scripts/bootstrap_env.sh 2>/dev/null || true
+	@./scripts/bootstrap_env.sh
 
 # =============================================================================
 # Mode Selection
