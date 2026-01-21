@@ -250,6 +250,33 @@ services:
       retries: 5
     restart: unless-stopped
 
+  # ClickHouse - TensorZero Observability Backend (TIER 4)
+  # Enables full observability for standalone mode with metrics and traces
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.12-alpine
+    container_name: pmoves-dox-clickhouse
+    hostname: tensorzero-clickhouse
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-tensorzero}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-tensorzero}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_DB: default
+    ports:
+      - "8123:8123"   # HTTP API
+      - "9000:9000"   # Native protocol
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./config/clickhouse-listen.xml:/etc/clickhouse-server/config.d/listen.xml:ro
+    networks:
+      - data_tier
+      - app_tier
+    healthcheck:
+      test: ["CMD", "wget", "--spider", "--tries", "1", "http://127.0.0.1:8123/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
 
   glances:
     image: nicolargo/glances:latest-full
@@ -387,8 +414,16 @@ services:
     networks:
       - app_tier
       - api_tier
-      - pmoves_data  # Connect to parent PMOVES.AI for ClickHouse
+      - data_tier  # Connect to local ClickHouse for standalone observability
+    depends_on:
+      clickhouse:
+        condition: service_healthy
     restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   agent-zero:
     build:
@@ -499,3 +534,4 @@ volumes:
   neo4j-data:
   neo4j-logs:
   agent-zero-data:
+  clickhouse-data:

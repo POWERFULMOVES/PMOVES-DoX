@@ -1,28 +1,49 @@
 # TensorZero gateway config for PMOVES-DoX
-# Uses OpenAI-compatible API for model routing
+# 6-Tier Architecture with Full Observability
+#
+# TIER 1: Gateway (this config) - routes requests
+# TIER 2: Cloud Models (OpenRouter) - primary LLM
+# TIER 3: Local Models (Ollama) - fallback/embeddings
+# TIER 4: Observability (ClickHouse) - metrics/traces
+# TIER 5: UI (Agent Zero) - web interface
+# TIER 6: MCP Protocol (Agent Zero) - tool orchestration
 
 [gateway]
+bind_address = "0.0.0.0:3000"
 
-# Observability enabled (connects to parent PMOVES.AI ClickHouse)
+# Observability enabled - connects to local ClickHouse (TIER 4)
 [gateway.observability]
 enabled = true
 async_writes = true
 
-# Disable OTLP traces (we use ClickHouse directly)
+# Disable OTLP traces (using ClickHouse directly)
 [gateway.export.otlp.traces]
 enabled = false
 
 # -----------------
-# Chat Models
+# TIER 2: Cloud Models (OpenRouter)
 # -----------------
 
-# Gemini Flash (Google AI - primary)
+# Nemotron 70B via OpenRouter (primary cloud model)
+[models.nemotron_70b]
+routing = ["openrouter"]
+
+[models.nemotron_70b.providers.openrouter]
+type = "openai"
+api_base = "https://openrouter.ai/api/v1"
+model_name = "nvidia/llama-3.1-nemotron-70b-instruct"
+
+# Gemini Flash (Google AI - fast alternative)
 [models.gemini_flash]
 routing = ["google_ai"]
 
 [models.gemini_flash.providers.google_ai]
 type = "google_ai_studio_gemini"
-model_name = "gemini-1.5-flash"
+model_name = "gemini-2.0-flash"
+
+# -----------------
+# TIER 3: Local Models (Ollama)
+# -----------------
 
 # Llama 3.2 via Ollama (fallback/local)
 [models.llama_ollama]
@@ -34,11 +55,27 @@ api_base = "http://ollama:11434/v1"
 model_name = "llama3.2"
 api_key_location = "none"
 
-# -----------------
-# Embedding Models
-# -----------------
+# Nemotron Mini via Ollama (utility tasks)
+[models.nemotron_mini]
+routing = ["ollama_local"]
 
-# Qwen3 Embedding 8B via Ollama (4096d, RTX 5090 optimized)
+[models.nemotron_mini.providers.ollama_local]
+type = "openai"
+api_base = "http://ollama:11434/v1"
+model_name = "nemotron-mini"
+api_key_location = "none"
+
+# Qwen 2.5:7b for embeddings
+[models.qwen_embed]
+routing = ["ollama_local"]
+
+[models.qwen_embed.providers.ollama_local]
+type = "openai"
+api_base = "http://ollama:11434/v1"
+model_name = "qwen2.5:7b"
+api_key_location = "none"
+
+# Qwen3 Embedding 8B (4096d, RTX 5090 optimized)
 [models.qwen3_embed]
 routing = ["ollama_local"]
 
@@ -47,3 +84,39 @@ type = "openai"
 api_base = "http://ollama:11434/v1"
 model_name = "qwen3-embedding:8b"
 api_key_location = "none"
+
+# -----------------
+# Functions (Agent Roles with Weighted Routing)
+# -----------------
+
+# Orchestrator: Main reasoning (80% cloud, 20% local fallback)
+[functions.orchestrator]
+type = "chat"
+
+[functions.orchestrator.variants.cloud]
+type = "chat_completion"
+weight = 0.8
+model = "nemotron_70b"
+
+[functions.orchestrator.variants.local]
+type = "chat_completion"
+weight = 0.2
+model = "llama_ollama"
+
+# Utility: Quick tasks (100% local)
+[functions.utility]
+type = "chat"
+
+[functions.utility.variants.local]
+type = "chat_completion"
+weight = 1.0
+model = "nemotron_mini"
+
+# Embed: Embeddings (100% local)
+[functions.embed]
+type = "chat"
+
+[functions.embed.variants.local]
+type = "chat_completion"
+weight = 1.0
+model = "qwen_embed"
