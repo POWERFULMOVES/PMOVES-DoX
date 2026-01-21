@@ -89,6 +89,36 @@ class SupabaseDatabase:
         )
         return artifact["id"]
 
+    def update_artifact(self, artifact_id: str, **fields: Any) -> None:
+        """Update an artifact's fields, merging extras if provided."""
+        extras = fields.pop("extras", None)
+
+        # If extras provided, fetch current and merge
+        if extras is not None:
+            rows = self._run(
+                self._table("artifacts").select("extras").eq("id", artifact_id),
+                operation="get_artifact_extras",
+            )
+            if rows:
+                current_extras = rows[0].get("extras") or {}
+                if isinstance(current_extras, str):
+                    try:
+                        current_extras = json.loads(current_extras)
+                    except json.JSONDecodeError:
+                        current_extras = {}
+                current_extras.update(extras)
+                fields["extras"] = current_extras
+            else:
+                fields["extras"] = extras
+
+        if not fields:
+            return
+
+        self._run(
+            self._table("artifacts").update(fields).eq("id", artifact_id),
+            operation="update_artifact",
+        )
+
     def add_fact(self, fact: Dict) -> None:
         payload = {**fact, "metrics": fact.get("metrics", {})}
         self._run(self._table("facts").upsert(payload, on_conflict="id"), operation="add_fact")
