@@ -69,13 +69,19 @@ def _build_accelerator_options() -> AcceleratorOptions | None:
         return None
 
 
-async def process_pdf(
+def process_pdf(
     file_path: Path,
     report_week: str,
     artifacts_dir: Path,
     artifact_id: Optional[str] = None,
 ) -> Tuple[List[Dict[str, Any]], List[Dict[str, Any]], Dict[str, Any]]:
-    """Convert a PDF with Docling and surface enriched evidence."""
+    """Convert a PDF with Docling and surface enriched evidence.
+
+    Note: This is intentionally synchronous because Docling's DocumentConverter.convert()
+    is synchronous. Calling this from async code should use asyncio.to_thread() or
+    loop.run_in_executor(). FastAPI background tasks run in thread pools, so they
+    can call this directly without wrapping.
+    """
 
     artifacts_dir.mkdir(parents=True, exist_ok=True)
 
@@ -191,12 +197,18 @@ async def process_pdf(
         )
 
         if should_persist:
-            # Get table location
+            # Get table location - handle different Docling API versions
             bbox = None
             if hasattr(table, 'prov') and table.prov:
+                prov = table.prov[0]
+                # Try different attribute names for page number (API changed between versions)
+                page_num = getattr(prov, 'page', None) or getattr(prov, 'page_no', None)
+                bbox_tuple = None
+                if hasattr(prov, 'bbox'):
+                    bbox_tuple = prov.bbox.as_tuple() if hasattr(prov.bbox, 'as_tuple') else None
                 bbox = {
-                    'page': table.prov[0].page if table.prov else None,
-                    'bbox': table.prov[0].bbox.as_tuple() if hasattr(table.prov[0], 'bbox') else None
+                    'page': page_num,
+                    'bbox': bbox_tuple
                 }
             
             preview_df = df.head(5)
@@ -266,16 +278,21 @@ async def process_pdf(
             }
         )
 
-        if metrics:
-            facts.append(
-                {
-                    "id": str(uuid.uuid4()),
-                    "report_week": report_week,
-                    "entity": None,
-                    "metrics": metrics,
-                    "evidence_id": evidence_id,
-                }
-            )
+        # Always create fact for tables (use structure info if no metrics)
+        fact_metrics = metrics if metrics else {
+            "rows": int(df.shape[0]),
+            "columns": int(df.shape[1]),
+            "column_names": list(df.columns)[:10],  # First 10 column names
+        }
+        facts.append(
+            {
+                "id": str(uuid.uuid4()),
+                "report_week": report_week,
+                "entity": "table",
+                "metrics": fact_metrics,
+                "evidence_id": evidence_id,
+            }
+        )
 
     # --------------------------- text metrics ---------------------------
     for section_idx, item in enumerate(getattr(doc, "texts", []) or []):
@@ -284,9 +301,8 @@ async def process_pdf(
             continue
 
         metrics = extract_metrics_from_text(text)
-        if not metrics:
-            continue
 
+        # Always create evidence for text sections (removed metrics gate)
         evidence_id = str(uuid.uuid4())
         coordinates = None
         provenance = getattr(item, "prov", None)
@@ -308,21 +324,24 @@ async def process_pdf(
                 "preview": text[:300],
                 "content_type": "text",
                 "coordinates": coordinates,
+                "full_data": {"text": text, "metrics": metrics},
             }
         )
 
-        facts.append(
-            {
-                "id": str(uuid.uuid4()),
-                "report_week": report_week,
-                "entity": None,
-                "metrics": metrics,
-                "evidence_id": evidence_id,
-            }
-        )
+        # Only add fact if metrics were extracted
+        if metrics:
+            facts.append(
+                {
+                    "id": str(uuid.uuid4()),
+                    "report_week": report_week,
+                    "entity": None,
+                    "metrics": metrics,
+                    "evidence_id": evidence_id,
+                }
+            )
 
     # --------------------------- charts ---------------------------
-    chart_results = await chart_processor.process_charts(doc, artifacts_dir, file_path.stem)
+    chart_results = chart_processor.process_charts(doc, artifacts_dir, file_path.stem)
     vlm_enabled = bool(vlm_repo)
     for chart_idx, chart in enumerate(chart_results):
         evidence_id = str(uuid.uuid4())
@@ -449,6 +468,28 @@ async def process_pdf(
                 }
             )
     analysis_results["metric_hits"] = metric_hits
+
+    # Add document-level summary fact (captures document structure even if no metrics)
+    doc_pages = getattr(doc, "pages", {}) or {}
+    doc_texts = getattr(doc, "texts", []) or []
+    doc_tables = getattr(doc, "tables", []) or []
+    facts.append(
+        {
+            "id": str(uuid.uuid4()),
+            "report_week": report_week,
+            "entity": "document_summary",
+            "metrics": {
+                "pages": len(doc_pages) if isinstance(doc_pages, (dict, list)) else 1,
+                "text_sections": len(doc_texts),
+                "tables": len(doc_tables),
+                "charts": len(analysis_results.get("charts", [])),
+                "formulas": len(analysis_results.get("formulas", [])),
+                "total_evidence": len(evidence),
+                "total_facts": len(facts),  # Count before this summary
+            },
+            "evidence_id": None,
+        }
+    )
 
     return facts, evidence, analysis_results
 
