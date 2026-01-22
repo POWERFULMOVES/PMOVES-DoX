@@ -22,8 +22,12 @@ class ChartProcessor:
     def __init__(self, enable_ocr: bool = True) -> None:
         self.enable_ocr = enable_ocr
 
-    async def process_charts(self, doc: Any, artifacts_dir: Path, stem: str) -> List[Dict[str, Any]]:
-        """Persist chart images and return lightweight metadata."""
+    def process_charts(self, doc: Any, artifacts_dir: Path, stem: str) -> List[Dict[str, Any]]:
+        """Persist chart images and return lightweight metadata.
+
+        Note: This is synchronous for compatibility with sync callers. The underlying
+        operations (_save_figure, _ocr_image) are already synchronous.
+        """
 
         pictures = getattr(doc, "pictures", []) or []
         if not pictures:
@@ -36,7 +40,7 @@ class ChartProcessor:
         for idx, figure in enumerate(pictures):
             chart_id = f"{stem}_chart_{idx}"
             output_path = charts_dir / f"{chart_id}.png"
-            saved_path = await asyncio.to_thread(self._save_figure, figure, output_path)
+            saved_path = self._save_figure(figure, output_path)
 
             page = self._extract_page(figure)
             bbox = self._extract_bbox(figure)
@@ -45,7 +49,7 @@ class ChartProcessor:
 
             text_summary: Optional[str] = None
             if self.enable_ocr and pytesseract and saved_path:
-                text_summary = await asyncio.to_thread(self._ocr_image, saved_path)
+                text_summary = self._ocr_image(saved_path)
 
             rel_path = None
             if saved_path:

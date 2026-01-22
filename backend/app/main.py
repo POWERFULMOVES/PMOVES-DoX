@@ -241,11 +241,30 @@ async def _startup_watch():
     # Start watcher thread
     t = threading.Thread(target=_watch_loop, daemon=True)
     t.start()
-    try:
-        search_index.rebuild()
-    except Exception:
-        pass
-    
+
+    # Rebuild search index in background thread with timeout to prevent startup hang
+    def _rebuild_with_timeout():
+        try:
+            import signal
+            # Use alarm on Unix, skip timeout on Windows
+            if hasattr(signal, 'SIGALRM'):
+                def timeout_handler(signum, frame):
+                    raise TimeoutError("Search index rebuild timed out")
+                signal.signal(signal.SIGALRM, timeout_handler)
+                signal.alarm(30)  # 30 second timeout
+            search_index.rebuild()
+            if hasattr(signal, 'SIGALRM'):
+                signal.alarm(0)  # Cancel alarm
+            print("[STARTUP] Search index rebuild completed")
+        except TimeoutError:
+            print("[STARTUP] Search index rebuild timed out, continuing without full index")
+        except Exception as e:
+            print(f"[STARTUP] Search index rebuild failed: {e}")
+
+    # Run rebuild in background thread so startup completes immediately
+    rebuild_thread = threading.Thread(target=_rebuild_with_timeout, daemon=True)
+    rebuild_thread.start()
+
     # Connect to NATS Geometry Bus (non-blocking)
     try:
         from app.services.chit_service import chit_service
@@ -1827,20 +1846,39 @@ def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict],
         "formulas": [],
     }
 
+import logging
+import sys
+_log = logging.getLogger(__name__)
+
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
+    print(f"[DEBUG-STDERR] _process_and_store called for {file_path}", file=sys.stderr, flush=True)
     try:
         analysis_payload: dict | None = None
         facts: list[dict]
         evidence: list[dict]
         if suffix == ".pdf":
             # PDF is async-capable but can be used sync too
-            if _env_flag("FAST_PDF_MODE", True):
+            fast_mode = _env_flag("FAST_PDF_MODE", False)
+            print(f"[DEBUG-STDERR] FAST_PDF_MODE={fast_mode}", file=sys.stderr, flush=True)
+            _log.warning(f"[DEBUG] FAST_PDF_MODE={fast_mode}, processing {file_path.name}")
+            if fast_mode:
+                _log.warning("[DEBUG] Using _process_pdf_fast")
                 facts, evidence, analysis_payload = _process_pdf_fast(file_path, ARTIFACTS_DIR)
             else:
-                import anyio
-                facts, evidence, analysis_payload = anyio.run(
-                    process_pdf, file_path, report_week, ARTIFACTS_DIR, artifact_id
-                )
+                _log.warning("[DEBUG] Using Docling process_pdf (synchronous)")
+                try:
+                    # Call process_pdf directly - it's synchronous and background tasks
+                    # run in thread pools, so no need for anyio.run()
+                    facts, evidence, analysis_payload = process_pdf(
+                        file_path, report_week, ARTIFACTS_DIR, artifact_id
+                    )
+                    _log.warning(f"[DEBUG] Docling completed: {len(facts)} facts, {len(evidence)} evidence")
+                except Exception as docling_err:
+                    _log.error(f"[ERROR] Docling failed: {docling_err}")
+                    import traceback
+                    _log.error(traceback.format_exc())
+                    _log.warning("[DEBUG] Falling back to _process_pdf_fast")
+                    facts, evidence, analysis_payload = _process_pdf_fast(file_path, ARTIFACTS_DIR)
             # Ensure a PDF document row exists for deeplinks/open
             try:
                 db.add_document({
