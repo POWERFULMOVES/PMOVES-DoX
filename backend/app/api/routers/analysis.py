@@ -1,12 +1,14 @@
-from fastapi import APIRouter, HTTPException, Query, Body
+from fastapi import APIRouter, HTTPException, Query, Body, UploadFile, File, Form
 from pydantic import BaseModel, Field
-from typing import List, Dict, Any, Optional
+from typing import List, Dict, Any, Optional, Literal
 import uuid
 import time
 import json
 import csv
 import yaml
 import os
+import re
+import requests
 from pathlib import Path
 
 from app.globals import (
@@ -317,3 +319,332 @@ def hrm_echo(req: EchoRequest, Mmax: int = 3, Mmin: int = 1):
     dt = (time.time() - t0) * 1000.0
     HRM_STATS.record(steps=steps, latency_ms=dt, payload={"mode": "echo"})
     return {"out": s, "steps": steps, "variants": variants, "latency_ms": round(dt, 3)}
+
+
+# ---------------- API Documentation Generator ----------------
+
+def _is_ollama_available() -> bool:
+    """Check if Ollama service is reachable."""
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    try:
+        resp = requests.get(f"{base_url.rstrip('/')}/api/tags", timeout=2.0)
+        return resp.status_code == 200
+    except Exception:
+        return False
+
+
+def _extract_with_ollama(code: str, language: str, model: Optional[str]) -> Optional[List[Dict[str, Any]]]:
+    """Use Ollama for endpoint extraction."""
+    base_url = os.getenv("OLLAMA_BASE_URL", "http://localhost:11434")
+    model_name = model or os.getenv("OLLAMA_MODEL", "llama3.1")
+
+    prompt = f"""Analyze the following {language} code and extract API endpoint definitions.
+
+For each endpoint found, provide:
+1. HTTP method (GET, POST, PUT, DELETE, PATCH)
+2. Path/route (e.g., /api/users, /api/users/{{id}})
+3. A brief summary of what the endpoint does
+4. Request parameters (path params, query params)
+
+Code to analyze:
+```{language}
+{code[:8000]}
+```
+
+Return the endpoints as a JSON array with this structure:
+[
+  {{
+    "method": "GET",
+    "path": "/api/users",
+    "summary": "List all users",
+    "parameters": [],
+    "responses": {{"200": {{"description": "Success"}}}}
+  }}
+]
+
+Return ONLY the JSON array, no other text."""
+
+    payload = {
+        "model": model_name,
+        "prompt": prompt,
+        "stream": False,
+    }
+
+    try:
+        resp = requests.post(
+            f"{base_url.rstrip('/')}/api/generate",
+            json=payload,
+            timeout=60
+        )
+        if resp.ok:
+            response_text = resp.json().get("response", "")
+            # Try to parse JSON from response
+            json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
+            if json_match:
+                return json.loads(json_match.group())
+    except Exception as e:
+        print(f"[API-DOC] Ollama extraction failed: {e}")
+
+    return None
+
+
+def _heuristic_endpoint_extraction(code: str, file_ext: str) -> List[Dict[str, Any]]:
+    """Extract endpoints using regex patterns when LLM is unavailable."""
+    endpoints = []
+
+    if file_ext == ".py":
+        # FastAPI patterns: @app.get("/path"), @router.post("/path")
+        fastapi_pattern = r'@(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']'
+        for match in re.finditer(fastapi_pattern, code, re.IGNORECASE):
+            method, path = match.groups()
+            endpoints.append({
+                "method": method.upper(),
+                "path": path,
+                "summary": f"{method.upper()} {path}",
+                "parameters": [],
+                "responses": {"200": {"description": "Success"}}
+            })
+
+        # Flask patterns: @app.route("/path", methods=["GET"])
+        flask_pattern = r'@(?:app|bp)\s*\.route\s*\(\s*["\']([^"\']+)["\'](?:.*?methods\s*=\s*\[([^\]]+)\])?'
+        for match in re.finditer(flask_pattern, code, re.DOTALL):
+            path = match.group(1)
+            methods_str = match.group(2) or '"GET"'
+            methods = re.findall(r'["\'](\w+)["\']', methods_str)
+            for method in methods:
+                endpoints.append({
+                    "method": method.upper(),
+                    "path": path,
+                    "summary": f"{method.upper()} {path}",
+                    "parameters": [],
+                    "responses": {"200": {"description": "Success"}}
+                })
+
+    elif file_ext in (".js", ".ts"):
+        # Express patterns: app.get('/path', ...), router.post('/path', ...)
+        express_pattern = r'(?:app|router)\.(get|post|put|delete|patch)\s*\(\s*["\']([^"\']+)["\']'
+        for match in re.finditer(express_pattern, code, re.IGNORECASE):
+            method, path = match.groups()
+            endpoints.append({
+                "method": method.upper(),
+                "path": path,
+                "summary": f"{method.upper()} {path}",
+                "parameters": [],
+                "responses": {"200": {"description": "Success"}}
+            })
+
+        # Next.js API route pattern (export functions)
+        nextjs_pattern = r'export\s+(?:async\s+)?function\s+(GET|POST|PUT|DELETE|PATCH)'
+        for match in re.finditer(nextjs_pattern, code):
+            method = match.group(1)
+            endpoints.append({
+                "method": method.upper(),
+                "path": "/api/[route]",
+                "summary": f"{method.upper()} handler",
+                "parameters": [],
+                "responses": {"200": {"description": "Success"}}
+            })
+
+    return endpoints
+
+
+def _heuristic_schema_extraction(code: str, file_ext: str) -> List[Dict[str, Any]]:
+    """Extract schema definitions using regex patterns."""
+    schemas = []
+
+    if file_ext == ".py":
+        # Pydantic/dataclass patterns
+        class_pattern = r'class\s+(\w+)\s*\((?:BaseModel|BaseSettings|TypedDict)'
+        for match in re.finditer(class_pattern, code):
+            schema_name = match.group(1)
+            schemas.append({
+                "name": schema_name,
+                "type": "object",
+                "properties": {},
+                "required": []
+            })
+
+    elif file_ext == ".ts":
+        # TypeScript interface pattern
+        interface_pattern = r'(?:interface|type)\s+(\w+)'
+        for match in re.finditer(interface_pattern, code):
+            schema_name = match.group(1)
+            schemas.append({
+                "name": schema_name,
+                "type": "object",
+                "properties": {},
+                "required": []
+            })
+
+    return schemas
+
+
+def _build_openapi_spec(
+    endpoints: List[Dict[str, Any]],
+    schemas: List[Dict[str, Any]],
+    title: str,
+    version: str,
+    description: str,
+) -> Dict[str, Any]:
+    """Build a complete OpenAPI 3.0 specification from extracted components."""
+    # Build paths object
+    paths: Dict[str, Dict[str, Any]] = {}
+    for ep in endpoints:
+        path = ep.get("path", "/")
+        method = ep.get("method", "GET").lower()
+
+        if path not in paths:
+            paths[path] = {}
+
+        operation: Dict[str, Any] = {
+            "summary": ep.get("summary", ""),
+            "description": ep.get("description", ""),
+            "responses": ep.get("responses", {"200": {"description": "Success"}}),
+        }
+
+        if ep.get("parameters"):
+            operation["parameters"] = ep["parameters"]
+
+        if ep.get("request_body"):
+            operation["requestBody"] = ep["request_body"]
+
+        if ep.get("tags"):
+            operation["tags"] = ep["tags"]
+
+        paths[path][method] = operation
+
+    # Build components/schemas
+    components: Dict[str, Any] = {}
+    if schemas:
+        components["schemas"] = {
+            s["name"]: {
+                "type": s.get("type", "object"),
+                "properties": s.get("properties", {}),
+                "required": s.get("required", [])
+            }
+            for s in schemas
+        }
+
+    spec = {
+        "openapi": "3.0.0",
+        "info": {
+            "title": title,
+            "version": version,
+            "description": description,
+        },
+        "servers": [{"url": "http://localhost:8000", "description": "Default server"}],
+        "paths": paths,
+        "components": components,
+    }
+
+    return spec
+
+
+def _parse_existing_spec(content: str, file_ext: str) -> Optional[Dict[str, Any]]:
+    """Parse existing OpenAPI/Swagger spec from JSON/YAML."""
+    try:
+        if file_ext == ".json":
+            data = json.loads(content)
+        else:
+            data = yaml.safe_load(content)
+
+        # Validate it's an OpenAPI/Swagger spec
+        if isinstance(data, dict) and ("openapi" in data or "swagger" in data):
+            return data
+    except Exception:
+        pass
+
+    return None
+
+
+@router.post("/analysis/api-doc")
+async def generate_api_documentation(
+    file: UploadFile = File(...),
+    format: str = Form("openapi"),
+    title: Optional[str] = Form(None),
+    version: str = Form("1.0.0"),
+    description: Optional[str] = Form(None),
+    provider: Optional[str] = Form(None),
+    model: Optional[str] = Form(None),
+):
+    """
+    Generate API documentation from uploaded code files.
+
+    Supports:
+    - Python (.py) - FastAPI, Flask route detection
+    - JavaScript/TypeScript (.js, .ts) - Express, Next.js API routes
+    - JSON/YAML (.json, .yaml, .yml) - Existing OpenAPI enhancement
+
+    Returns an OpenAPI 3.0 specification.
+    """
+    # Validate file extension
+    allowed_extensions = {".py", ".js", ".ts", ".json", ".yaml", ".yml"}
+    file_ext = Path(file.filename or "").suffix.lower()
+    if file_ext not in allowed_extensions:
+        raise HTTPException(
+            status_code=400,
+            detail=f"Unsupported file type. Allowed: {', '.join(allowed_extensions)}"
+        )
+
+    # Read file content
+    content = await file.read()
+    try:
+        code_text = content.decode("utf-8")
+    except UnicodeDecodeError:
+        raise HTTPException(status_code=400, detail="File must be UTF-8 encoded text")
+
+    # Process based on file type
+    if file_ext in {".json", ".yaml", ".yml"}:
+        # Try to parse as existing OpenAPI spec
+        existing_spec = _parse_existing_spec(code_text, file_ext)
+        if existing_spec:
+            # Return enhanced/validated spec
+            return {
+                **existing_spec,
+                "x-generated-by": "PMOVES-DoX",
+                "x-source-type": "existing_spec",
+            }
+
+    # Determine language for extraction
+    language_map = {
+        ".py": "Python",
+        ".js": "JavaScript",
+        ".ts": "TypeScript",
+    }
+    language = language_map.get(file_ext, "code")
+
+    # Try LLM extraction first
+    endpoints = None
+    provider_used = "heuristic"
+
+    provider_name = (provider or os.getenv("LANGEXTRACT_PROVIDER", "")).lower()
+
+    if provider_name in ("ollama", "") and _is_ollama_available():
+        endpoints = _extract_with_ollama(code_text, language, model)
+        if endpoints:
+            provider_used = "ollama"
+
+    # Fallback to heuristic extraction
+    if not endpoints:
+        endpoints = _heuristic_endpoint_extraction(code_text, file_ext)
+
+    # Extract schemas
+    schemas = _heuristic_schema_extraction(code_text, file_ext)
+
+    # Build OpenAPI specification
+    spec = _build_openapi_spec(
+        endpoints=endpoints,
+        schemas=schemas,
+        title=title or Path(file.filename or "API").stem,
+        version=version,
+        description=description or f"API documentation generated from {file.filename}",
+    )
+
+    # Add metadata
+    spec["x-generated-by"] = "PMOVES-DoX"
+    spec["x-provider"] = provider_used
+    spec["x-source-file"] = file.filename
+    spec["x-endpoints-count"] = len(endpoints)
+    spec["x-schemas-count"] = len(schemas)
+
+    return spec
