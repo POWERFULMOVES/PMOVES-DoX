@@ -1,8 +1,11 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Form, Query
 from fastapi.responses import FileResponse
 from typing import List, Dict, Annotated, Optional, Any
+import logging
 import os
 import shutil
+import sys
+import traceback
 import uuid
 import json
 import threading
@@ -45,20 +48,36 @@ def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict],
         "formulas": [],
     }
 
+_log = logging.getLogger(__name__)
+
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
+
     try:
         analysis_payload: dict | None = None
         facts: list[dict] = []
         evidence: list[dict] = []
         if suffix == ".pdf":
-            # PDF is async-capable but can be used sync too
-            if env_flag("FAST_PDF_MODE", True):
+            # process_pdf is synchronous - call directly from background task
+            fast_mode = env_flag("FAST_PDF_MODE", False)  # Docling runs by default
+            _log.warning(f"[DOCLING] Processing {file_path.name}, FAST_PDF_MODE={fast_mode}")
+            print(f"[DOCLING] Processing {file_path.name}, FAST_PDF_MODE={fast_mode}", file=sys.stderr, flush=True)
+
+            if fast_mode:
                 facts, evidence, analysis_payload = _process_pdf_fast(file_path, ARTIFACTS_DIR)
             else:
-                import anyio
-                facts, evidence, analysis_payload = anyio.run(
-                    process_pdf, file_path, report_week, ARTIFACTS_DIR, artifact_id
-                )
+                # Call process_pdf directly - it's synchronous and background tasks
+                # run in thread pools, so no need for anyio.run()
+                try:
+                    facts, evidence, analysis_payload = process_pdf(
+                        file_path, report_week, ARTIFACTS_DIR, artifact_id
+                    )
+                    _log.warning(f"[DOCLING] Completed: {len(facts)} facts, {len(evidence)} evidence")
+                    print(f"[DOCLING] Completed: {len(facts)} facts, {len(evidence)} evidence", file=sys.stderr, flush=True)
+                except Exception as docling_err:
+                    _log.error(f"[DOCLING] Failed: {docling_err}")
+                    _log.error(traceback.format_exc())
+                    print(f"[DOCLING] Fallback to fast mode due to error: {docling_err}", file=sys.stderr, flush=True)
+                    facts, evidence, analysis_payload = _process_pdf_fast(file_path, ARTIFACTS_DIR)
             # Ensure a PDF document row exists for deeplinks/open
             try:
                 db.add_document({
@@ -149,12 +168,24 @@ def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suff
         else:
             raise HTTPException(400, f"Unsupported file type: {suffix}")
 
-        for fact in facts:
-            fact["artifact_id"] = artifact_id
-            db.add_fact(fact)
-        for ev in evidence:
-            ev["artifact_id"] = artifact_id
-            db.add_evidence(ev)
+        print(f"[STORAGE] Starting to store {len(facts)} facts and {len(evidence)} evidence", file=sys.stderr, flush=True)
+        for idx, fact in enumerate(facts):
+            try:
+                fact["artifact_id"] = artifact_id
+                db.add_fact(fact)
+            except Exception as e:
+                print(f"[STORAGE] Error adding fact {idx}: {e}", file=sys.stderr, flush=True)
+                raise
+        print(f"[STORAGE] Stored {len(facts)} facts", file=sys.stderr, flush=True)
+
+        for idx, ev in enumerate(evidence):
+            try:
+                ev["artifact_id"] = artifact_id
+                db.add_evidence(ev)
+            except Exception as e:
+                print(f"[STORAGE] Error adding evidence {idx}: {e}", file=sys.stderr, flush=True)
+                raise
+        print(f"[STORAGE] Stored {len(evidence)} evidence", file=sys.stderr, flush=True)
 
         if analysis_payload and suffix == ".pdf":
             try:
@@ -218,13 +249,22 @@ def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suff
             except Exception:
                 pass
 
+        print("[STORAGE] All storage complete, marking task as completed", file=sys.stderr, flush=True)
         if task_id:
             TASKS[task_id].update({
                 "status": "completed",
                 "facts_count": len(facts),
                 "evidence_count": len(evidence)
             })
+        # Update artifact status to processed
+        try:
+            db.update_artifact(artifact_id, status="processed")
+            print(f"[STORAGE] Updated artifact {artifact_id} status to processed", file=sys.stderr, flush=True)
+        except Exception as e:
+            print(f"[STORAGE] Failed to update artifact status: {e}", file=sys.stderr, flush=True)
     except Exception as e:
+        print(f"[STORAGE] ERROR in _process_and_store: {e}", file=sys.stderr, flush=True)
+        print(traceback.format_exc(), file=sys.stderr, flush=True)
         if task_id:
             TASKS[task_id].update({"status": "error", "error": str(e)})
         else:

@@ -31,7 +31,10 @@ services:
       - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
       - AUTO_MIGRATE=${AUTO_MIGRATE:-false}
-      - SEARCH_DEVICE=${SEARCH_DEVICE:-cpu}
+      # Device selection - defaults to cpu for CI/staging, override in .env for GPU
+      - DEFAULT_DEVICE=${DEFAULT_DEVICE:-cpu}
+      - SEARCH_DEVICE=${SEARCH_DEVICE:-${DEFAULT_DEVICE:-cpu}}
+      - DOCLING_DEVICE=${DOCLING_DEVICE:-${DEFAULT_DEVICE:-cpu}}
       - HRM_ENABLED=${HRM_ENABLED:-false}
       - HRM_MMAX=${HRM_MMAX:-6}
       - HRM_MMIN=${HRM_MMIN:-2}

@@ -132,7 +132,7 @@ export default function LogsPanel() {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
+    <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Logs</h2>
       <div className="grid grid-cols-1 md:grid-cols-7 gap-2 mb-3">
         <input className="border rounded px-2 py-1" placeholder="level" value={level} onChange={e => setLevel(e.target.value)} />

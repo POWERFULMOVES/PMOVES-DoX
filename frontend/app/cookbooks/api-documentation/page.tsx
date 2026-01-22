@@ -5,7 +5,7 @@ import { ArrowLeft, FileText, Upload, Download, Code2, FileJson, FileCode, Spark
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
-import { api } from "@/lib/api";
+import { getApiBase } from "@/lib/config";
 
 type SpecFormat = "openapi" | "swagger" | "asyncapi" | "graphql";
 
@@ -43,76 +43,27 @@ export default function APIDocumentationPage() {
     setSpecYaml("");
 
     try {
-      // Upload file and generate spec
+      // Upload file and generate spec via real API
       const formData = new FormData();
       formData.append("file", selectedFile);
       formData.append("format", format);
 
-      // Call the analysis API to generate documentation
-      // For now, we'll use the documents endpoint and generate a mock spec
-      // In production, this would call a dedicated /api/analysis/api-doc endpoint
+      const response = await fetch(`${getApiBase()}/analysis/api-doc`, {
+        method: "POST",
+        body: formData,
+      });
 
-      // Simulate API call for demo
-      await new Promise(resolve => setTimeout(resolve, 2000));
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.detail || `HTTP error ${response.status}`);
+      }
 
-      // Generate a sample OpenAPI spec based on the file
-      const mockSpec: GeneratedSpec = {
-        openapi: "3.0.0",
-        info: {
-          title: selectedFile.name.replace(/\.[^/.]+$/, ""),
-          version: "1.0.0",
-          description: `API documentation generated from ${selectedFile.name}`
-        },
-        paths: {
-          "/api/users": {
-            get: {
-              summary: "List all users",
-              responses: {
-                "200": {
-                  description: "Successful response",
-                  content: {
-                    "application/json": {
-                      schema: {
-                        type: "array",
-                        items: { type: "object" }
-                      }
-                    }
-                  }
-                }
-              }
-            },
-            post: {
-              summary: "Create a new user",
-              requestBody: {
-                required: true,
-                content: {
-                  "application/json": {
-                    schema: { $ref: "#/components/schemas/User" }
-                  }
-                }
-              }
-            }
-          }
-        },
-        components: {
-          schemas: {
-            User: {
-              type: "object",
-              properties: {
-                id: { type: "string" },
-                name: { type: "string" },
-                email: { type: "string", format: "email" }
-              }
-            }
-          }
-        }
-      };
-
-      setGeneratedSpec(mockSpec);
-      setSpecYaml(JSON.stringify(mockSpec, null, 2));
+      const spec = await response.json();
+      setGeneratedSpec(spec);
+      setSpecYaml(JSON.stringify(spec, null, 2));
     } catch (error) {
       console.error("Failed to generate spec:", error);
-      alert("Failed to generate API documentation");
+      alert(`Failed to generate API documentation: ${error instanceof Error ? error.message : "Unknown error"}`);
     } finally {
       setGenerating(false);
     }

@@ -106,7 +106,7 @@ export default function ArtifactsPanel() {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
+    <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Artifacts</h2>
       <div className="max-h-80 overflow-auto border rounded">
         <table className="min-w-full text-left text-xs">
@@ -125,7 +125,7 @@ export default function ArtifactsPanel() {
                     <td className="px-2 py-1">
                       <div className="flex items-center gap-2 flex-wrap">
                         {typeof a.tags_count === 'number' && (
-                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${a.tags_count>0?'bg-emerald-100 text-emerald-700 border-emerald-200':'bg-gray-100 text-gray-700 border-gray-200'}`}>
+                          <span className={`text-[10px] px-2 py-0.5 rounded-full border ${a.tags_count>0?'bg-emerald-100 text-emerald-700 border-emerald-200':'bg-gray-100 dark:bg-gray-700 text-gray-700 border-gray-200'}`}>
                             Auto‑Tag {a.tags_count>0?`done (${a.tags_count})`:'pending'}
                           </span>
                         )}
@@ -187,7 +187,7 @@ export default function ArtifactsPanel() {
 
       {detail && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center" onClick={()=>{ setDetail(null); setAnalysis(null); }}>
-          <div className="bg-white rounded shadow p-4 w-[900px] max-h-[85vh] overflow-auto" onClick={e=>e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded shadow p-4 w-[900px] max-h-[85vh] overflow-auto" onClick={e=>e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-semibold">Artifact Details</h3>
               <button onClick={()=>{ setDetail(null); setAnalysis(null); }} className="text-gray-500">✕</button>
@@ -203,7 +203,7 @@ export default function ArtifactsPanel() {
                 <div className="font-medium mb-1">Facts ({(detail.facts||[]).length})</div>
                 <div className="border rounded max-h-60 overflow-auto">
                   <table className="min-w-full text-left text-xs">
-                    <thead><tr className="bg-gray-50"><th className="px-2 py-1">entity</th><th className="px-2 py-1">metrics</th></tr></thead>
+                    <thead><tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">entity</th><th className="px-2 py-1">metrics</th></tr></thead>
                     <tbody>
                       {(detail.facts||[]).slice(0,10).map((f:any,i:number)=> (
                         <tr key={i} className="border-t"><td className="px-2 py-1">{f.entity||''}</td><td className="px-2 py-1">{JSON.stringify(f.metrics)}</td></tr>
@@ -216,7 +216,7 @@ export default function ArtifactsPanel() {
                 <div className="font-medium mb-1">Evidence ({(detail.evidence||[]).length})</div>
                 <div className="border rounded max-h-60 overflow-auto">
                   <table className="min-w-full text-left text-xs">
-                    <thead><tr className="bg-gray-50"><th className="px-2 py-1">locator</th><th className="px-2 py-1">type</th></tr></thead>
+                    <thead><tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">locator</th><th className="px-2 py-1">type</th></tr></thead>
                     <tbody>
                       {(detail.evidence||[]).slice(0,10).map((e:any,i:number)=> (
                         <tr key={i} className="border-t"><td className="px-2 py-1">{e.locator}</td><td className="px-2 py-1">{e.content_type}</td></tr>
@@ -272,7 +272,7 @@ export default function ArtifactsPanel() {
                           ? tbl.columns
                           : (tbl.rows && tbl.rows[0] ? Object.keys(tbl.rows[0]) : []);
                         return (
-                          <div key={tbl.id} className="border rounded p-2 bg-gray-50">
+                          <div key={tbl.id} className="border rounded p-2 bg-gray-50 dark:bg-gray-800">
                             <div className="flex flex-wrap text-xs gap-2 mb-2">
                               <span className="font-semibold">{tbl.locator}</span>
                               <span>pages: {(tbl.pages||[]).join(', ')||'n/a'}</span>
@@ -281,7 +281,7 @@ export default function ArtifactsPanel() {
                             </div>
                             <div className="max-h-48 overflow-auto bg-white border rounded">
                               <table className="min-w-full text-[11px]">
-                                <thead className="bg-gray-100">
+                                <thead className="bg-gray-100 dark:bg-gray-700">
                                   <tr>{columns.map((col:string)=>(<th key={col} className="px-2 py-1 text-left border-b">{col}</th>))}</tr>
                                 </thead>
                                 <tbody>
@@ -307,7 +307,7 @@ export default function ArtifactsPanel() {
                       {(analysis.charts||[]).map((chart:any)=>{
                         const imageSrc = chart.image_path ? `${getApiBase()}/download?rel=${encodeURIComponent(chart.image_path)}` : null;
                         return (
-                          <div key={chart.id || chart.locator} className="border rounded p-2 bg-gray-50">
+                          <div key={chart.id || chart.locator} className="border rounded p-2 bg-gray-50 dark:bg-gray-800">
                             <div className="flex flex-col text-xs gap-1 mb-2">
                               <span className="font-semibold">{chart.locator}</span>
                               <span>type: {chart.type || 'unknown'}</span>
@@ -339,7 +339,7 @@ export default function ArtifactsPanel() {
                     <div className="font-medium mb-1">Formulas ({analysis.formulas?.length || 0})</div>
                     <div className="space-y-2">
                       {(analysis.formulas||[]).map((formula:any)=> (
-                        <div key={formula.id || formula.locator} className="border rounded p-2 bg-gray-50 text-xs">
+                        <div key={formula.id || formula.locator} className="border rounded p-2 bg-gray-50 dark:bg-gray-800 text-xs">
                           <div className="font-semibold">{formula.locator}</div>
                           {formula.latex && <div className="mt-1 font-mono text-[11px]">{formula.latex}</div>}
                           {!formula.latex && formula.content && <div className="mt-1">{formula.content}</div>}
@@ -356,7 +356,7 @@ export default function ArtifactsPanel() {
                     <div className="font-medium mb-1">Named Entities ({analysis.entities?.length || 0})</div>
                     <div className="border rounded max-h-64 overflow-auto">
                       <table className="min-w-full text-left text-xs">
-                        <thead className="bg-gray-100"><tr><th className="px-2 py-1">label</th><th className="px-2 py-1">text</th><th className="px-2 py-1">page</th></tr></thead>
+                        <thead className="bg-gray-100 dark:bg-gray-700"><tr><th className="px-2 py-1">label</th><th className="px-2 py-1">text</th><th className="px-2 py-1">page</th></tr></thead>
                         <tbody>
                           {(analysis.entities||[]).map((ent:any, idx:number)=>(
                             <tr key={idx} className="border-t"><td className="px-2 py-1">{ent.label}</td><td className="px-2 py-1">{ent.text}</td><td className="px-2 py-1">{ent.page ?? ''}</td></tr>
@@ -372,7 +372,7 @@ export default function ArtifactsPanel() {
                         <div className="font-medium mb-1">Metric Hits ({analysis.metric_hits.length})</div>
                         <div className="border rounded max-h-40 overflow-auto text-xs">
                           <table className="min-w-full text-left text-[11px]">
-                            <thead className="bg-gray-100"><tr><th className="px-2 py-1">type</th><th className="px-2 py-1">value</th><th className="px-2 py-1">page</th></tr></thead>
+                            <thead className="bg-gray-100 dark:bg-gray-700"><tr><th className="px-2 py-1">type</th><th className="px-2 py-1">value</th><th className="px-2 py-1">page</th></tr></thead>
                             <tbody>
                               {analysis.metric_hits.map((hit:any, idx:number)=>(
                                 <tr key={idx} className="border-t"><td className="px-2 py-1">{hit.type}</td><td className="px-2 py-1">{hit.value}</td><td className="px-2 py-1">{hit.page ?? ''}</td></tr>

@@ -49,8 +49,8 @@ interface DataModelUpdate {
  * Props for the A2UIRenderer component.
  */
 interface A2UIRendererProps {
-    /** Stream of A2UI protocol messages (JSON objects) */
-    content: any[];
+    /** Stream of A2UI protocol messages (JSON objects) or a simple card object */
+    content: any[] | any;
     /** Callback for button actions */
     onAction?: (action: any) => void;
     /** Optional CSS class name */
@@ -129,24 +129,79 @@ const ComponentRegistry: Record<string, React.FC<any>> = {
 };
 
 /**
+ * Renders simple card-style content (fallback for non-protocol payloads)
+ */
+function SimpleCardRenderer({ content }: { content: any }) {
+    if (!content) return null;
+
+    return (
+        <Card className="glass-card overflow-hidden border-white/10">
+            <CardHeader className="pb-2">
+                {content.title && (
+                    <CardTitle className="text-lg">{content.title}</CardTitle>
+                )}
+                {content.description && (
+                    <CardDescription>{content.description}</CardDescription>
+                )}
+            </CardHeader>
+            {(content.items || content.text || content.data) && (
+                <CardContent>
+                    {content.text && (
+                        <p className="text-sm text-muted-foreground">{content.text}</p>
+                    )}
+                    {content.items && Array.isArray(content.items) && (
+                        <ul className="list-disc list-inside space-y-1 text-sm text-muted-foreground">
+                            {content.items.map((item: string, i: number) => (
+                                <li key={i}>{item}</li>
+                            ))}
+                        </ul>
+                    )}
+                    {content.data && (
+                        <pre className="text-xs bg-black/20 p-2 rounded overflow-x-auto">
+                            {(() => {
+                                try {
+                                    return JSON.stringify(content.data, null, 2);
+                                } catch {
+                                    return String(content.data);
+                                }
+                            })()}
+                        </pre>
+                    )}
+                </CardContent>
+            )}
+        </Card>
+    );
+}
+
+/**
  * Renders a UI based on the A2UI (Agent-to-UI) protocol.
- * 
+ *
  * This component consumes a stream of A2UI messages (`surfaceUpdate`, `beginRendering`, etc.)
  * and dynamically renders them using a registry of mapped React components.
- * 
- * @param props.content - Array of A2UI protocol messages.
+ *
+ * Also supports simple card-style objects as a fallback for non-protocol payloads.
+ *
+ * @param props.content - Array of A2UI protocol messages, or a simple card object.
  * @param props.onAction - Callback handler for interactive elements (e.g., buttons).
  * @param props.className - Additional CSS classes.
  */
 export default function A2UIRenderer({ content, onAction, className }: A2UIRendererProps) {
     const [components, setComponents] = useState<Map<string, A2UIComponent>>(new Map());
     const [rootId, setRootId] = useState<string | null>(null);
+    const [isSimpleContent, setIsSimpleContent] = useState(false);
 
     useEffect(() => {
         if (!content) return;
 
+        // Check if content is a simple object (not an array of protocol messages)
+        if (!Array.isArray(content)) {
+            setIsSimpleContent(true);
+            return;
+        }
+
+        setIsSimpleContent(false);
         const compMap = new Map(components);
-        
+
         content.forEach(msg => {
             if (msg.surfaceUpdate) {
                 msg.surfaceUpdate.components.forEach((c: any) => {
@@ -172,13 +227,22 @@ export default function A2UIRenderer({ content, onAction, className }: A2UIRende
         if (!Renderer) return <div className="text-yellow-500 text-xs">Unknown: {type}</div>;
 
         return (
-            <Renderer 
-                {...props} 
-                renderId={renderComponent} 
+            <Renderer
+                {...props}
+                renderId={renderComponent}
                 onAction={onAction}
             />
         );
     };
+
+    // Render simple card content as fallback
+    if (isSimpleContent) {
+        return (
+            <div className={cn("a2ui-surface w-full", className)}>
+                <SimpleCardRenderer content={content} />
+            </div>
+        );
+    }
 
     if (!rootId) return <div className="animate-pulse h-32 bg-secondary/20 rounded-lg" />;
 
