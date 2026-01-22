@@ -278,56 +278,9 @@ async def generate_summary(req: SummaryGenerateRequest):
     return result
 
 # ---------------- Conversion & Structure ----------------
-
-@router.post("/convert")
-async def convert_document(req: ConvertRequest):
-    # Placeholder - Mocking for smoke test
-    out_dir = ARTIFACTS_DIR / "converted"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    fmt = req.format or req.target_format
-    ext = fmt if fmt != "markdown" else "md"
-    dummy_file = out_dir / f"{req.document_id or req.artifact_id}.{ext}"
-    content = "dummy content" * 100 if ext == "docx" else "dummy content"
-    dummy_file.write_text(content, encoding="utf-8")
-    rel = str(dummy_file.relative_to(ARTIFACTS_DIR))
-    return {"content": "Converted content placeholder.", "rel": rel}
-
-@router.post("/structure/chr")
-async def generate_chr(req: CHRRequest):
-    # Placeholder for CHR generation - Mocking for smoke test
-    out_dir = ARTIFACTS_DIR / "chr"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    dummy_csv = out_dir / f"{req.artifact_id or req.document_id}_chr.csv"
-    dummy_csv.write_text("dummy,csv,content", encoding="utf-8")
-    dummy_json = out_dir / f"{req.artifact_id or req.document_id}_chr.json"
-    dummy_json.write_text('{"rows": [{"dummy": "row"}]}', encoding="utf-8")
-    rel_csv = str(dummy_csv.relative_to(ARTIFACTS_DIR))
-    rel_json = str(dummy_json.relative_to(ARTIFACTS_DIR))
-    return {"chr": [], "artifacts": {"rel_csv": rel_csv, "rel_json": rel_json}}
-
-# ---------------- Visualization ----------------
-
-@router.post("/viz/datavzrd")
-async def build_datavzrd(req: DataVZRDRequest):
-    # Placeholder for datavzrd build
-    return {"status": "ok", "project_dir": "placeholder"}
-
-@router.post("/viz/datavzrd/logs")
-async def build_datavzrd_logs(req: DataVZRDLogsRequest):
-    # Placeholder for datavzrd logs
-    return {"status": "ok", "project_dir": "placeholder"}
-
-# ---------------- Export ----------------
-
-@router.post("/export/poml")
-async def export_poml(req: ExportPOMLRequest):
-    # Mocking POML export for smoke test
-    out_dir = ARTIFACTS_DIR / "poml"
-    out_dir.mkdir(parents=True, exist_ok=True)
-    dummy_poml = out_dir / f"{req.document_id}.poml"
-    dummy_poml.write_text("<poml><output-schema></output-schema></poml>", encoding="utf-8")
-    rel = str(dummy_poml.relative_to(ARTIFACTS_DIR))
-    return {"status": "ok", "rel": rel, "path": str(dummy_poml)}
+# NOTE: Real implementations for /convert, /structure/chr, /viz/datavzrd,
+# /viz/datavzrd/logs, and /export/poml are in main.py with @app decorators.
+# Do NOT add placeholder endpoints here - they will shadow the real implementations.
 
 # ---------------- Experiments ----------------
 
