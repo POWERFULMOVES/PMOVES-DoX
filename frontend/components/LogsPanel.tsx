@@ -132,7 +132,7 @@ export default function LogsPanel() {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
+    <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Logs</h2>
       <div className="grid grid-cols-1 md:grid-cols-7 gap-2 mb-3">
         <input className="border rounded px-2 py-1" placeholder="level" value={level} onChange={e => setLevel(e.target.value)} />
@@ -181,7 +181,7 @@ export default function LogsPanel() {
       {loading ? <div>Loading…</div> : (
         <div className="max-h-80 overflow-auto border rounded">
           <table className="min-w-full text-left text-xs">
-            <thead><tr className="bg-gray-50"><th className="px-2 py-1">ts</th><th className="px-2 py-1">level</th><th className="px-2 py-1">code</th><th className="px-2 py-1">component</th><th className="px-2 py-1">message</th></tr></thead>
+            <thead><tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">ts</th><th className="px-2 py-1">level</th><th className="px-2 py-1">code</th><th className="px-2 py-1">component</th><th className="px-2 py-1">message</th></tr></thead>
             <tbody>
               {logs.map((l,i)=> (
                 <tr key={i} className="border-t"><td className="px-2 py-1">{l.ts}</td><td className="px-2 py-1">{l.level}</td><td className="px-2 py-1">{l.code}</td><td className="px-2 py-1">{l.component}</td><td className="px-2 py-1">{l.message}</td></tr>
