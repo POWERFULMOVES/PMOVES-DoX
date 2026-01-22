@@ -78,7 +78,7 @@ export default function APIsPanel() {
             <thead><tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">method</th><th className="px-2 py-1">path</th><th className="px-2 py-1">summary</th><th className="px-2 py-1">tags</th></tr></thead>
             <tbody>
               {apis.map((a,i)=> (
-                <tr key={i} className="border-t hover:bg-gray-50 dark:bg-gray-800 cursor-pointer" onClick={()=>openDetail(a.id)}>
+                <tr key={i} className="border-t hover:bg-muted cursor-pointer" onClick={()=>openDetail(a.id)}>
                   <td className="px-2 py-1">{a.method}</td>
                   <td className="px-2 py-1">{a.path}</td>
                   <td className="px-2 py-1">{a.summary}</td>
