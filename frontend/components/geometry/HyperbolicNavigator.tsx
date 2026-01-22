@@ -36,20 +36,36 @@ interface CGPSuperNode {
   constellations: CGPConstellation[];
 }
 
+/**
+ * Parameters for 3D manifold visualization.
+ * Controls curvature, surface function, and animation time.
+ */
 export interface ManifoldParams {
+  /** Gaussian curvature constant (negative=hyperbolic, 0=flat, positive=spherical) */
   curvature_k?: number;
+  /** Epsilon parameter for surface calculations */
   epsilon?: number;
+  /** Surface function identifier (e.g., 'hyperbolic', 'spherical') */
   surfaceFn?: string;
+  /** Animation time parameter */
   t?: number;
 }
 
+/**
+ * Props for the HyperbolicNavigator component.
+ */
 export interface HyperbolicNavigatorProps {
+  /** CGP data containing super nodes for visualization */
   data: {
     super_nodes: CGPSuperNode[];
   };
+  /** Additional CSS classes */
   className?: string;
+  /** SVG width in pixels (default: 800) */
   width?: number;
+  /** SVG height in pixels (default: 600) */
   height?: number;
+  /** Initial parameters for 3D manifold view */
   initialManifoldParams?: ManifoldParams | null;
 }
 
@@ -64,7 +80,15 @@ const Manifold3D = dynamic(() => import('./Manifold3D'), {
 // const Manifold3D = ... (Deleted)
 
 
-// --- Main Navigator Component ---
+/**
+ * HyperbolicNavigator - Poincaré disk visualization for hierarchical knowledge.
+ *
+ * Renders CGP (CHIT Geometry Packet) super nodes on a 2D hyperbolic plane using D3.js.
+ * Supports real-time NATS updates and toggling to 3D manifold view.
+ *
+ * @param props - Component props including CGP data and display options
+ * @returns React component rendering hyperbolic navigator or 3D manifold
+ */
 export function HyperbolicNavigator({ data, className, width = 800, height = 600, initialManifoldParams }: HyperbolicNavigatorProps) {
   const svgRef = useRef<SVGSVGElement>(null);
   const containerRef = useRef<HTMLDivElement>(null);
@@ -89,32 +113,52 @@ export function HyperbolicNavigator({ data, className, width = 800, height = 600
     if (!connection) return;
 
     const sc = StringCodec();
-    const sub = connection.subscribe("geometry.event.>");
-    console.log("HyperbolicNavigator: Subscribed to geometry.event.>");
+    let sub: ReturnType<typeof connection.subscribe> | null = null;
+    let isActive = true;
 
     (async () => {
-      for await (const m of sub) {
-        try {
-          const payload = JSON.parse(sc.decode(m.data));
-          
-           // Type Detection
-           if (payload.type === 'manifold_update' || payload.parameters) {
-               console.log("HyperbolicNavigator: Manifold Update", payload);
-               setManifoldParams(payload.parameters);
-               // Auto-switch to manifold mode if we get a pure manifold update? 
-               // Maybe just let user toggle.
-           } else if (payload.super_nodes || payload.type === 'constellation_update') {
-               console.log("HyperbolicNavigator: Constellation Update", payload);
-               setVizData(payload);
-           }
-        } catch (err) {
-          console.error("Failed to parse NATS geometry event", err);
+      try {
+        sub = connection.subscribe("geometry.event.>");
+        console.log("HyperbolicNavigator: Subscribed to geometry.event.>");
+
+        for await (const m of sub) {
+          if (!isActive) break;
+          try {
+            const payload = JSON.parse(sc.decode(m.data));
+
+             // Type Detection
+             if (payload.type === 'manifold_update' || payload.parameters) {
+                 console.log("HyperbolicNavigator: Manifold Update", payload);
+                 setManifoldParams(payload.parameters);
+                 // Auto-switch to manifold mode if we get a pure manifold update?
+                 // Maybe just let user toggle.
+             } else if (payload.super_nodes || payload.type === 'constellation_update') {
+                 console.log("HyperbolicNavigator: Constellation Update", payload);
+                 setVizData(payload);
+             }
+          } catch (err) {
+            console.error("Failed to parse NATS geometry event", err);
+          }
+        }
+      } catch (err: any) {
+        // Handle connection closed or other NATS errors gracefully
+        if (err?.code === 'CONNECTION_CLOSED' || err?.message?.includes('CONNECTION_CLOSED')) {
+          console.log("HyperbolicNavigator: NATS connection closed, will reconnect automatically");
+        } else {
+          console.error("HyperbolicNavigator: NATS subscription error", err);
         }
       }
     })();
 
     return () => {
-      sub.unsubscribe();
+      isActive = false;
+      if (sub) {
+        try {
+          sub.unsubscribe();
+        } catch {
+          // Ignore errors during cleanup
+        }
+      }
     };
   }, [connection]);
 
