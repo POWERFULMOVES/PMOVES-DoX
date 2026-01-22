@@ -271,7 +271,7 @@ export default function TagsPanel() {
                 <div className="text-xs bg-gray-50 dark:bg-gray-800 border rounded p-2 max-h-96 overflow-auto whitespace-pre-wrap">
                   {selectedHistory ? (
                     diffLines(selectedHistory.prompt_text || '', presetPrompt).map((d,i)=> (
-                      <div key={i} className={d.type==='add'?'text-green-700':d.type==='del'?'text-red-700':'text-gray-800'}>
+                      <div key={i} className={d.type==='add'?'text-green-700 dark:text-green-400':d.type==='del'?'text-red-700 dark:text-red-400':'text-gray-800 dark:text-gray-200'}>
                         {d.type==='add'?'+ ': d.type==='del'?'- ':'  '}{d.text}
                       </div>
                     ))

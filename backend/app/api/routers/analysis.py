@@ -1,6 +1,8 @@
 from fastapi import APIRouter, HTTPException, Query, Body, UploadFile, File, Form
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Literal
+import asyncio
+import logging
 import uuid
 import time
 import json
@@ -10,6 +12,8 @@ import os
 import re
 import requests
 from pathlib import Path
+
+logger = logging.getLogger(__name__)
 
 from app.globals import (
     db, qa_engine, summary_service, HRM_ENABLED, HRM_CFG, HRM_STATS,
@@ -624,8 +628,8 @@ async def generate_api_documentation(
 
     provider_name = (provider or os.getenv("LANGEXTRACT_PROVIDER", "")).lower()
 
-    if provider_name in ("ollama", "") and _is_ollama_available():
-        endpoints = _extract_with_ollama(code_text, language, model)
+    if provider_name in ("ollama", "") and await asyncio.to_thread(_is_ollama_available):
+        endpoints = await asyncio.to_thread(_extract_with_ollama, code_text, language, model)
         if endpoints:
             provider_used = "ollama"
 

@@ -158,7 +158,13 @@ function SimpleCardRenderer({ content }: { content: any }) {
                     )}
                     {content.data && (
                         <pre className="text-xs bg-black/20 p-2 rounded overflow-x-auto">
-                            {JSON.stringify(content.data, null, 2)}
+                            {(() => {
+                                try {
+                                    return JSON.stringify(content.data, null, 2);
+                                } catch {
+                                    return String(content.data);
+                                }
+                            })()}
                         </pre>
                     )}
                 </CardContent>
