@@ -242,21 +242,17 @@ async def _startup_watch():
     t = threading.Thread(target=_watch_loop, daemon=True)
     t.start()
 
-    # Rebuild search index in background thread with timeout to prevent startup hang
+    # Rebuild search index in background with timeout to prevent startup hang
+    # Note: Using ThreadPoolExecutor instead of signal.alarm() because signals
+    # only work in the main thread, not background threads
     def _rebuild_with_timeout():
+        from concurrent.futures import ThreadPoolExecutor, TimeoutError as FuturesTimeoutError
         try:
-            import signal
-            # Use alarm on Unix, skip timeout on Windows
-            if hasattr(signal, 'SIGALRM'):
-                def timeout_handler(signum, frame):
-                    raise TimeoutError("Search index rebuild timed out")
-                signal.signal(signal.SIGALRM, timeout_handler)
-                signal.alarm(30)  # 30 second timeout
-            search_index.rebuild()
-            if hasattr(signal, 'SIGALRM'):
-                signal.alarm(0)  # Cancel alarm
+            with ThreadPoolExecutor(max_workers=1) as executor:
+                future = executor.submit(search_index.rebuild)
+                future.result(timeout=30)  # 30 second timeout
             print("[STARTUP] Search index rebuild completed")
-        except TimeoutError:
+        except FuturesTimeoutError:
             print("[STARTUP] Search index rebuild timed out, continuing without full index")
         except Exception as e:
             print(f"[STARTUP] Search index rebuild failed: {e}")
