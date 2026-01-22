@@ -43,8 +43,8 @@ services:
       - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-true}
       - LANGEXTRACT_API_KEY=${GOOGLE_API_KEY:-}
       # Use TensorZero gateway as OpenAI-compatible endpoint
-      - OPENAI_BASE_URL=${TENSORZERO_URL:-http://tensorzero-gateway:3030}/openai/v1
-      - TENSORZERO_BASE_URL=${TENSORZERO_URL:-http://tensorzero-gateway:3030}
+      - OPENAI_BASE_URL=${TENSORZERO_URL:-http://tensorzero:3000}/openai/v1
+      - TENSORZERO_BASE_URL=${TENSORZERO_URL:-http://tensorzero:3000}
       - OPENAI_API_KEY=${OPENAI_API_KEY:-tensorzero}
       # TensorZero Embeddings (for SearchIndex - uses GPU Orchestrator)
       - TENSORZERO_EMBEDDING_MODEL=${TENSORZERO_EMBEDDING_MODEL:-qwen3_embedding_8b_local}
@@ -402,6 +402,7 @@ services:
     command: ["--config-file", "/app/config/tensorzero.toml"]
     ports:
       - "3000:3000"
+      - "3030:3000"  # Host access for TensorZero UI (internal uses :3000)
     volumes:
       - ./tensorzero.toml:/app/config/tensorzero.toml
     env_file:
@@ -415,9 +416,13 @@ services:
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
-      - app_tier
-      - api_tier
-      - data_tier  # Connect to local ClickHouse for standalone observability
+      app_tier:
+        aliases:
+          - tensorzero-gateway  # Network alias for service discovery
+      api_tier:
+        aliases:
+          - tensorzero-gateway
+      data_tier:
     depends_on:
       clickhouse:
         condition: service_healthy
