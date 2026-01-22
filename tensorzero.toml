@@ -42,7 +42,7 @@ type = "google_ai_studio_gemini"
 model_name = "gemini-2.0-flash"
 
 # -----------------
-# TIER 3: Local Models (Ollama)
+# TIER 3: Local Models (Ollama Container)
 # -----------------
 
 # Llama 3.2 via Ollama (fallback/local)
@@ -83,6 +83,160 @@ routing = ["ollama_local"]
 type = "openai"
 api_base = "http://ollama:11434/v1"
 model_name = "qwen3-embedding:8b"
+api_key_location = "none"
+
+# -----------------
+# TIER 3b: Host Ollama Cloud Models (via host.docker.internal)
+# -----------------
+
+# DeepSeek V3.2 Cloud
+[models.deepseek_v3]
+routing = ["ollama_host"]
+
+[models.deepseek_v3.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "deepseek-v3.2:cloud"
+api_key_location = "none"
+
+# Kimi K2 1T Cloud
+[models.kimi_k2]
+routing = ["ollama_host"]
+
+[models.kimi_k2.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "kimi-k2:1t-cloud"
+api_key_location = "none"
+
+# Minimax M2 Cloud
+[models.minimax_m2]
+routing = ["ollama_host"]
+
+[models.minimax_m2.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "minimax-m2:cloud"
+api_key_location = "none"
+
+# Gemini 3 Pro Preview
+[models.gemini_3_pro]
+routing = ["ollama_host"]
+
+[models.gemini_3_pro.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "gemini-3-pro-preview:latest"
+api_key_location = "none"
+
+# Qwen3 Next 80B Cloud
+[models.qwen3_next]
+routing = ["ollama_host"]
+
+[models.qwen3_next.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "qwen3-next:80b-cloud"
+api_key_location = "none"
+
+# Gemma3 27B Cloud
+[models.gemma3_cloud]
+routing = ["ollama_host"]
+
+[models.gemma3_cloud.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "gemma3:27b-cloud"
+api_key_location = "none"
+
+# Qwen3 Coder 480B Cloud
+[models.qwen3_coder]
+routing = ["ollama_host"]
+
+[models.qwen3_coder.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "qwen3-coder:480b-cloud"
+api_key_location = "none"
+
+# Qwen3 VL 8B (Host Ollama with Vision)
+[models.qwen3_vl_local]
+routing = ["ollama_host"]
+
+[models.qwen3_vl_local.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "qwen3-vl:8b"
+api_key_location = "none"
+
+# Qwen3 VL 235B Cloud
+[models.qwen3_vl_cloud]
+routing = ["ollama_host"]
+
+[models.qwen3_vl_cloud.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "qwen3-vl:235b-cloud"
+api_key_location = "none"
+
+# Ministral 3 14B Cloud
+[models.ministral_3]
+routing = ["ollama_host"]
+
+[models.ministral_3.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "ministral-3:14b-cloud"
+api_key_location = "none"
+
+# Devstral 2 123B Cloud
+[models.devstral_2]
+routing = ["ollama_host"]
+
+[models.devstral_2.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "devstral-2:123b-cloud"
+api_key_location = "none"
+
+# Gemini 3 Flash Preview Cloud
+[models.gemini_3_flash]
+routing = ["ollama_host"]
+
+[models.gemini_3_flash.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "gemini-3-flash-preview:cloud"
+api_key_location = "none"
+
+# GLM 4.7 Cloud
+[models.glm_4]
+routing = ["ollama_host"]
+
+[models.glm_4.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "glm-4.7:cloud"
+api_key_location = "none"
+
+# Nemotron 3 Nano 30B Cloud
+[models.nemotron_nano]
+routing = ["ollama_host"]
+
+[models.nemotron_nano.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "nemotron-3-nano:30b-cloud"
+api_key_location = "none"
+
+# Function Gemma (Host Ollama)
+[models.functiongemma]
+routing = ["ollama_host"]
+
+[models.functiongemma.providers.ollama_host]
+type = "openai"
+api_base = "http://host.docker.internal:11434/v1"
+model_name = "functiongemma:latest"
 api_key_location = "none"
 
 # -----------------
