@@ -33,7 +33,7 @@ const COOKBOOKS: Cookbook[] = [
     id: 'api-documentation',
     title: 'API Documentation Generator',
     description: 'Generate OpenAPI specs from code or raw text.',
-    status: 'planned',
+    status: 'ready',
     steps: [
       'Upload code files or API descriptions',
       'System identifies endpoints and parameters',
