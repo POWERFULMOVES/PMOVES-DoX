@@ -295,6 +295,11 @@ def process_pdf(
         )
 
     # --------------------------- text metrics ---------------------------
+    # NOTE: Asymmetric evidence/fact behavior by design:
+    # - Evidence is ALWAYS created for non-empty text sections (preserves full text)
+    # - Facts are ONLY created when metrics are extracted (avoids empty fact rows)
+    # This differs from tables where facts are always created since tables have
+    # inherent structure (row/column counts) even without extracted metrics.
     for section_idx, item in enumerate(getattr(doc, "texts", []) or []):
         text = getattr(item, "text", "") or ""
         if not text.strip():
@@ -302,7 +307,7 @@ def process_pdf(
 
         metrics = extract_metrics_from_text(text)
 
-        # Always create evidence for text sections (removed metrics gate)
+        # Always create evidence for text sections
         evidence_id = str(uuid.uuid4())
         coordinates = None
         provenance = getattr(item, "prov", None)

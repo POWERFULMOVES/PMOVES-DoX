@@ -2,9 +2,11 @@ from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Q
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
+import logging
 import os
 from pathlib import Path
 import shutil
+import sys
 from typing import List, Dict, Optional, Any, Literal, Annotated
 import uuid
 import asyncio
@@ -1842,8 +1844,6 @@ def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict],
         "formulas": [],
     }
 
-import logging
-import sys
 _log = logging.getLogger(__name__)
 
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):

@@ -1,7 +1,6 @@
 """Chart extraction helpers for Docling PDF output."""
 from __future__ import annotations
 
-import asyncio
 from pathlib import Path
 from typing import Any, Dict, List, Optional
 

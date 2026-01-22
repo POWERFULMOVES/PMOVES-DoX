@@ -1,8 +1,11 @@
 from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Form, Query
 from fastapi.responses import FileResponse
 from typing import List, Dict, Annotated, Optional, Any
+import logging
 import os
 import shutil
+import sys
+import traceback
 import uuid
 import json
 import threading
@@ -45,10 +48,9 @@ def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict],
         "formulas": [],
     }
 
+_log = logging.getLogger(__name__)
+
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
-    import logging
-    import sys
-    _log = logging.getLogger(__name__)
 
     try:
         analysis_payload: dict | None = None
@@ -73,7 +75,6 @@ def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suff
                     print(f"[DOCLING] Completed: {len(facts)} facts, {len(evidence)} evidence", file=sys.stderr, flush=True)
                 except Exception as docling_err:
                     _log.error(f"[DOCLING] Failed: {docling_err}")
-                    import traceback
                     _log.error(traceback.format_exc())
                     print(f"[DOCLING] Fallback to fast mode due to error: {docling_err}", file=sys.stderr, flush=True)
                     facts, evidence, analysis_payload = _process_pdf_fast(file_path, ARTIFACTS_DIR)
@@ -248,7 +249,7 @@ def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suff
             except Exception:
                 pass
 
-        print(f"[STORAGE] All storage complete, marking task as completed", file=sys.stderr, flush=True)
+        print("[STORAGE] All storage complete, marking task as completed", file=sys.stderr, flush=True)
         if task_id:
             TASKS[task_id].update({
                 "status": "completed",
@@ -262,7 +263,6 @@ def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suff
         except Exception as e:
             print(f"[STORAGE] Failed to update artifact status: {e}", file=sys.stderr, flush=True)
     except Exception as e:
-        import traceback
         print(f"[STORAGE] ERROR in _process_and_store: {e}", file=sys.stderr, flush=True)
         print(traceback.format_exc(), file=sys.stderr, flush=True)
         if task_id:
