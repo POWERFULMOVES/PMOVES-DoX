@@ -6,7 +6,9 @@ import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Button } from "@/components/ui/button";
 import A2UIRenderer from "@/components/a2ui/A2UIRenderer";
+import { useNats } from "@/lib/nats-context";
 import { getNatsWsUrl } from "@/lib/config";
+import { StringCodec, Subscription } from "nats.ws";
 
 interface A2UIPayload {
   type: string;
@@ -17,76 +19,63 @@ interface A2UIPayload {
 
 export default function A2UIPage() {
   const [payloads, setPayloads] = useState<A2UIPayload[]>([]);
-  const [connected, setConnected] = useState(false);
   const [command, setCommand] = useState("");
   const [commandResult, setCommandResult] = useState<any>(null);
-  const wsRef = useRef<WebSocket | null>(null);
-  const reconnectTimeoutRef = useRef<NodeJS.Timeout | null>(null);
+  const subscriptionRef = useRef<Subscription | null>(null);
 
-  const connectWebSocket = () => {
-    if (wsRef.current?.readyState === WebSocket.OPEN) return;
+  // Use the NATS context for proper WebSocket connection
+  const { connection, isConnected, error, reconnectAttempt } = useNats();
+  const sc = StringCodec();
 
-    const wsUrl = getNatsWsUrl();
-    try {
-      const ws = new WebSocket(wsUrl);
-      wsRef.current = ws;
+  // Subscribe to A2UI subject when connected
+  useEffect(() => {
+    if (!connection || !isConnected) return;
 
-      ws.onopen = () => {
-        console.log("A2UI WebSocket connected");
-        setConnected(true);
-        // Subscribe to A2UI render subject
-        ws.send(JSON.stringify({
-          action: "subscribe",
-          subject: "a2ui.render.v1"
-        }));
-      };
-
-      ws.onmessage = (event) => {
-        try {
-          const data = JSON.parse(event.data);
-          if (data.subject === "a2ui.render.v1" && data.payload) {
-            setPayloads(prev => [
-              {
-                type: "render",
-                content: data.payload,
-                timestamp: new Date().toISOString(),
-                source: data.source || "agent"
-              },
-              ...prev
-            ].slice(0, 50)); // Keep last 50 payloads
-          }
-        } catch (e) {
-          console.error("Failed to parse WebSocket message:", e);
+    const subscribe = async () => {
+      try {
+        // Unsubscribe from previous subscription if exists
+        if (subscriptionRef.current) {
+          subscriptionRef.current.unsubscribe();
         }
-      };
 
-      ws.onerror = (error) => {
-        console.error("WebSocket error:", error);
-        setConnected(false);
-      };
+        // Subscribe to the A2UI render subject
+        const sub = connection.subscribe("a2ui.render.v1");
+        subscriptionRef.current = sub;
+        console.log("A2UI: Subscribed to a2ui.render.v1");
 
-      ws.onclose = () => {
-        console.log("WebSocket closed, reconnecting...");
-        setConnected(false);
-        // Reconnect after 3 seconds
-        reconnectTimeoutRef.current = setTimeout(connectWebSocket, 3000);
-      };
-    } catch (error) {
-      console.error("Failed to connect WebSocket:", error);
-      setConnected(false);
-    }
-  };
+        // Process incoming messages
+        (async () => {
+          for await (const msg of sub) {
+            try {
+              const data = JSON.parse(sc.decode(msg.data));
+              setPayloads(prev => [
+                {
+                  type: "render",
+                  content: data,
+                  timestamp: new Date().toISOString(),
+                  source: msg.subject || "agent"
+                },
+                ...prev
+              ].slice(0, 50)); // Keep last 50 payloads
+            } catch (e) {
+              console.error("Failed to parse NATS message:", e);
+            }
+          }
+        })();
+      } catch (err) {
+        console.error("A2UI: Failed to subscribe:", err);
+      }
+    };
 
-  const disconnectWebSocket = () => {
-    if (reconnectTimeoutRef.current) {
-      clearTimeout(reconnectTimeoutRef.current);
-    }
-    if (wsRef.current) {
-      wsRef.current.close();
-      wsRef.current = null;
-    }
-    setConnected(false);
-  };
+    subscribe();
+
+    return () => {
+      if (subscriptionRef.current) {
+        subscriptionRef.current.unsubscribe();
+        subscriptionRef.current = null;
+      }
+    };
+  }, [connection, isConnected]);
 
   const sendCommand = async () => {
     if (!command.trim()) return;
@@ -103,11 +92,6 @@ export default function A2UIPage() {
       setCommandResult({ error: String(error) });
     }
   };
-
-  useEffect(() => {
-    connectWebSocket();
-    return () => disconnectWebSocket();
-  }, []);
 
   return (
     <div className="min-h-screen bg-transparent p-8">
@@ -128,16 +112,13 @@ export default function A2UIPage() {
           </div>
           <div className="ml-auto flex items-center gap-2">
             <div className={`flex items-center gap-2 px-3 py-1 rounded-full ${
-              connected ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
+              isConnected ? "bg-green-500/20 text-green-400" : "bg-red-500/20 text-red-400"
             }`}>
               <Activity className="w-4 h-4" />
-              {connected ? "Connected" : "Disconnected"}
+              {isConnected ? "Connected" : reconnectAttempt > 0 ? `Reconnecting (${reconnectAttempt})...` : "Disconnected"}
             </div>
-            {!connected && (
-              <Button onClick={connectWebSocket} variant="outline" size="sm">
-                <RefreshCw className="w-4 h-4 mr-2" />
-                Reconnect
-              </Button>
+            {error && (
+              <span className="text-xs text-red-400">{error.message}</span>
             )}
           </div>
         </div>
@@ -238,8 +219,8 @@ export default function A2UIPage() {
                   </div>
                   <div className="flex justify-between">
                     <span className="text-gray-400">Status</span>
-                    <span className={connected ? "text-green-400" : "text-red-400"}>
-                      {connected ? "Connected" : "Disconnected"}
+                    <span className={isConnected ? "text-green-400" : "text-red-400"}>
+                      {isConnected ? "Connected" : reconnectAttempt > 0 ? `Reconnecting...` : "Disconnected"}
                     </span>
                   </div>
                 </div>
