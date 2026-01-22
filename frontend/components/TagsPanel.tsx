@@ -290,7 +290,7 @@ export default function TagsPanel() {
       {loading ? <div>Loading…</div> : (
         <div className="max-h-80 overflow-auto border rounded">
           <table className="min-w-full text-left text-xs">
-            <thead><tr className="bg-gray-50"><th className="px-2 py-1">tag</th><th className="px-2 py-1">score</th><th className="px-2 py-1">document</th><th className="px-2 py-1">source</th><th className="px-2 py-1">hrm</th></tr></thead>
+            <thead><tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">tag</th><th className="px-2 py-1">score</th><th className="px-2 py-1">document</th><th className="px-2 py-1">source</th><th className="px-2 py-1">hrm</th></tr></thead>
             <tbody>
               {tags.map((t,i)=> (
                 <tr key={i} className="border-t">

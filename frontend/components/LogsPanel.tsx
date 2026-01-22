@@ -181,7 +181,7 @@ export default function LogsPanel() {
       {loading ? <div>Loading…</div> : (
         <div className="max-h-80 overflow-auto border rounded">
           <table className="min-w-full text-left text-xs">
-            <thead><tr className="bg-gray-50"><th className="px-2 py-1">ts</th><th className="px-2 py-1">level</th><th className="px-2 py-1">code</th><th className="px-2 py-1">component</th><th className="px-2 py-1">message</th></tr></thead>
+            <thead><tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">ts</th><th className="px-2 py-1">level</th><th className="px-2 py-1">code</th><th className="px-2 py-1">component</th><th className="px-2 py-1">message</th></tr></thead>
             <tbody>
               {logs.map((l,i)=> (
                 <tr key={i} className="border-t"><td className="px-2 py-1">{l.ts}</td><td className="px-2 py-1">{l.level}</td><td className="px-2 py-1">{l.code}</td><td className="px-2 py-1">{l.component}</td><td className="px-2 py-1">{l.message}</td></tr>

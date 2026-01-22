@@ -111,7 +111,7 @@ export default function ArtifactsPanel() {
       <div className="max-h-80 overflow-auto border rounded">
         <table className="min-w-full text-left text-xs">
           <thead>
-            <tr className="bg-gray-50"><th className="px-2 py-1">id</th><th className="px-2 py-1">filename</th><th className="px-2 py-1">type</th><th className="px-2 py-1">status</th><th className="px-2 py-1">actions</th></tr>
+            <tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">id</th><th className="px-2 py-1">filename</th><th className="px-2 py-1">type</th><th className="px-2 py-1">status</th><th className="px-2 py-1">actions</th></tr>
           </thead>
           <tbody>
             {artifacts.map((a:any)=> {
@@ -160,7 +160,7 @@ export default function ArtifactsPanel() {
                     </td>
                   </tr>
                   {open && (
-                    <tr className="bg-gray-50">
+                    <tr className="bg-gray-50 dark:bg-gray-800">
                       <td colSpan={5} className="px-2 py-2">
                         <div className="flex flex-wrap items-center gap-2 text-xs">
                           <label className="flex items-center gap-1"><input type="checkbox" checked={!!opts[a.id].includePoml} onChange={e=>setOpts(prev=>({ ...prev, [a.id]: { ...prev[a.id], includePoml: e.target.checked } }))} /> Include POML</label>
