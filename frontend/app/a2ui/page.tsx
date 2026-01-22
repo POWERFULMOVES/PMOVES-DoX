@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState, useRef } from "react";
+import { useEffect, useState, useRef, useMemo } from "react";
 import { ArrowLeft, BrainCircuit, Activity, RefreshCw, Send } from "lucide-react";
 import Link from "next/link";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -25,7 +25,7 @@ export default function A2UIPage() {
 
   // Use the NATS context for proper WebSocket connection
   const { connection, isConnected, error, reconnectAttempt } = useNats();
-  const sc = StringCodec();
+  const sc = useMemo(() => StringCodec(), []);
 
   // Subscribe to A2UI subject when connected
   useEffect(() => {

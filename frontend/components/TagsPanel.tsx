@@ -228,7 +228,7 @@ export default function TagsPanel() {
           <div className="text-xs text-gray-600 mt-1">Examples loaded: {presetExamples?.length ?? 0}</div>
           <div className="mt-2 flex gap-2">
             <button onClick={async ()=>{ await savePreset(); if (docId) localStorage.removeItem(`lms_prompt_draft_${docId}`); setLastSavedAt(new Date().toISOString()); }} className="bg-gray-800 text-white rounded px-3 py-1">Save Prompt</button>
-            <button onClick={openHistory} className="bg-gray-50 dark:bg-gray-8000 text-white rounded px-3 py-1">History</button>
+            <button onClick={openHistory} className="bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white rounded px-3 py-1">History</button>
             <select className="border rounded px-2 py-1 text-xs" id="pomlVariant">
               <option value="generic">Generic</option>
               <option value="troubleshoot">Troubleshoot</option>

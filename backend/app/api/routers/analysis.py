@@ -551,8 +551,8 @@ def _parse_existing_spec(content: str, file_ext: str) -> Optional[Dict[str, Any]
         # Validate it's an OpenAPI/Swagger spec
         if isinstance(data, dict) and ("openapi" in data or "swagger" in data):
             return data
-    except Exception:
-        pass
+    except Exception as e:
+        logger.debug(f"Failed to parse spec: {e}")
 
     return None
 
@@ -577,6 +577,11 @@ async def generate_api_documentation(
 
     Returns an OpenAPI 3.0 specification.
     """
+    # Validate format parameter (currently only OpenAPI 3.0 supported)
+    supported_formats = {"openapi", "openapi3", "openapi3.0"}
+    if format.lower() not in supported_formats:
+        logger.warning(f"Unsupported format '{format}' requested, defaulting to OpenAPI 3.0")
+
     # Validate file extension
     allowed_extensions = {".py", ".js", ".ts", ".json", ".yaml", ".yml"}
     file_ext = Path(file.filename or "").suffix.lower()

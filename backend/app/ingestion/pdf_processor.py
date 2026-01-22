@@ -282,7 +282,7 @@ def process_pdf(
         fact_metrics = metrics if metrics else {
             "rows": int(df.shape[0]),
             "columns": int(df.shape[1]),
-            "column_names": list(df.columns)[:10],  # First 10 column names
+            "column_names": [str(c) for c in list(df.columns)[:10]],  # First 10 column names (stringified for JSON)
         }
         facts.append(
             {
