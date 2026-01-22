@@ -6,17 +6,31 @@ import { OrbitControls } from 'three/examples/jsm/controls/OrbitControls.js';
 import { useNats } from '@/lib/nats-context';
 import { StringCodec } from 'nats.ws';
 
+/**
+ * Parameters for manifold surface generation.
+ */
 interface ManifoldParams {
+    /** Gaussian curvature constant (negative=hyperbolic, positive=spherical, ~0=flat) */
     curvature_k?: number;
+    /** Epsilon parameter for surface perturbation */
     epsilon?: number;
+    /** Surface function type identifier */
     surfaceFn?: string;
+    /** Animation time parameter */
     t?: number;
 }
 
+/**
+ * Props for the Manifold3D component.
+ */
 interface Props {
+    /** Canvas width in pixels */
     width: number;
+    /** Canvas height in pixels */
     height: number;
+    /** Manifold parameters controlling surface shape */
     params: ManifoldParams | null;
+    /** Callback when params are updated via NATS */
     onParamsUpdate?: (params: ManifoldParams) => void;
 }
 
@@ -122,6 +136,16 @@ function generateManifoldGeometry(
     return geometry;
 }
 
+/**
+ * Manifold3D - Three.js 3D surface renderer for geometric manifolds.
+ *
+ * Renders parametric surfaces based on curvature parameters using WebGL.
+ * Supports hyperbolic, spherical, and flat manifolds with real-time NATS updates.
+ * Features auto-rotating camera with OrbitControls for interactive exploration.
+ *
+ * @param props - Component props including dimensions and manifold parameters
+ * @returns React component rendering interactive 3D manifold visualization
+ */
 export default function Manifold3D({ width, height, params, onParamsUpdate }: Props) {
     const mountRef = useRef<HTMLDivElement>(null);
     const rendererRef = useRef<THREE.WebGLRenderer | null>(null);
@@ -150,29 +174,49 @@ export default function Manifold3D({ width, height, params, onParamsUpdate }: Pr
         if (!connection) return;
 
         const sc = StringCodec();
-        const sub = connection.subscribe("geometry.event.manifold_update");
-        console.log("Manifold3D: Subscribed to geometry.event.manifold_update");
+        let sub: ReturnType<typeof connection.subscribe> | null = null;
+        let isActive = true;
 
         (async () => {
-            for await (const m of sub) {
-                try {
-                    const payload = JSON.parse(sc.decode(m.data));
-                    console.log("Manifold3D: Received manifold update", payload);
+            try {
+                sub = connection.subscribe("geometry.event.manifold_update");
+                console.log("Manifold3D: Subscribed to geometry.event.manifold_update");
 
-                    if (payload.parameters || payload.curvature_k !== undefined) {
-                        const newParams = payload.parameters || payload;
-                        setLocalParams(prev => ({ ...prev, ...newParams }));
-                        // Use ref to call callback without causing subscription churn
-                        onParamsUpdateRef.current?.(newParams);
+                for await (const m of sub) {
+                    if (!isActive) break;
+                    try {
+                        const payload = JSON.parse(sc.decode(m.data));
+                        console.log("Manifold3D: Received manifold update", payload);
+
+                        if (payload.parameters || payload.curvature_k !== undefined) {
+                            const newParams = payload.parameters || payload;
+                            setLocalParams(prev => ({ ...prev, ...newParams }));
+                            // Use ref to call callback without causing subscription churn
+                            onParamsUpdateRef.current?.(newParams);
+                        }
+                    } catch (err) {
+                        console.error("Manifold3D: Failed to parse NATS message", err);
                     }
-                } catch (err) {
-                    console.error("Manifold3D: Failed to parse NATS message", err);
+                }
+            } catch (err: any) {
+                // Handle connection closed or other NATS errors gracefully
+                if (err?.code === 'CONNECTION_CLOSED' || err?.message?.includes('CONNECTION_CLOSED')) {
+                    console.log("Manifold3D: NATS connection closed, will reconnect automatically");
+                } else {
+                    console.error("Manifold3D: NATS subscription error", err);
                 }
             }
         })();
 
         return () => {
-            sub.unsubscribe();
+            isActive = false;
+            if (sub) {
+                try {
+                    sub.unsubscribe();
+                } catch {
+                    // Ignore errors during cleanup
+                }
+            }
         };
     }, [connection]); // Removed onParamsUpdate from deps - using ref instead
 
