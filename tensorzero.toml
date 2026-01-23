@@ -1,39 +1,38 @@
 # TensorZero gateway config for PMOVES-DoX
-# 6-Tier Architecture with Full Observability
+# Aligned with PMOVES.AI Agentic Architecture
 #
-# TIER 1: Gateway (this config) - routes requests
-# TIER 2: Cloud Models (OpenRouter) - primary LLM
-# TIER 3: Local Models (Ollama) - fallback/embeddings
-# TIER 4: Observability (ClickHouse) - metrics/traces
-# TIER 5: UI (Agent Zero) - web interface
-# TIER 6: MCP Protocol (Agent Zero) - tool orchestration
+# Architecture: Local/Cloud Hybrid with 3-Function Pattern
+# - Cloud: OpenRouter, Google AI, Ollama Cloud Models
+# - Local: Host Ollama (functiongemma, qwen3-vl), Container Ollama (embeddings)
+# Per docs/agents/PMOVES.AI Agentic Architecture Deep Dive.md
 
 [gateway]
 bind_address = "0.0.0.0:3000"
 
-# Observability enabled - connects to local ClickHouse (TIER 4)
+# Observability (ClickHouse)
 [gateway.observability]
 enabled = true
 async_writes = true
 
-# Disable OTLP traces (using ClickHouse directly)
 [gateway.export.otlp.traces]
 enabled = false
 
 # -----------------
-# TIER 2: Cloud Models (OpenRouter)
+# Cloud Providers
 # -----------------
 
-# Nemotron 70B via OpenRouter (primary cloud model)
-[models.nemotron_70b]
+# OpenRouter (cloud LLMs - Nemotron, Claude, etc.)
+# API key via TENSORZERO_PROVIDER_OPENROUTER_API_KEY env var
+[models.openrouter_nemotron]
 routing = ["openrouter"]
 
-[models.nemotron_70b.providers.openrouter]
+[models.openrouter_nemotron.providers.openrouter]
 type = "openai"
 api_base = "https://openrouter.ai/api/v1"
 model_name = "nvidia/llama-3.1-nemotron-70b-instruct"
 
-# Gemini Flash (Google AI - fast alternative)
+# Google AI (Gemini Flash - fast cloud)
+# API key via GOOGLE_AI_STUDIO_API_KEY env var
 [models.gemini_flash]
 routing = ["google_ai"]
 
@@ -42,235 +41,74 @@ type = "google_ai_studio_gemini"
 model_name = "gemini-2.0-flash"
 
 # -----------------
-# TIER 3: Local Models (Ollama Container)
+# Local/Hybrid Providers (Ollama)
 # -----------------
 
-# Llama 3.2 via Ollama (fallback/local)
-[models.llama_ollama]
-routing = ["ollama_local"]
+# Host Ollama - Cloud models via Ollama API
+# Includes: deepseek-v3:cloud, kimi-k2:1t-cloud, qwen3-next:80b-cloud
+# URL configurable via OLLAMA_HOST_URL env var (default: host.docker.internal:11434)
+[models.ollama_cloud]
+routing = ["ollama_host"]
 
-[models.llama_ollama.providers.ollama_local]
+[models.ollama_cloud.providers.ollama_host]
 type = "openai"
-api_base = "http://ollama:11434/v1"
-model_name = "llama3.2"
+model_name = "deepseek-v3:cloud"
 api_key_location = "none"
 
-# Nemotron Mini via Ollama (utility tasks)
-[models.nemotron_mini]
-routing = ["ollama_local"]
+# Host Ollama - Local models
+# Includes: functiongemma, qwen3-vl:8b
+[models.ollama_local]
+routing = ["ollama_host"]
 
-[models.nemotron_mini.providers.ollama_local]
+[models.ollama_local.providers.ollama_host]
 type = "openai"
-api_base = "http://ollama:11434/v1"
-model_name = "nemotron-mini"
+model_name = "functiongemma"
 api_key_location = "none"
 
-# Qwen 2.5:7b for embeddings
-[models.qwen_embed]
-routing = ["ollama_local"]
+# Container Ollama (embeddings only)
+# URL: http://ollama:11434 (internal Docker network)
+[models.ollama_embed]
+routing = ["ollama_container"]
 
-[models.qwen_embed.providers.ollama_local]
-type = "openai"
-api_base = "http://ollama:11434/v1"
-model_name = "qwen2.5:7b"
-api_key_location = "none"
-
-# Qwen3 Embedding 8B (4096d, RTX 5090 optimized)
-[models.qwen3_embed]
-routing = ["ollama_local"]
-
-[models.qwen3_embed.providers.ollama_local]
+[models.ollama_embed.providers.ollama_container]
 type = "openai"
 api_base = "http://ollama:11434/v1"
 model_name = "qwen3-embedding:8b"
 api_key_location = "none"
 
 # -----------------
-# TIER 3b: Host Ollama Cloud Models (via host.docker.internal)
+# Functions (Core Three per PMOVES.AI Architecture)
 # -----------------
 
-# DeepSeek V3.2 Cloud
-[models.deepseek_v3]
-routing = ["ollama_host"]
-
-[models.deepseek_v3.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "deepseek-v3.2:cloud"
-api_key_location = "none"
-
-# Kimi K2 1T Cloud
-[models.kimi_k2]
-routing = ["ollama_host"]
-
-[models.kimi_k2.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "kimi-k2:1t-cloud"
-api_key_location = "none"
-
-# Minimax M2 Cloud
-[models.minimax_m2]
-routing = ["ollama_host"]
-
-[models.minimax_m2.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "minimax-m2:cloud"
-api_key_location = "none"
-
-# Gemini 3 Pro Preview
-[models.gemini_3_pro]
-routing = ["ollama_host"]
-
-[models.gemini_3_pro.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "gemini-3-pro-preview:latest"
-api_key_location = "none"
-
-# Qwen3 Next 80B Cloud
-[models.qwen3_next]
-routing = ["ollama_host"]
-
-[models.qwen3_next.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "qwen3-next:80b-cloud"
-api_key_location = "none"
-
-# Gemma3 27B Cloud
-[models.gemma3_cloud]
-routing = ["ollama_host"]
-
-[models.gemma3_cloud.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "gemma3:27b-cloud"
-api_key_location = "none"
-
-# Qwen3 Coder 480B Cloud
-[models.qwen3_coder]
-routing = ["ollama_host"]
-
-[models.qwen3_coder.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "qwen3-coder:480b-cloud"
-api_key_location = "none"
-
-# Qwen3 VL 8B (Host Ollama with Vision)
-[models.qwen3_vl_local]
-routing = ["ollama_host"]
-
-[models.qwen3_vl_local.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "qwen3-vl:8b"
-api_key_location = "none"
-
-# Qwen3 VL 235B Cloud
-[models.qwen3_vl_cloud]
-routing = ["ollama_host"]
-
-[models.qwen3_vl_cloud.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "qwen3-vl:235b-cloud"
-api_key_location = "none"
-
-# Ministral 3 14B Cloud
-[models.ministral_3]
-routing = ["ollama_host"]
-
-[models.ministral_3.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "ministral-3:14b-cloud"
-api_key_location = "none"
-
-# Devstral 2 123B Cloud
-[models.devstral_2]
-routing = ["ollama_host"]
-
-[models.devstral_2.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "devstral-2:123b-cloud"
-api_key_location = "none"
-
-# Gemini 3 Flash Preview Cloud
-[models.gemini_3_flash]
-routing = ["ollama_host"]
-
-[models.gemini_3_flash.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "gemini-3-flash-preview:cloud"
-api_key_location = "none"
-
-# GLM 4.7 Cloud
-[models.glm_4]
-routing = ["ollama_host"]
-
-[models.glm_4.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "glm-4.7:cloud"
-api_key_location = "none"
-
-# Nemotron 3 Nano 30B Cloud
-[models.nemotron_nano]
-routing = ["ollama_host"]
-
-[models.nemotron_nano.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "nemotron-3-nano:30b-cloud"
-api_key_location = "none"
-
-# Function Gemma (Host Ollama)
-[models.functiongemma]
-routing = ["ollama_host"]
-
-[models.functiongemma.providers.ollama_host]
-type = "openai"
-api_base = "http://host.docker.internal:11434/v1"
-model_name = "functiongemma:latest"
-api_key_location = "none"
-
-# -----------------
-# Functions (Agent Roles with Weighted Routing)
-# -----------------
-
-# Orchestrator: Main reasoning (80% cloud, 20% local fallback)
+# Orchestrator: Main reasoning (Opus-tier tasks)
+# Routing: Cloud (OpenRouter/Gemini) with local fallback
 [functions.orchestrator]
 type = "chat"
 
-[functions.orchestrator.variants.cloud]
+[functions.orchestrator.variants.openrouter]
 type = "chat_completion"
-weight = 0.8
-model = "nemotron_70b"
+model = "openrouter_nemotron"
+weight = 0.4
 
-[functions.orchestrator.variants.local]
+[functions.orchestrator.variants.gemini]
 type = "chat_completion"
+model = "gemini_flash"
+weight = 0.4
+
+[functions.orchestrator.variants.ollama_cloud]
+type = "chat_completion"
+model = "ollama_cloud"
 weight = 0.2
-model = "llama_ollama"
 
-# Utility: Quick tasks (100% local)
+# Utility: Fast tasks (Haiku-tier)
+# Routing: Local Ollama (functiongemma) for speed
 [functions.utility]
 type = "chat"
 
 [functions.utility.variants.local]
 type = "chat_completion"
+model = "ollama_local"
 weight = 1.0
-model = "nemotron_mini"
 
-# Embed: Embeddings (100% local)
-[functions.embed]
-type = "chat"
-
-[functions.embed.variants.local]
-type = "chat_completion"
-weight = 1.0
-model = "qwen_embed"
+# Embed: Reference only - embeddings handled by backend SearchIndex
+# Backend uses EMBEDDING_OLLAMA_URL for qwen3-embedding:8b via SentenceTransformers

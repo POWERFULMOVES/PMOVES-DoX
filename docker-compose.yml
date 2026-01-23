@@ -29,7 +29,8 @@ services:
       - PORT=${BACKEND_PORT:-8484}
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
       - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
-      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://ollama:11434}
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_OLLAMA_URL=${EMBEDDING_OLLAMA_URL:-http://ollama:11434}
       - AUTO_MIGRATE=${AUTO_MIGRATE:-false}
       # Device selection - defaults to cpu for CI/staging, override in .env for GPU
       - DEFAULT_DEVICE=${DEFAULT_DEVICE:-cpu}
@@ -191,7 +192,7 @@ services:
     environment:
       - CIPHER_API_PREFIX=""
       - NODE_ENV=production
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
       - SEARCH_DEVICE=cpu
     volumes:
       - ./external/PMOVES-BoTZ/features/cipher/pmoves_cipher/memAgent/cipher.yml:/app/memAgent/cipher.yml

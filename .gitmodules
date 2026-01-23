@@ -1,15 +1,19 @@
 [submodule "A2UI_reference"]
 	path = A2UI_reference
 	url = https://github.com/POWERFULMOVES/Pmoves-A2UI.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
 [submodule "PsyFeR_reference"]
 	path = PsyFeR_reference
 	url = https://github.com/POWERFULMOVES/Pmoves-PsyFeR-Holo.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
 [submodule "external/Pmoves-Glancer"]
 	path = external/Pmoves-Glancer
 	url = https://github.com/POWERFULMOVES/Pmoves-Glancer.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
 [submodule "external/Pmoves-hyperdimensions"]
 	path = external/Pmoves-hyperdimensions
 	url = https://github.com/POWERFULMOVES/Pmoves-hyperdimensions.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
 [submodule "external/conductor"]
 	path = external/conductor
 	url = https://github.com/gemini-cli-extensions/conductor.git
@@ -20,6 +24,32 @@
 [submodule "external/PMOVES-BoTZ"]
 	path = external/PMOVES-BoTZ
 	url = https://github.com/POWERFULMOVES/PMOVES-BoTZ.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
 [submodule "external/PMOVES-BotZ-gateway"]
 	path = external/PMOVES-BotZ-gateway
 	url = https://github.com/POWERFULMOVES/PMOVES-BotZ-gateway.git
+	branch = PMOVES.AI-Edition-Hardened
+[submodule "external/PMOVES-n8n"]
+	path = external/PMOVES-n8n
+	url = https://github.com/POWERFULMOVES/PMOVES-n8n.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
+[submodule "external/PMOVES-n8n-mcp"]
+	path = external/PMOVES-n8n-mcp
+	url = https://github.com/POWERFULMOVES/PMOVES-n8n-mcp.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
+[submodule "external/PMOVES-google_workspace_mcp"]
+	path = external/PMOVES-google_workspace_mcp
+	url = https://github.com/POWERFULMOVES/PMOVES-google_workspace_mcp.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
+[submodule "external/PMOVES-docling"]
+	path = external/PMOVES-docling
+	url = https://github.com/POWERFULMOVES/PMOVES-docling.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
+[submodule "external/PMOVES-postman-mcp-server"]
+	path = external/PMOVES-postman-mcp-server
+	url = https://github.com/POWERFULMOVES/PMOVES-postman-mcp-server.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
+[submodule "external/PMOVES-bentopdf"]
+	path = external/PMOVES-bentopdf
+	url = https://github.com/POWERFULMOVES/PMOVES-bentopdf.git
+	branch = PMOVES.AI-Edition-Hardened-DoX
