@@ -20,7 +20,8 @@ import threading
 import re
 from pydantic import BaseModel
 from app.hrm import HRMConfig, HRMMetrics, refine_sort_digits
-from app.api.routers import documents, analysis, system, cipher, models, graph
+from app.api.routers import documents, analysis, system, cipher, models, graph, a2a
+from app.security import SecurityMiddleware
 
 app = FastAPI(title="PMOVES-DoX API")
 
@@ -30,6 +31,8 @@ app.include_router(system.router)
 app.include_router(cipher.router)
 app.include_router(models.router, prefix="/models", tags=["models"])
 app.include_router(graph.router)
+# A2A router mounted at root for .well-known path
+app.include_router(a2a.router)
 
 from app.ingestion.pdf_processor import process_pdf
 from app.ingestion.csv_processor import process_csv
@@ -89,6 +92,16 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+# Security middleware - Defense in Depth pattern validation
+# Enabled via SECURITY_MIDDLEWARE_ENABLED env var (default: true)
+# Validates commands and paths against patterns.yaml rules
+if os.getenv("SECURITY_MIDDLEWARE_ENABLED", "true").lower() in ("1", "true", "yes", "on"):
+    try:
+        app.add_middleware(SecurityMiddleware)
+        logging.getLogger(__name__).info("Security middleware enabled")
+    except Exception as e:
+        logging.getLogger(__name__).warning(f"Security middleware initialization failed: {e}")
 
 # Mount Pmoves-hyperdimensions tool
 import os
