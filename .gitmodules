@@ -24,7 +24,7 @@
 [submodule "external/PMOVES-BoTZ"]
 	path = external/PMOVES-BoTZ
 	url = https://github.com/POWERFULMOVES/PMOVES-BoTZ.git
-	branch = PMOVES.AI-Edition-Hardened-DoX
+	branch = PMOVES.AI-Edition-Hardened
 [submodule "external/PMOVES-BotZ-gateway"]
 	path = external/PMOVES-BotZ-gateway
 	url = https://github.com/POWERFULMOVES/PMOVES-BotZ-gateway.git
