@@ -198,7 +198,7 @@ class TensorZeroClient:
             base_url
             or os.environ.get("TENSORZERO_BASE_URL", "http://tensorzero-gateway:3030")
         ).rstrip("/")
-        self.model = model or os.environ.get("TENSORZERO_MODEL", "qwen2_5_14b")
+        self.model = model or os.environ.get("TENSORZERO_MODEL", "orchestrator")
         self.api_key = os.environ.get("TENSORZERO_API_KEY", "")
 ```
 
@@ -243,7 +243,7 @@ class CipherMemoryClient:
 | `N8N_API_URL` | n8n REST API URL | `http://n8n:5678/api/v1` |
 | `N8N_API_KEY` | n8n API key | Required |
 | `TENSORZERO_BASE_URL` | TensorZero gateway URL | `http://tensorzero-gateway:3030` |
-| `TENSORZERO_MODEL` | Default model for inference | `qwen2_5_14b` |
+| `TENSORZERO_MODEL` | Default model for inference | `orchestrator` |
 | `TENSORZERO_API_KEY` | TensorZero authentication | - |
 | `CIPHER_MEMORY_PATH` | Path to Cipher installation | `/app/features/cipher/pmoves_cipher` |
 
@@ -354,7 +354,7 @@ services:
 
 ## Changes Log
 
-### 2025-01-25: Cipher Memory TensorZero Migration
+### 2026-01-26: Cipher Memory TensorZero Migration
 
 **File Modified**: `features/cipher/memAgent/cipher_pmoves.yml`
 

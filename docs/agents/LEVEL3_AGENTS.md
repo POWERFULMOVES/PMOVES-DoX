@@ -513,7 +513,7 @@ async with KnowledgeManagerAgent("knowledge-001") as agent:
 | docling | SSE | JWT (SUPABASE_JWT_SECRET) | Document processing |
 | e2b | SSE | JWT (SUPABASE_JWT_SECRET) | Code sandbox |
 | vl-sentinel | SSE | JWT (SUPABASE_JWT_SECRET) | Vision-language |
-| cipher-memory | stdio | VENICE_API_KEY | Persistent memory |
+| cipher-memory | stdio | TENSORZERO_API_KEY | Persistent memory |
 | postman | stdio | POSTMAN_API_KEY | API testing |
 | n8n-agent | stdio | N8N_API_KEY | Workflow automation |
 | hostinger | stdio | HOSTINGER_API_KEY | VPS/DNS management |
@@ -529,7 +529,7 @@ N8N_API_KEY: ${N8N_API_KEY}
 N8N_API_URL: ${N8N_API_URL:-http://n8n:5678/api/v1}
 
 # External API Keys
-VENICE_API_KEY: ${VENICE_API_KEY}        # Cipher memory LLM
+# Note: Cipher memory uses TENSORZERO_API_KEY (Venice.ai removed)
 POSTMAN_API_KEY: ${POSTMAN_API_KEY}      # Postman collections
 HOSTINGER_API_KEY: ${HOSTINGER_API_KEY}  # Hostinger VPS
 ```
