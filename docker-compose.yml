@@ -17,11 +17,11 @@ services:
       - .env.local
     environment:
       # Override default values (env_file provides the actual values)
-      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
       - SUPABASE_URL=${SUPABASE_URL:-http://supabase-proxy:3000}
       # Map parent env variable names to DoX expected names
-      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY:-local-dev-anon-key-for-postgrest}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_SERVICE_ROLE_KEY:-local-dev-service-key-for-postgrest}}
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
       - REDIS_URL=redis://redis:6379
       - DB_BACKEND=${DB_BACKEND:-supabase}
       - NATS_URL=${NATS_URL:-nats://nats:4222}
@@ -46,7 +46,7 @@ services:
       # Use TensorZero gateway as OpenAI-compatible endpoint
       - OPENAI_BASE_URL=${TENSORZERO_URL:-http://tensorzero:3000}/openai/v1
       - TENSORZERO_BASE_URL=${TENSORZERO_URL:-http://tensorzero:3000}
-      - OPENAI_API_KEY=${OPENAI_API_KEY:-tensorzero}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
       # TensorZero Embeddings (for SearchIndex - uses GPU Orchestrator)
       - TENSORZERO_EMBEDDING_MODEL=${TENSORZERO_EMBEDDING_MODEL:-qwen3_embedding_8b_local}
       # Neo4j Knowledge Graph - Local (DoX container)
@@ -75,7 +75,7 @@ services:
       - nats
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO", "-", "http://localhost:8484/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:8484/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -120,10 +120,10 @@ services:
       - api_tier
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO", "-", "http://localhost:8222/varz"]
-      interval: 10s
+      test: ["CMD", "nats-server", "--help"]
+      interval: 30s
       timeout: 5s
-      retries: 5
+      retries: 3
 
   supabase-db:
     image: supabase/postgres:15.1.0.117
@@ -133,7 +133,7 @@ services:
         required: false
       - .env.local
     environment:
-      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-postgres}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
       POSTGRES_DB: postgres
     networks:
       - data_tier
@@ -153,10 +153,10 @@ services:
         required: false
       - .env.local
     environment:
-      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD:-postgres}@supabase-db:5432/postgres
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
       PGRST_DB_SCHEMA: public,storage,graphql_public
       PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET:-super-secret-jwt-token-with-at-least-32-characters-long}
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
       # Serve API at /rest/v1 prefix for Supabase Python client compatibility
       PGRST_SERVER_UNIX_SOCKET_MODE: ""
       PGRST_OPENAPI_SERVER_PROXY_URI: http://localhost:54321/rest/v1
@@ -202,7 +202,7 @@ services:
       - nats
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "wget", "-qO", "-", "http://localhost:3000/health"]
+      test: ["CMD", "nc", "-z", "127.0.0.1", "3000"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -229,9 +229,10 @@ services:
   neo4j:
     image: neo4j:5.15-community
     container_name: pmoves-dox-neo4j
+    # Note: Don't use env_file - Neo4j interprets all NEO4J_* vars as config settings
     environment:
       # Minimal Neo4j 5.x community config (no EULA needed for community)
-      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD:-pmovesNeo4jLocal2025}
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
       - NEO4J_dbms_memory_heap_initial__size=512m
       - NEO4J_dbms_memory_heap_max__size=1G
       - NEO4J_dbms_memory_pagecache_size=512m
@@ -247,11 +248,11 @@ services:
       - data_tier
       - pmoves_data  # Connect to parent Neo4j for shared knowledge graphs
     healthcheck:
-      # Healthcheck uses password from NEO4J_AUTH env var (defaults to pmovesNeo4jLocal2025)
-      test: ["CMD-SHELL", "cypher-shell -u neo4j -p ${NEO4J_PASSWORD:-pmovesNeo4jLocal2025} 'RETURN 1'"]
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
       interval: 30s
       timeout: 10s
       retries: 5
+      start_period: 30s
     restart: unless-stopped
 
   # ClickHouse - TensorZero Observability Backend (TIER 4)
@@ -261,8 +262,8 @@ services:
     container_name: pmoves-dox-clickhouse
     hostname: tensorzero-clickhouse
     environment:
-      CLICKHOUSE_USER: ${CLICKHOUSE_USER:-tensorzero}
-      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD:-tensorzero}
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
       CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
       CLICKHOUSE_DB: default
     ports:
@@ -275,7 +276,7 @@ services:
       - data_tier
       - app_tier
     healthcheck:
-      test: ["CMD", "wget", "--spider", "--tries", "1", "http://127.0.0.1:8123/ping"]
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping || curl -sf http://127.0.0.1:8123/ping"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -355,7 +356,7 @@ services:
       - api_tier
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      test: ["CMD", "curl", "-s", "http://localhost:8000/mcp"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -413,7 +414,7 @@ services:
     environment:
       - TENSORZERO_PROVIDER_OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
       - GOOGLE_AI_STUDIO_API_KEY=${GOOGLE_API_KEY}
-      - TENSORZERO_CLICKHOUSE_URL=http://${CLICKHOUSE_USER:-tensorzero}:${CLICKHOUSE_PASSWORD:-tensorzero}@tensorzero-clickhouse:8123/default
+      - TENSORZERO_CLICKHOUSE_URL=http://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@tensorzero-clickhouse:8123/default
     extra_hosts:
       - "host.docker.internal:host-gateway"
     networks:
@@ -429,7 +430,7 @@ services:
         condition: service_healthy
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-f", "http://localhost:3000/health"]
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
       interval: 30s
       timeout: 10s
       retries: 3
@@ -456,7 +457,7 @@ services:
       # MCP Server Configuration (docking pattern)
       # Enable MCP server so UI instance can connect to API MCP instance
       MCP_SERVER_ENABLED: "${AGENT_ZERO_MCP_ENABLED:-true}"
-      MCP_SERVER_TOKEN: "${AGENT_ZERO_MCP_TOKEN:-pmoves-dox-mcp-token}"
+      MCP_SERVER_TOKEN: "${AGENT_ZERO_MCP_TOKEN}"
       # Web UI available on WEB_UI_PORT (runs alongside MCP server)
       # MCP endpoint: http://pmoves-agent-zero:50051/mcp/t-{token}/sse
       WEB_UI_PORT: "50051"
