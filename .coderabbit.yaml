@@ -4,18 +4,15 @@
 reviews:
   # Enable reviews
   review_status: true
-
-  # Branches to review
-  branches:
-    - "PMOVES.AI-Edition-Hardened"
-    - "feat/*"
-    - "fix/*"
-    - "docs/*"
-    - "chore/*"
-
-  # Disable reviews on these branches
-  excluded_branches:
-    - "main"
+  auto_review:
+    enabled: true
+    # Additional base branches to review (default branch is always included)
+    base_branches:
+      - "PMOVES.AI-Edition-Hardened"
+      - "feat/.*"
+      - "fix/.*"
+      - "docs/.*"
+      - "chore/.*"
 
 # Language setting
 language: "en-US"

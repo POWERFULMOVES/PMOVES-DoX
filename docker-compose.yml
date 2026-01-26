@@ -20,8 +20,9 @@ services:
       - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
       - SUPABASE_URL=${SUPABASE_URL:-http://supabase-proxy:3000}
       # Map parent env variable names to DoX expected names
+      # Support both SUPABASE_SERVICE_KEY (our standard) and SUPABASE_SERVICE_ROLE_KEY (Supabase CLI)
       - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
-      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_SERVICE_ROLE_KEY}}
       - REDIS_URL=redis://redis:6379
       - DB_BACKEND=${DB_BACKEND:-supabase}
       - NATS_URL=${NATS_URL:-nats://nats:4222}
@@ -120,6 +121,9 @@ services:
       - api_tier
     restart: unless-stopped
     healthcheck:
+      # NOTE: NATS scratch image has no shell tools. --help verifies binary exists
+      # but doesn't confirm the server is listening. Enable http_port: 8222 for
+      # monitoring endpoint if a more robust healthcheck is required.
       test: ["CMD", "nats-server", "--help"]
       interval: 30s
       timeout: 5s
@@ -356,7 +360,7 @@ services:
       - api_tier
     restart: unless-stopped
     healthcheck:
-      test: ["CMD", "curl", "-s", "http://localhost:8000/mcp"]
+      test: ["CMD", "curl", "-sf", "http://localhost:8000/mcp"]
       interval: 30s
       timeout: 10s
       retries: 3
