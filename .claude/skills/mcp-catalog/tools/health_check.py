@@ -50,12 +50,13 @@ def load_catalog(path: Path) -> dict:
 def derive_health_url(sse_url: str) -> str:
     """Derive the health endpoint URL from an SSE URL using proper URL parsing."""
     parsed = urlparse(sse_url)
-    path = parsed.path
+    # Normalize path by stripping trailing slashes to avoid double slashes
+    path = parsed.path.rstrip("/")
     if path.endswith("/sse"):
         path = path[:-4]
-    elif path == "/sse":
+    elif path == "/sse" or path == "":
         path = ""
-    new_path = f"{path}/health"
+    new_path = f"{path}/health" if path else "/health"
     return urlunparse(parsed._replace(path=new_path))
 
 

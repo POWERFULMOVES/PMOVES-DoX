@@ -49,17 +49,21 @@ def load_catalog(path: Path) -> dict:
 def derive_tools_url(sse_url: str, tool_name: str) -> str:
     """Derive the tools endpoint URL from an SSE URL using proper URL parsing."""
     parsed = urlparse(sse_url)
-    path = parsed.path
+    # Normalize path by stripping trailing slashes to avoid double slashes
+    path = parsed.path.rstrip("/")
     if path.endswith("/sse"):
         path = path[:-4]
-    elif path == "/sse":
+    elif path == "/sse" or path == "":
         path = ""
     new_path = f"{path}/tools/{tool_name}"
     return urlunparse(parsed._replace(path=new_path))
 
 
 def expand_env_var(value: str) -> str:
-    """Expand environment variable references including default syntax."""
+    """Expand environment variable references including default syntax.
+
+    Follows shell ${VAR:-default} semantics where empty string is treated as unset.
+    """
     import os
     dollar_brace = chr(36) + chr(123)
     if not (value.startswith(dollar_brace) and value.endswith(chr(125))):
@@ -67,9 +71,14 @@ def expand_env_var(value: str) -> str:
     inner = value[2:-1]
     match = re.match(r'^([^:]+):-(.*)' + chr(36), inner)
     if match:
-        return os.environ.get(match.group(1), match.group(2))
+        # Per shell semantics: empty string is treated as unset, use default
+        val = os.environ.get(match.group(1))
+        return val if val else match.group(2)
     var_name = inner.split(':-')[0]
-    return os.environ.get(var_name, '')
+    default_val = inner.split(':-')[1] if ':-' in inner else ''
+    # Per shell semantics: empty string is treated as unset, use default
+    val = os.environ.get(var_name)
+    return val if val else default_val
 
 
 def call_sse_tool(
