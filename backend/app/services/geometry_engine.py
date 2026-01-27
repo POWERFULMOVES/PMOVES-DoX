@@ -375,4 +375,584 @@ class GeometryEngine:
     };
 }"""
 
+    def analyze_semantic_clusters(
+        self,
+        embeddings: List[np.ndarray],
+        labels: Optional[List[str]] = None,
+        n_clusters: Optional[int] = None
+    ) -> Dict[str, Any]:
+        """Analyze semantic clusters in embedding space.
+
+        Uses K-Means clustering with automatic cluster count detection via
+        the elbow method when n_clusters is not specified.
+
+        Args:
+            embeddings: List of embedding vectors.
+            labels: Optional labels for each embedding.
+            n_clusters: Number of clusters (auto-detect if None).
+
+        Returns:
+            ClusterAnalysis dict with:
+            - clusters: List of cluster info (centroid, members, density)
+            - silhouette_score: Clustering quality metric (-1 to 1, higher is better)
+            - manifold_type: Detected manifold type for clusters
+        """
+        if not embeddings or len(embeddings) < 2:
+            return {
+                "clusters": [],
+                "silhouette_score": 0.0,
+                "manifold_type": "insufficient_data"
+            }
+
+        try:
+            from sklearn.cluster import KMeans
+            from sklearn.metrics import silhouette_score
+        except ImportError:
+            logger.warning("sklearn not available, using simplified clustering")
+            return self._fallback_clustering(embeddings, labels)
+
+        data = np.array([np.array(e) for e in embeddings])
+        n_samples = len(data)
+
+        # Auto-detect optimal number of clusters using elbow method
+        if n_clusters is None:
+            n_clusters = self._detect_optimal_clusters(data)
+
+        # Ensure valid n_clusters
+        n_clusters = max(2, min(n_clusters, n_samples - 1))
+
+        try:
+            # Perform K-Means clustering
+            kmeans = KMeans(n_clusters=n_clusters, random_state=42, n_init=10)
+            cluster_labels = kmeans.fit_predict(data)
+
+            # Calculate silhouette score
+            if n_clusters >= 2 and n_clusters < n_samples:
+                sil_score = silhouette_score(data, cluster_labels)
+            else:
+                sil_score = 0.0
+
+            # Build cluster info
+            clusters = []
+            for i in range(n_clusters):
+                mask = cluster_labels == i
+                cluster_points = data[mask]
+                member_indices = np.where(mask)[0].tolist()
+
+                # Calculate cluster density (inverse of average distance to centroid)
+                centroid = kmeans.cluster_centers_[i]
+                distances = np.linalg.norm(cluster_points - centroid, axis=1)
+                avg_dist = np.mean(distances) if len(distances) > 0 else 0.0
+                density = 1.0 / (avg_dist + 1e-9)
+
+                # Get member labels if provided
+                member_labels = None
+                if labels:
+                    member_labels = [labels[j] for j in member_indices if j < len(labels)]
+
+                clusters.append({
+                    "cluster_id": i,
+                    "centroid": centroid.tolist(),
+                    "member_indices": member_indices,
+                    "member_labels": member_labels,
+                    "size": int(np.sum(mask)),
+                    "density": float(density),
+                    "avg_distance_to_centroid": float(avg_dist)
+                })
+
+            # Detect manifold type based on cluster distribution
+            manifold_type = self._detect_cluster_manifold_type(clusters, data)
+
+            return {
+                "clusters": clusters,
+                "silhouette_score": float(sil_score),
+                "manifold_type": manifold_type,
+                "n_clusters": n_clusters
+            }
+
+        except Exception as e:
+            logger.error(f"analyze_semantic_clusters error: {e}")
+            return {
+                "clusters": [],
+                "silhouette_score": 0.0,
+                "manifold_type": "error"
+            }
+
+    def _detect_optimal_clusters(self, data: np.ndarray, max_clusters: int = 10) -> int:
+        """Detect optimal number of clusters using elbow method.
+
+        Args:
+            data: Embedding data matrix.
+            max_clusters: Maximum clusters to consider.
+
+        Returns:
+            Optimal number of clusters.
+        """
+        try:
+            from sklearn.cluster import KMeans
+        except ImportError:
+            return min(3, len(data) - 1)
+
+        n_samples = len(data)
+        max_k = min(max_clusters, n_samples - 1)
+
+        if max_k < 2:
+            return 2
+
+        inertias = []
+        k_range = range(2, max_k + 1)
+
+        for k in k_range:
+            kmeans = KMeans(n_clusters=k, random_state=42, n_init=10)
+            kmeans.fit(data)
+            inertias.append(kmeans.inertia_)
+
+        # Find elbow using second derivative
+        if len(inertias) < 3:
+            return 2
+
+        inertias = np.array(inertias)
+        # Compute second derivative
+        d1 = np.diff(inertias)
+        d2 = np.diff(d1)
+
+        # Elbow is where second derivative is maximum (most negative to less negative)
+        elbow_idx = np.argmax(d2) + 2  # +2 because we started at k=2 and lost 2 from diff
+        optimal_k = list(k_range)[min(elbow_idx, len(k_range) - 1)]
+
+        return optimal_k
+
+    def _detect_cluster_manifold_type(
+        self,
+        clusters: List[Dict[str, Any]],
+        data: np.ndarray
+    ) -> str:
+        """Detect manifold type based on cluster distribution.
+
+        Args:
+            clusters: Cluster analysis results.
+            data: Original embedding data.
+
+        Returns:
+            Manifold type string.
+        """
+        if len(clusters) < 2:
+            return "flat"
+
+        # Analyze inter-cluster distances
+        centroids = np.array([c["centroid"] for c in clusters])
+
+        # Compute pairwise distances between centroids
+        n = len(centroids)
+        inter_dists = []
+        for i in range(n):
+            for j in range(i + 1, n):
+                inter_dists.append(np.linalg.norm(centroids[i] - centroids[j]))
+
+        if not inter_dists:
+            return "flat"
+
+        inter_dists = np.array(inter_dists)
+
+        # Analyze variance of inter-cluster distances
+        dist_cv = np.std(inter_dists) / (np.mean(inter_dists) + 1e-9)
+
+        # Analyze cluster densities
+        densities = [c["density"] for c in clusters]
+        density_cv = np.std(densities) / (np.mean(densities) + 1e-9)
+
+        # High variance in distances = hierarchical = hyperbolic
+        # Low variance, compact = spherical
+        if dist_cv > 0.5 or density_cv > 0.5:
+            return "hyperbolic"
+        elif dist_cv < 0.2 and density_cv < 0.3:
+            return "spherical"
+        else:
+            return "euclidean"
+
+    def _fallback_clustering(
+        self,
+        embeddings: List[np.ndarray],
+        labels: Optional[List[str]] = None
+    ) -> Dict[str, Any]:
+        """Fallback clustering when sklearn is not available.
+
+        Uses simple centroid-based single cluster approach.
+        """
+        data = np.array([np.array(e) for e in embeddings])
+        centroid = np.mean(data, axis=0)
+        distances = np.linalg.norm(data - centroid, axis=1)
+
+        return {
+            "clusters": [{
+                "cluster_id": 0,
+                "centroid": centroid.tolist(),
+                "member_indices": list(range(len(data))),
+                "member_labels": labels,
+                "size": len(data),
+                "density": float(1.0 / (np.mean(distances) + 1e-9)),
+                "avg_distance_to_centroid": float(np.mean(distances))
+            }],
+            "silhouette_score": 0.0,
+            "manifold_type": "euclidean"
+        }
+
+    def compute_geodesic_distance(
+        self,
+        point_a: np.ndarray,
+        point_b: np.ndarray,
+        geometry: str = "auto"
+    ) -> float:
+        """Compute geodesic distance between two points.
+
+        Computes the distance on the specified manifold type:
+        - Hyperbolic: Poincaré ball distance
+        - Spherical: Great circle (arc) distance
+        - Euclidean: Standard L2 norm
+
+        Args:
+            point_a: First embedding vector.
+            point_b: Second embedding vector.
+            geometry: Manifold type ("hyperbolic", "spherical", "euclidean", "auto")
+
+        Returns:
+            Geodesic distance on the manifold.
+        """
+        a = np.array(point_a)
+        b = np.array(point_b)
+
+        # Auto-detect geometry from point norms
+        if geometry == "auto":
+            geometry = self._detect_geometry_from_points(a, b)
+
+        if geometry == "hyperbolic":
+            return self._poincare_distance(a, b)
+        elif geometry == "spherical":
+            return self._spherical_distance(a, b)
+        else:  # euclidean
+            return float(np.linalg.norm(a - b))
+
+    def _detect_geometry_from_points(
+        self,
+        point_a: np.ndarray,
+        point_b: np.ndarray
+    ) -> str:
+        """Detect geometry type from point characteristics.
+
+        Uses norms and relative positions to infer manifold type.
+        """
+        norm_a = np.linalg.norm(point_a)
+        norm_b = np.linalg.norm(point_b)
+
+        # Points very close to unit sphere boundary suggest Poincaré model
+        if norm_a > 0.8 or norm_b > 0.8:
+            if norm_a < 1.0 and norm_b < 1.0:
+                return "hyperbolic"
+
+        # Points on or near unit sphere suggest spherical geometry
+        if 0.95 < norm_a < 1.05 and 0.95 < norm_b < 1.05:
+            return "spherical"
+
+        return "euclidean"
+
+    def _poincare_distance(self, point_a: np.ndarray, point_b: np.ndarray) -> float:
+        """Compute Poincaré ball distance.
+
+        d(a, b) = arccosh(1 + 2 * ||a - b||^2 / ((1 - ||a||^2)(1 - ||b||^2)))
+
+        Args:
+            point_a: First point in Poincaré ball.
+            point_b: Second point in Poincaré ball.
+
+        Returns:
+            Hyperbolic distance.
+        """
+        norm_a_sq = np.sum(point_a ** 2)
+        norm_b_sq = np.sum(point_b ** 2)
+        diff_sq = np.sum((point_a - point_b) ** 2)
+
+        # Clamp norms to stay inside the ball
+        norm_a_sq = min(norm_a_sq, 0.999)
+        norm_b_sq = min(norm_b_sq, 0.999)
+
+        denominator = (1 - norm_a_sq) * (1 - norm_b_sq)
+
+        if denominator <= 0:
+            return float('inf')
+
+        # Poincaré distance formula
+        x = 1 + 2 * diff_sq / denominator
+
+        # arccosh(x) = ln(x + sqrt(x^2 - 1))
+        if x < 1:
+            x = 1.0
+
+        return float(np.arccosh(x))
+
+    def _spherical_distance(self, point_a: np.ndarray, point_b: np.ndarray) -> float:
+        """Compute great circle distance on a sphere.
+
+        d(a, b) = arccos(a · b / (||a|| ||b||))
+
+        Args:
+            point_a: First point (normalized to unit sphere).
+            point_b: Second point (normalized to unit sphere).
+
+        Returns:
+            Spherical (arc) distance.
+        """
+        norm_a = np.linalg.norm(point_a)
+        norm_b = np.linalg.norm(point_b)
+
+        if norm_a < 1e-9 or norm_b < 1e-9:
+            return 0.0
+
+        # Normalize to unit sphere
+        a_unit = point_a / norm_a
+        b_unit = point_b / norm_b
+
+        # Dot product gives cosine of angle
+        cos_angle = np.dot(a_unit, b_unit)
+
+        # Clamp to valid range for arccos
+        cos_angle = np.clip(cos_angle, -1.0, 1.0)
+
+        return float(np.arccos(cos_angle))
+
+    def determine_attention_allocation(
+        self,
+        query_embedding: np.ndarray,
+        candidate_embeddings: List[np.ndarray],
+        temperature: float = 1.0
+    ) -> List[float]:
+        """Determine attention weights for candidates based on query.
+
+        Uses geodesic distances and softmax to compute attention weights.
+        Closer candidates receive higher attention weights.
+
+        Args:
+            query_embedding: The query vector.
+            candidate_embeddings: List of candidate vectors.
+            temperature: Softmax temperature (lower = sharper focus).
+
+        Returns:
+            List of attention weights summing to 1.0.
+        """
+        if not candidate_embeddings:
+            return []
+
+        if len(candidate_embeddings) == 1:
+            return [1.0]
+
+        query = np.array(query_embedding)
+
+        # Compute geodesic distances from query to each candidate
+        distances = []
+        for candidate in candidate_embeddings:
+            dist = self.compute_geodesic_distance(query, np.array(candidate), geometry="auto")
+            distances.append(dist)
+
+        distances = np.array(distances)
+
+        # Handle infinite distances
+        max_finite = np.max(distances[np.isfinite(distances)]) if np.any(np.isfinite(distances)) else 1.0
+        distances = np.where(np.isfinite(distances), distances, max_finite * 2)
+
+        # Convert distances to similarities (negative distances)
+        # and apply softmax with temperature
+        # Lower distance = higher similarity = higher attention
+        similarities = -distances / (temperature + 1e-9)
+
+        # Softmax for numerical stability
+        similarities = similarities - np.max(similarities)
+        exp_sims = np.exp(similarities)
+        attention_weights = exp_sims / (np.sum(exp_sims) + 1e-9)
+
+        return attention_weights.tolist()
+
+    def detect_knowledge_gaps(
+        self,
+        embeddings: List[np.ndarray],
+        threshold: float = 0.3
+    ) -> List[Dict[str, Any]]:
+        """Detect low-density regions indicating knowledge gaps.
+
+        Uses kernel density estimation to find sparse regions in the
+        embedding space that may represent gaps in coverage.
+
+        Args:
+            embeddings: Embedding vectors representing knowledge.
+            threshold: Density threshold for gap detection (0-1, lower = more gaps).
+
+        Returns:
+            List of gap regions with centroids and suggested topics.
+        """
+        if not embeddings or len(embeddings) < 3:
+            return []
+
+        data = np.array([np.array(e) for e in embeddings])
+        n_samples, n_dims = data.shape
+
+        try:
+            # Compute local density for each point using k-NN distances
+            k = min(5, n_samples - 1)
+
+            # Pairwise distance matrix
+            diff = data[:, np.newaxis, :] - data[np.newaxis, :, :]
+            dist_matrix = np.sqrt(np.sum(diff ** 2, axis=2))
+
+            # For each point, get average distance to k nearest neighbors
+            local_densities = []
+            for i in range(n_samples):
+                dists = np.sort(dist_matrix[i])[1:k+1]  # Exclude self (distance 0)
+                avg_knn_dist = np.mean(dists)
+                # Density is inverse of average distance
+                density = 1.0 / (avg_knn_dist + 1e-9)
+                local_densities.append(density)
+
+            local_densities = np.array(local_densities)
+
+            # Normalize densities to [0, 1]
+            min_density = np.min(local_densities)
+            max_density = np.max(local_densities)
+            if max_density > min_density:
+                normalized_densities = (local_densities - min_density) / (max_density - min_density)
+            else:
+                normalized_densities = np.ones(n_samples) * 0.5
+
+            # Find low-density points (below threshold)
+            gap_mask = normalized_densities < threshold
+            gap_indices = np.where(gap_mask)[0]
+
+            if len(gap_indices) == 0:
+                return []
+
+            # Cluster gap points to find distinct gap regions
+            gap_points = data[gap_indices]
+            gap_regions = self._cluster_gap_points(gap_points, gap_indices, normalized_densities)
+
+            return gap_regions
+
+        except Exception as e:
+            logger.error(f"detect_knowledge_gaps error: {e}")
+            return []
+
+    def _cluster_gap_points(
+        self,
+        gap_points: np.ndarray,
+        gap_indices: np.ndarray,
+        densities: np.ndarray
+    ) -> List[Dict[str, Any]]:
+        """Cluster gap points into distinct regions.
+
+        Args:
+            gap_points: Embedding vectors identified as gaps.
+            gap_indices: Original indices of gap points.
+            densities: Normalized density values for all points.
+
+        Returns:
+            List of gap region descriptions.
+        """
+        if len(gap_points) == 0:
+            return []
+
+        if len(gap_points) == 1:
+            return [{
+                "region_id": 0,
+                "centroid": gap_points[0].tolist(),
+                "member_indices": gap_indices.tolist(),
+                "avg_density": float(densities[gap_indices[0]]),
+                "size": 1,
+                "severity": float(1.0 - densities[gap_indices[0]]),
+                "suggested_topic": "Underexplored area near boundary"
+            }]
+
+        try:
+            from sklearn.cluster import DBSCAN
+
+            # Use DBSCAN to find natural clusters of gap points
+            eps = np.percentile(
+                np.linalg.norm(gap_points[:, np.newaxis] - gap_points, axis=2),
+                30
+            )
+            clustering = DBSCAN(eps=max(eps, 0.1), min_samples=1).fit(gap_points)
+            cluster_labels = clustering.labels_
+
+        except ImportError:
+            # Fallback: treat all gaps as one region
+            cluster_labels = np.zeros(len(gap_points), dtype=int)
+
+        # Build gap region info
+        gap_regions = []
+        unique_labels = np.unique(cluster_labels)
+
+        for i, label in enumerate(unique_labels):
+            if label == -1:  # DBSCAN noise points
+                continue
+
+            mask = cluster_labels == label
+            region_points = gap_points[mask]
+            region_indices = gap_indices[mask]
+
+            centroid = np.mean(region_points, axis=0)
+            avg_density = np.mean(densities[region_indices])
+
+            # Severity based on how sparse the region is
+            severity = 1.0 - avg_density
+
+            # Generate suggested topic based on centroid position
+            suggested_topic = self._generate_gap_topic_suggestion(centroid, severity)
+
+            gap_regions.append({
+                "region_id": int(i),
+                "centroid": centroid.tolist(),
+                "member_indices": region_indices.tolist(),
+                "avg_density": float(avg_density),
+                "size": int(np.sum(mask)),
+                "severity": float(severity),
+                "suggested_topic": suggested_topic
+            })
+
+        # Sort by severity (most severe gaps first)
+        gap_regions.sort(key=lambda x: x["severity"], reverse=True)
+
+        return gap_regions
+
+    def _generate_gap_topic_suggestion(
+        self,
+        centroid: np.ndarray,
+        severity: float
+    ) -> str:
+        """Generate a suggested topic description for a knowledge gap.
+
+        Args:
+            centroid: Center of the gap region.
+            severity: How severe the gap is (0-1).
+
+        Returns:
+            Suggested topic string.
+        """
+        # Analyze centroid characteristics
+        norm = np.linalg.norm(centroid)
+        dim = len(centroid)
+
+        # Determine position description
+        if norm < 0.3:
+            position = "central"
+        elif norm < 0.7:
+            position = "intermediate"
+        else:
+            position = "peripheral"
+
+        # Severity description
+        if severity > 0.8:
+            severity_desc = "Critical"
+        elif severity > 0.5:
+            severity_desc = "Significant"
+        else:
+            severity_desc = "Minor"
+
+        return f"{severity_desc} gap in {position} region (norm={norm:.2f}, dim={dim})"
+
+
 geometry_engine = GeometryEngine()
