@@ -121,9 +121,21 @@ class ReasoningService:
     - Query and retrieve traces
     - Manage evidence pools for cross-step reference
 
+    Storage Lifecycle:
+        **IMPORTANT**: This service uses in-memory storage only. All reasoning
+        traces and evidence pools are stored in Python dictionaries and are
+        ephemeral. Data is NOT persisted across service restarts.
+
+        When the service is restarted (application restart, container restart,
+        or server reboot), all traces and evidence will be lost.
+
+        For persistent storage of reasoning traces, integrate with CipherService
+        which provides encrypted storage capabilities. See the cipher_service
+        module for details on persisting sensitive reasoning data.
+
     Attributes:
-        _traces: Dictionary of active reasoning traces by ID.
-        _evidence_pool: Dictionary of evidence pools by trace ID.
+        _traces: Dictionary of active reasoning traces by ID (in-memory only).
+        _evidence_pool: Dictionary of evidence pools by trace ID (in-memory only).
     """
 
     def __init__(self) -> None:
