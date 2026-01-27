@@ -3,8 +3,10 @@
 This module provides structured reasoning capabilities with:
 - Reasoning trace management (start, add steps, conclude)
 - Evidence circulation between reasoning steps
-- Integration with Cipher Memory for persistence
 - Citation and confidence tracking
+
+Note: Storage is currently in-memory only. Traces are NOT persisted across
+service restarts. For persistent storage, integrate with CipherService.
 
 The service supports multi-agent reasoning where different agents can contribute
 steps to a shared reasoning trace, with evidence accumulated in a pool that

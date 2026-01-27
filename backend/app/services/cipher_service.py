@@ -2,12 +2,15 @@ from typing import Dict, List, Optional, Any
 from app.database_factory import get_db_interface
 import logging
 import json
+import threading
 from datetime import datetime, timezone
 import uuid
 
 LOGGER = logging.getLogger(__name__)
 
 # Module-level storage for workspaces (shared across all CipherService usage)
+# Protected by _storage_lock for thread-safe access in FastAPI concurrent requests
+_storage_lock = threading.Lock()
 _workspaces: Dict[str, Dict[str, Any]] = {}
 _team_memories: Dict[str, Dict[str, Any]] = {}
 _reasoning_steps: Dict[str, Dict[str, Any]] = {}
@@ -74,6 +77,20 @@ class CipherService:
     # --- Team Memory Capabilities ---
 
     @staticmethod
+    def _validate_key_component(value: str, name: str) -> None:
+        """Validate that a key component does not contain the delimiter.
+
+        Args:
+            value: The value to validate.
+            name: Name of the parameter for error messages.
+
+        Raises:
+            ValueError: If value contains ':' character.
+        """
+        if ":" in value:
+            raise ValueError(f"{name} cannot contain ':' character")
+
+    @staticmethod
     async def create_workspace(
         workspace_id: str, metadata: Optional[Dict[str, Any]] = None
     ) -> Dict[str, Any]:
@@ -85,23 +102,29 @@ class CipherService:
 
         Returns:
             Workspace info dict with id, created_at, metadata.
+
+        Raises:
+            ValueError: If workspace_id contains ':' character.
         """
-        global _workspaces
+        global _workspaces, _storage_lock
 
-        if workspace_id in _workspaces:
-            LOGGER.warning(f"Workspace '{workspace_id}' already exists, returning existing")
-            return _workspaces[workspace_id]
+        CipherService._validate_key_component(workspace_id, "workspace_id")
 
-        now = datetime.now(timezone.utc).isoformat()
-        workspace_info = {
-            "id": workspace_id,
-            "created_at": now,
-            "updated_at": now,
-            "metadata": metadata or {},
-        }
+        with _storage_lock:
+            if workspace_id in _workspaces:
+                LOGGER.warning(f"Workspace '{workspace_id}' already exists, returning existing")
+                return _workspaces[workspace_id]
 
-        _workspaces[workspace_id] = workspace_info
-        LOGGER.info(f"Created workspace: {workspace_id}")
+            now = datetime.now(timezone.utc).isoformat()
+            workspace_info = {
+                "id": workspace_id,
+                "created_at": now,
+                "updated_at": now,
+                "metadata": metadata or {},
+            }
+
+            _workspaces[workspace_id] = workspace_info
+            LOGGER.info(f"Created workspace: {workspace_id}")
 
         # Optionally store in Cipher backend if available
         db = CipherService._get_db()
@@ -134,11 +157,20 @@ class CipherService:
 
         Returns:
             Storage confirmation with memory_id.
-        """
-        global _team_memories, _workspaces
 
-        # Verify workspace exists
-        if workspace_id not in _workspaces:
+        Raises:
+            ValueError: If workspace_id or key contains ':' character.
+        """
+        global _team_memories, _workspaces, _storage_lock
+
+        # Validate key components to prevent delimiter collisions
+        CipherService._validate_key_component(workspace_id, "workspace_id")
+        CipherService._validate_key_component(key, "key")
+
+        # Verify workspace exists (create_workspace has its own lock)
+        with _storage_lock:
+            workspace_exists = workspace_id in _workspaces
+        if not workspace_exists:
             LOGGER.warning(f"Workspace '{workspace_id}' not found, creating it")
             await CipherService.create_workspace(workspace_id)
 
@@ -157,11 +189,12 @@ class CipherService:
             "updated_at": now,
         }
 
-        _team_memories[composite_key] = memory_entry
+        with _storage_lock:
+            _team_memories[composite_key] = memory_entry
 
-        # Update workspace timestamp
-        if workspace_id in _workspaces:
-            _workspaces[workspace_id]["updated_at"] = now
+            # Update workspace timestamp
+            if workspace_id in _workspaces:
+                _workspaces[workspace_id]["updated_at"] = now
 
         LOGGER.info(f"Stored team memory: {composite_key} (id={memory_id})")
 
@@ -205,21 +238,24 @@ class CipherService:
         Returns:
             Dict with workspace_id, items list, and count.
         """
-        global _team_memories, _workspaces
+        global _team_memories, _workspaces, _storage_lock
 
         prefix = f"{workspace_id}:"
         items = []
+        total_count = 0
 
-        # Collect ALL matching items first (don't limit yet)
-        for composite_key, memory_entry in _team_memories.items():
-            if composite_key.startswith(prefix):
-                items.append(memory_entry)
+        with _storage_lock:
+            # Collect ALL matching items first (don't limit yet)
+            for composite_key, memory_entry in _team_memories.items():
+                if composite_key.startswith(prefix):
+                    items.append(memory_entry.copy())  # Copy to avoid holding lock during sort
+                    total_count += 1
+
+            workspace_info = _workspaces.get(workspace_id, {}).copy()
 
         # Sort by created_at descending (most recent first), THEN apply limit
         items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
         items = items[:limit]
-
-        workspace_info = _workspaces.get(workspace_id, {})
 
         LOGGER.debug(
             f"Retrieved {len(items)} items from workspace '{workspace_id}' (limit={limit})"
@@ -230,9 +266,7 @@ class CipherService:
             "workspace_metadata": workspace_info.get("metadata", {}),
             "items": items,  # Already limited after sorting
             "count": len(items),
-            "total_in_workspace": sum(
-                1 for k in _team_memories if k.startswith(prefix)
-            ),
+            "total_in_workspace": total_count,
         }
 
     @staticmethod
@@ -244,8 +278,11 @@ class CipherService:
 
         Returns:
             Storage confirmation with step_id.
+
+        Raises:
+            ValueError: If step is missing required fields or step already exists.
         """
-        global _reasoning_steps
+        global _reasoning_steps, _storage_lock
 
         trace_id = step.get("trace_id")
         step_number = step.get("step_number")
@@ -268,7 +305,13 @@ class CipherService:
             "raw_step": step,
         }
 
-        _reasoning_steps[composite_key] = reasoning_entry
+        with _storage_lock:
+            # Prevent silent overwrites - reasoning steps should be immutable
+            if composite_key in _reasoning_steps:
+                raise ValueError(
+                    f"Reasoning step {step_number} for trace {trace_id} already exists"
+                )
+            _reasoning_steps[composite_key] = reasoning_entry
 
         LOGGER.info(
             f"Stored reasoning step: trace={trace_id}, step={step_number} (id={step_id})"

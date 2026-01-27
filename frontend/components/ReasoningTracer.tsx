@@ -75,19 +75,23 @@ export default function ReasoningTracer({
   const [error, setError] = useState<string | null>(null);
   const [expandedSteps, setExpandedSteps] = useState<Set<string>>(new Set());
 
-  // Fetch trace data from backend
-  const fetchTrace = useCallback(async (id: string) => {
+  // Fetch trace data from backend with AbortController support
+  const fetchTrace = useCallback(async (id: string, signal?: AbortSignal) => {
     setLoading(true);
     setError(null);
     try {
       const apiBase = getApiBase();
-      const response = await fetch(`${apiBase}/a2a/reasoning/trace/${id}`);
+      const response = await fetch(`${apiBase}/a2a/reasoning/trace/${id}`, { signal });
       if (!response.ok) {
         throw new Error(`Failed to fetch trace: ${response.statusText}`);
       }
       const data: ReasoningTrace = await response.json();
       setTrace(data);
     } catch (err) {
+      // Ignore aborted fetches - component unmounted or traceId changed
+      if (err instanceof DOMException && err.name === 'AbortError') {
+        return;
+      }
       console.error('Error fetching reasoning trace:', err);
       setError(err instanceof Error ? err.message : 'Failed to load reasoning trace');
     } finally {
@@ -95,13 +99,15 @@ export default function ReasoningTracer({
     }
   }, []);
 
-  // Fetch trace when traceId changes
+  // Fetch trace when traceId changes, with cleanup to prevent race conditions
   useEffect(() => {
     if (!traceId) {
       setTrace(null);
       return;
     }
-    fetchTrace(traceId);
+    const controller = new AbortController();
+    fetchTrace(traceId, controller.signal);
+    return () => controller.abort();
   }, [traceId, fetchTrace]);
 
   // Toggle step expansion
