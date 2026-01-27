@@ -8,10 +8,12 @@ Usage:
 
 import argparse
 import json
+import re
 import subprocess
 import sys
 from pathlib import Path
 from typing import Dict, Any, Optional
+from urllib.parse import urlparse, urlunparse
 
 import yaml
 
@@ -44,6 +46,41 @@ def load_catalog(path: Path) -> dict:
         return yaml.safe_load(f)
 
 
+def derive_tools_url(sse_url: str, tool_name: str) -> str:
+    """Derive the tools endpoint URL from an SSE URL using proper URL parsing."""
+    parsed = urlparse(sse_url)
+    # Normalize path by stripping trailing slashes to avoid double slashes
+    path = parsed.path.rstrip("/")
+    if path.endswith("/sse"):
+        path = path[:-4]
+    elif path == "/sse" or path == "":
+        path = ""
+    new_path = f"{path}/tools/{tool_name}"
+    return urlunparse(parsed._replace(path=new_path))
+
+
+def expand_env_var(value: str) -> str:
+    """Expand environment variable references including default syntax.
+
+    Follows shell ${VAR:-default} semantics where empty string is treated as unset.
+    """
+    import os
+    dollar_brace = chr(36) + chr(123)
+    if not (value.startswith(dollar_brace) and value.endswith(chr(125))):
+        return value
+    inner = value[2:-1]
+    match = re.match(r'^([^:]+):-(.*)' + chr(36), inner)
+    if match:
+        # Per shell semantics: empty string is treated as unset, use default
+        val = os.environ.get(match.group(1))
+        return val if val else match.group(2)
+    var_name = inner.split(':-')[0]
+    default_val = inner.split(':-')[1] if ':-' in inner else ''
+    # Per shell semantics: empty string is treated as unset, use default
+    val = os.environ.get(var_name)
+    return val if val else default_val
+
+
 def call_sse_tool(
     url: str, tool_name: str, args: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
@@ -64,9 +101,8 @@ def call_sse_tool(
         }
 
     # SSE servers typically have a tools endpoint
-    # Convert SSE URL to tools endpoint
-    base_url = url.replace("/sse", "")
-    tools_url = f"{base_url}/tools/{tool_name}"
+    # Convert SSE URL to tools endpoint using proper URL parsing
+    tools_url = derive_tools_url(url, tool_name)
 
     try:
         with httpx.Client(timeout=30.0) as client:
@@ -127,12 +163,8 @@ def call_stdio_tool(
 
     full_env = os.environ.copy()
     for k, v in env.items():
-        # Expand environment variable references
-        if v.startswith("${") and v.endswith("}"):
-            var_name = v[2:-1].split(":-")[0]
-            full_env[k] = os.environ.get(var_name, "")
-        else:
-            full_env[k] = v
+        # Expand environment variable references including VAR:-default syntax
+        full_env[k] = expand_env_var(v)
 
     try:
         full_cmd = [command] + args

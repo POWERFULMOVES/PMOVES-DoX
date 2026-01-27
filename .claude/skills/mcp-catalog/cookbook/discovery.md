@@ -54,7 +54,7 @@ n8n-agent
 hostinger
   Transport: stdio
   Command:   docker exec -i pmz-hostinger hostinger-api-mcp
-  Env vars:  API_TOKEN
+  Env vars:  HOSTINGER_API_KEY
 ```
 
 ### 2. Check Server Health
