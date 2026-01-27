@@ -14,6 +14,7 @@ import sys
 import time
 from pathlib import Path
 from typing import Dict, Any
+from urllib.parse import urlparse, urlunparse
 
 import yaml
 
@@ -46,6 +47,18 @@ def load_catalog(path: Path) -> dict:
         return yaml.safe_load(f)
 
 
+def derive_health_url(sse_url: str) -> str:
+    """Derive the health endpoint URL from an SSE URL using proper URL parsing."""
+    parsed = urlparse(sse_url)
+    path = parsed.path
+    if path.endswith("/sse"):
+        path = path[:-4]
+    elif path == "/sse":
+        path = ""
+    new_path = f"{path}/health"
+    return urlunparse(parsed._replace(path=new_path))
+
+
 def check_sse_server(url: str, timeout: float = 5.0) -> Dict[str, Any]:
     """Check health of an SSE server via HTTP.
 
@@ -62,8 +75,8 @@ def check_sse_server(url: str, timeout: float = 5.0) -> Dict[str, Any]:
             "error": "httpx not installed (pip install httpx)",
         }
 
-    # Derive health endpoint from SSE URL
-    health_url = url.replace("/sse", "/health")
+    # Derive health endpoint from SSE URL using proper URL parsing
+    health_url = derive_health_url(url)
 
     start = time.time()
     try:
