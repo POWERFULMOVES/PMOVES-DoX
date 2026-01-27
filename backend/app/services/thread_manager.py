@@ -812,7 +812,7 @@ class ThreadManager:
                 result = await executor(agent_id, task)
             else:
                 # Run sync executor in thread pool
-                result = await asyncio.get_event_loop().run_in_executor(
+                result = await asyncio.get_running_loop().run_in_executor(
                     None, executor, agent_id, task
                 )
             return result

@@ -210,14 +210,14 @@ class CipherService:
         prefix = f"{workspace_id}:"
         items = []
 
+        # Collect ALL matching items first (don't limit yet)
         for composite_key, memory_entry in _team_memories.items():
             if composite_key.startswith(prefix):
                 items.append(memory_entry)
-                if len(items) >= limit:
-                    break
 
-        # Sort by created_at descending (most recent first)
+        # Sort by created_at descending (most recent first), THEN apply limit
         items.sort(key=lambda x: x.get("created_at", ""), reverse=True)
+        items = items[:limit]
 
         workspace_info = _workspaces.get(workspace_id, {})
 
@@ -228,7 +228,7 @@ class CipherService:
         return {
             "workspace_id": workspace_id,
             "workspace_metadata": workspace_info.get("metadata", {}),
-            "items": items[:limit],
+            "items": items,  # Already limited after sorting
             "count": len(items),
             "total_in_workspace": sum(
                 1 for k in _team_memories if k.startswith(prefix)
