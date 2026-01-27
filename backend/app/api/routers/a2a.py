@@ -560,3 +560,81 @@ async def geometry_analyze(request: GeometryAnalyzeRequest) -> GeometryAnalyzeRe
         message=f"Geometry analysis ({request.analysis_type}) is not yet implemented. "
         "This capability will enable semantic space analysis using manifold geometry.",
     )
+
+
+# =============================================================================
+# Task Execution Endpoint (for Agent Dispatcher)
+# =============================================================================
+
+
+class TaskExecuteRequest(BaseModel):
+    """Request model for task execution from agent dispatcher.
+
+    Attributes:
+        task_id: Unique identifier for this task.
+        description: Human-readable task description.
+        payload: Task-specific data and parameters.
+        metadata: Additional metadata (chain context, step info, etc.)
+    """
+
+    task_id: str = Field(..., description="Unique task identifier")
+    description: str = Field("", description="Task description")
+    payload: Dict[str, Any] = Field(default_factory=dict, description="Task payload")
+    metadata: Dict[str, Any] = Field(default_factory=dict, description="Task metadata")
+
+
+class TaskExecuteResponse(BaseModel):
+    """Response model for task execution."""
+
+    task_id: str
+    status: str = Field("completed", description="Execution status")
+    result: Dict[str, Any] = Field(default_factory=dict, description="Execution result")
+    error: Optional[str] = Field(None, description="Error message if failed")
+    execution_time_ms: Optional[int] = Field(None, description="Execution time in milliseconds")
+
+
+@router.post(
+    "/a2a/task/execute",
+    response_model=TaskExecuteResponse,
+    tags=["a2a", "task"],
+    summary="Execute a dispatched task",
+    description="Endpoint for agent dispatcher to execute tasks on this agent.",
+)
+async def execute_task(request: TaskExecuteRequest) -> TaskExecuteResponse:
+    """Execute a task dispatched by the agent dispatcher.
+
+    This endpoint receives tasks from the AgentDispatcher service and executes
+    them using the appropriate internal services based on the task payload.
+
+    Args:
+        request: TaskExecuteRequest with task details and payload.
+
+    Returns:
+        TaskExecuteResponse with execution status and results.
+
+    Note:
+        This is a stub implementation. Full implementation will route tasks
+        to appropriate internal services (search, analysis, extraction, etc.)
+        based on payload content and metadata.
+    """
+    import time
+    start_time = time.time()
+
+    # Stub implementation - echo back task info with mock result
+    # In production, this would route to internal services based on payload
+    result = {
+        "task_id": request.task_id,
+        "description": request.description,
+        "payload_keys": list(request.payload.keys()),
+        "metadata_keys": list(request.metadata.keys()),
+        "message": "Task received and acknowledged. Full execution pending implementation.",
+    }
+
+    execution_time_ms = int((time.time() - start_time) * 1000)
+
+    return TaskExecuteResponse(
+        task_id=request.task_id,
+        status="completed",
+        result=result,
+        execution_time_ms=execution_time_ms,
+    )

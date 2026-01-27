@@ -384,6 +384,17 @@ class ThreadManager:
                 error=f"Thread type mismatch: expected PARALLEL, got {context.config.thread_type}",
             )
 
+        # Validate tasks list is not empty
+        if not tasks:
+            self._update_status(
+                thread_id, ThreadStatus.FAILED, error="No tasks provided"
+            )
+            return ThreadResult(
+                thread_id=thread_id,
+                status=ThreadStatus.FAILED,
+                error="No tasks provided for parallel execution",
+            )
+
         self._update_status(thread_id, ThreadStatus.RUNNING)
         start_time = datetime.now(timezone.utc)
 
@@ -711,8 +722,12 @@ class ThreadManager:
             std_dev = variance ** 0.5
 
             # Agreement based on coefficient of variation
-            cv = std_dev / abs(avg_value) if avg_value != 0 else float("inf")
-            agreement_score = max(0.0, 1.0 - cv)
+            # Handle zero-average case: if all values are zero, that's perfect agreement
+            if avg_value == 0:
+                agreement_score = 1.0 if variance == 0 else 0.0
+            else:
+                cv = std_dev / abs(avg_value)
+                agreement_score = max(0.0, 1.0 - cv)
 
             return ConsensusResult(
                 consensus_reached=agreement_score >= threshold,
