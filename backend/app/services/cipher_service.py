@@ -22,20 +22,48 @@ class CipherService:
         return get_db_interface()
 
     @staticmethod
-    def add_memory(category: str, content: Dict, context: Optional[Dict] = None) -> str:
-        """Stores a generic memory."""
+    def add_memory(
+        category: str,
+        content: Dict,
+        context: Optional[Dict] = None,
+        user_id: Optional[str] = None
+    ) -> str:
+        """Stores a generic memory.
+
+        Args:
+            category: Memory category (fact, preference, skill_learned, workflow, other).
+            content: The memory content as a dictionary.
+            context: Optional context metadata.
+            user_id: Optional user ID for RLS scoping. Required for proper user isolation.
+
+        Returns:
+            The memory ID if successful, empty string otherwise.
+        """
         db = CipherService._get_db()
         if hasattr(db, "add_memory"):
-            return db.add_memory(category, content, context)
+            return db.add_memory(category, content, context, user_id=user_id)
         LOGGER.warning("add_memory not implemented in current DB adapter")
         return ""
 
     @staticmethod
-    def search_memory(category: Optional[str] = None, q: Optional[str] = None) -> List[Dict]:
-        """Searches memory."""
+    def search_memory(
+        category: Optional[str] = None,
+        q: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> List[Dict]:
+        """Searches memory.
+
+        Args:
+            category: Optional category filter.
+            q: Optional text search query.
+            user_id: Optional user ID for RLS scoping. Required for proper user isolation.
+
+        Returns:
+            List of matching memory records.
+        """
         db = CipherService._get_db()
         if hasattr(db, "search_memory"):
-            return db.search_memory(category=category, q=q)
+            return db.search_memory(category=category, q=q, user_id=user_id)
         return []
 
     @staticmethod
@@ -49,8 +77,8 @@ class CipherService:
     # --- Legacy/Specific Wrappers ---
 
     @staticmethod
-    def add_fact(content: Dict, source: str = "user_input") -> str:
-        return CipherService.add_memory("fact", content, {"source": source})
+    def add_fact(content: Dict, source: str = "user_input", user_id: Optional[str] = None) -> str:
+        return CipherService.add_memory("fact", content, {"source": source}, user_id=user_id)
 
     @staticmethod
     def add_preference(key: str, value: Any, user_id: str) -> None:

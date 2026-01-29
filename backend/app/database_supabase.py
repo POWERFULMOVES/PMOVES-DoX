@@ -583,16 +583,25 @@ class SupabaseDatabase:
         }
 
     # ----------------------------------------------------------------- Cipher / Memory
-    def add_memory(self, category: str, content: Dict, context: Optional[Dict] = None) -> str:
+    def add_memory(
+        self,
+        category: str,
+        content: Dict,
+        context: Optional[Dict] = None,
+        user_id: Optional[str] = None
+    ) -> str:
         payload = {
             "category": category,
             "content": content,
             "context": context or {},
             "created_at": self._now_iso(),
         }
+        # Include user_id for RLS scoping if provided
+        if user_id:
+            payload["user_id"] = user_id
         # If accessing the native supabase client returning the inserted row:
         # data = self._table("cipher_memory").insert(payload).execute()
-        # But we use the helper _run which returns a list of rows if configured correctly, 
+        # But we use the helper _run which returns a list of rows if configured correctly,
         # or we might need to fetch the ID depending on the client config.
         # Assuming defaults that return inserted data:
         rows = self._run(self._table("cipher_memory").insert(payload).select(), operation="add_memory")
@@ -601,19 +610,23 @@ class SupabaseDatabase:
         return ""
 
     def search_memory(
-        self, 
-        category: Optional[str] = None, 
-        limit: int = 10, 
-        q: Optional[str] = None
+        self,
+        category: Optional[str] = None,
+        limit: int = 10,
+        q: Optional[str] = None,
+        user_id: Optional[str] = None
     ) -> List[Dict]:
         query = self._table("cipher_memory").select("*")
         if category:
             query = query.eq("category", category)
-        
+        # Filter by user_id for RLS scoping if provided
+        if user_id:
+            query = query.eq("user_id", user_id)
+
         # Simple text search on the JSONB content if 'q' is provided is hard without pg_trgm validation
         # For now, we return recent items. Real semantic search requires the vector extension.
         query = query.order("created_at", desc=True).limit(limit)
-        
+
         return self._run(query, operation="search_memory")
 
     def get_user_prefs(self, user_id: str) -> Dict:
@@ -668,3 +681,24 @@ class SupabaseDatabase:
         if enabled_only:
             query = query.eq("enabled", True)
         return self._run(query, operation="list_skills")
+
+    def update_skill(self, skill_id: str, enabled: bool) -> Optional[Dict]:
+        """Update a skill's enabled status.
+
+        Args:
+            skill_id: The skill ID to update.
+            enabled: The new enabled status.
+
+        Returns:
+            The updated skill dict if found, None otherwise.
+        """
+        rows = self._run(
+            self._table("skills_registry")
+            .update({"enabled": enabled})
+            .eq("id", skill_id)
+            .select(),
+            operation="update_skill",
+        )
+        if rows:
+            return rows[0]
+        return None
