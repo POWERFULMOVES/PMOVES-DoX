@@ -122,7 +122,7 @@ async def config():
         "deployment": {
             "mode": "docked" if is_docked_mode() else "standalone",
             "nats_url": os.getenv("NATS_URL", "nats://nats:4222"),
-            "tensorzero_url": os.getenv("TENSORZERO_BASE_URL", "http://tensorzero:3000"),
+            "tensorzero_url": os.getenv("TENSORZERO_BASE_URL", "http://tensorzero-gateway:3030"),
         },
     }
 
