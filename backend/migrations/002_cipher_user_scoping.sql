@@ -28,6 +28,14 @@ create policy "cipher_memory_service_role_policy" on cipher_memory
     using (true)
     with check (true);
 
--- Note: Existing records without user_id will not be accessible via the user policy
--- You may want to run a data migration to assign user_ids to existing records
--- or create an additional policy for anonymous/unassigned records if needed.
+-- Step 6: Create fallback policy for legacy records without user_id
+-- This allows authenticated users to read (but not modify) legacy records
+create policy "cipher_memory_legacy_readonly" on cipher_memory
+    for select
+    to authenticated
+    using (user_id is null);
+
+-- Note: Legacy records (user_id IS NULL) are read-only for all authenticated users.
+-- New records will have user_id set and will be scoped to that user.
+-- Consider running a data migration to assign user_ids to existing records
+-- if you want to transfer ownership to specific users.

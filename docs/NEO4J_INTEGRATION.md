@@ -25,10 +25,10 @@ PMOVES-DoX uses Neo4j as its primary knowledge graph database for storing docume
 
 ### Port Configuration
 
-| Service | Local Port | Parent Port | Protocol |
-|---------|------------|-------------|----------|
-| Neo4j HTTP | 17474 | 7474 | HTTP |
-| Neo4j Bolt | 17687 | 7687 | Bolt |
+| Service    | Local Port | Parent Port | Protocol |
+| ---------- | ---------- | ----------- | -------- |
+| Neo4j HTTP | 17474      | 7474        | HTTP     |
+| Neo4j Bolt | 17687      | 7687        | Bolt     |
 
 The local ports use a 10000 offset to avoid conflicts when running alongside the parent PMOVES.AI cluster.
 
@@ -103,7 +103,7 @@ CREATE CONSTRAINT document_unique_id IF NOT EXISTS FOR (d:Document) REQUIRE d.id
 
 ### Architecture Overview
 
-```
+```text
                                   PMOVES.AI Parent Cluster
                                  ┌─────────────────────────┐
                                  │   pmoves-neo4j-1        │
@@ -204,16 +204,16 @@ Represents named entities extracted from documents.
 
 **Supported Entity Types (spaCy NER):**
 
-| Type | Description | Example |
-|------|-------------|---------|
-| `PERSON` | People names | "John Smith" |
-| `ORG` | Organizations | "Apple Inc." |
-| `GPE` | Geopolitical entities | "United States" |
-| `LOC` | Locations | "Mount Everest" |
-| `DATE` | Dates | "January 2024" |
-| `MONEY` | Monetary values | "$1 million" |
-| `PRODUCT` | Products | "iPhone 15" |
-| `EVENT` | Events | "World Cup 2024" |
+| Type      | Description           | Example          |
+| --------- | --------------------- | ---------------- |
+| `PERSON`  | People names          | "John Smith"     |
+| `ORG`     | Organizations         | "Apple Inc."     |
+| `GPE`     | Geopolitical entities | "United States"  |
+| `LOC`     | Locations             | "Mount Everest"  |
+| `DATE`    | Dates                 | "January 2024"   |
+| `MONEY`   | Monetary values       | "$1 million"     |
+| `PRODUCT` | Products              | "iPhone 15"      |
+| `EVENT`   | Events                | "World Cup 2024" |
 
 ### Relationship Types
 
@@ -317,12 +317,12 @@ NEO4J_PARENT_PASSWORD=  # Set for docked mode
 
 ### Mode Selection
 
-| Configuration | Result |
-|---------------|--------|
-| `NEO4J_PARENT_PASSWORD` empty | Local-only mode |
-| `NEO4J_PARENT_PASSWORD` set | Dual-write mode |
-| Parent unreachable | Automatic fallback to local |
-| `NEO4J_ENABLED=false` | Neo4j disabled entirely |
+| Configuration                  | Result                       |
+| ------------------------------ | ---------------------------- |
+| `NEO4J_PARENT_PASSWORD` empty  | Local-only mode              |
+| `NEO4J_PARENT_PASSWORD` set    | Dual-write mode              |
+| Parent unreachable             | Automatic fallback to local  |
+| `NEO4J_ENABLED=false`          | Neo4j disabled entirely      |
 
 ### Docker Compose Environment
 
@@ -588,7 +588,7 @@ asyncio.run(test())
 ### Memory Issues with Large Graphs
 
 **Symptoms:**
-- Out of memory errors
+- Out-of-memory errors
 - Slow queries on large datasets
 
 **Solutions:**

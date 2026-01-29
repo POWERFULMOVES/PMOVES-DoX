@@ -51,8 +51,12 @@ def add_memory(
     - user_id field in request body
 
     Header takes precedence over body if both are provided.
+
+    TODO: In production, validate X-User-ID against authenticated JWT identity
+    to prevent spoofing. Currently trusts client-provided values.
     """
     # Determine user_id: header takes precedence over body
+    # TODO: Validate against authenticated context (JWT/session) to prevent spoofing
     user_id = x_user_id or req.user_id
 
     db = get_db_interface()
@@ -92,8 +96,8 @@ async def toggle_skill(skill_id: str, enabled: bool, db=Depends(get_db_interface
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Failed to update skill {skill_id}: {e}")
-        raise HTTPException(status_code=500, detail=f"Failed to update skill: {str(e)}")
+        logger.exception("Failed to update skill %s", skill_id)
+        raise HTTPException(status_code=500, detail="Failed to update skill") from e
 
 @router.get("/a2ui/demo")
 async def get_a2ui_demo():

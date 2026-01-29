@@ -24,7 +24,7 @@ PMOVES-DoX supports two database backends:
 
 ### Backend Selection
 
-```
+```text
 ┌─────────────────────────────────────────────────────────────────┐
 │                     Database Factory                             │
 │                                                                  │
@@ -89,11 +89,12 @@ SUPABASE_JWT_SECRET=your-generated-secret-here
 
 # Service role key (signed with JWT secret, role=service_role)
 # This key has admin privileges, bypasses RLS
-SUPABASE_SERVICE_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+# IMPORTANT: Never commit actual keys to version control
+SUPABASE_SERVICE_KEY=<your-service-role-jwt>
 
 # Anonymous key (signed with JWT secret, role=anon)
 # This key respects RLS policies
-SUPABASE_ANON_KEY=eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+SUPABASE_ANON_KEY=<your-anon-jwt>
 ```
 
 ### JWT Payload Structure
@@ -153,7 +154,7 @@ supabase-rest:
 
 ## RLS Policies
 
-Row Level Security (RLS) ensures data isolation between users and enforces access controls.
+Row-Level Security (RLS) ensures data isolation between users and enforces access controls.
 
 ### Enable RLS on Tables
 
@@ -382,6 +383,7 @@ WRITE_METHODS = {
     "add_memory",        # Cipher
     "set_user_pref",     # Cipher
     "register_skill",    # Cipher
+    "update_skill",      # Cipher
 }
 ```
 

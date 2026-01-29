@@ -613,7 +613,7 @@ class SupabaseDatabase:
         self,
         category: Optional[str] = None,
         limit: int = 10,
-        q: Optional[str] = None,
+        q: Optional[str] = None,  # TODO: Text search not yet implemented for Supabase
         user_id: Optional[str] = None
     ) -> List[Dict]:
         query = self._table("cipher_memory").select("*")
@@ -623,7 +623,8 @@ class SupabaseDatabase:
         if user_id:
             query = query.eq("user_id", user_id)
 
-        # Simple text search on the JSONB content if 'q' is provided is hard without pg_trgm validation
+        # NOTE: Text search parameter 'q' is currently ignored.
+        # Full-text search on JSONB requires pg_trgm or dedicated search index.
         # For now, we return recent items. Real semantic search requires the vector extension.
         query = query.order("created_at", desc=True).limit(limit)
 

@@ -357,7 +357,7 @@ services:
     command: ["/usr/local/bin/fastmcp", "run", "src/main.py:app", "--transport", "streamable-http", "--port", "8000", "--host", "0.0.0.0"]
     healthcheck:
       # FastMCP streamable-http - check MCP endpoint with required headers
-      test: ["CMD-SHELL", "curl -sf -X POST -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' http://localhost:8000/mcp -d '{}' || exit 0"]
+      test: ["CMD-SHELL", "curl -sf -X POST -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' http://localhost:8000/mcp -d '{}'"]
       interval: 30s
       timeout: 10s
       retries: 3

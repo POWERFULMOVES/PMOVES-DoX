@@ -53,4 +53,4 @@ Common issues and solutions are documented in:
 
 ---
 
-*Documentation last updated: January 2026*
+Documentation last updated: January 2026
