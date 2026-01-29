@@ -259,6 +259,19 @@ async def _startup_watch():
     t = threading.Thread(target=_watch_loop, daemon=True)
     t.start()
 
+    # Check integration health at startup
+    try:
+        from app.utils.integration_health import IntegrationHealth
+        health_check = IntegrationHealth()
+        integrations = await health_check.get_status()
+
+        print("[STARTUP] Integration Status:")
+        for name, status in integrations.items():
+            health_str = "✓" if status["healthy"] else "✗"
+            print(f"  {health_str} {name}: {status['url']}")
+    except Exception as e:
+        print(f"[STARTUP] Integration health check failed: {e}")
+
     # Rebuild search index in background with timeout to prevent startup hang
     # Note: Using ThreadPoolExecutor instead of signal.alarm() because signals
     # only work in the main thread, not background threads
@@ -351,9 +364,19 @@ async def list_tasks():
 @app.get("/healthz")
 async def health():
     """Health check endpoint for PMOVES.AI standard compliance."""
+    from app.utils.integration_health import IntegrationHealth
+
+    health_check = IntegrationHealth()
+    integrations = await health_check.get_status()
+
+    all_healthy = all(integration["healthy"] for integration in integrations.values())
+    status = "healthy" if all_healthy else "degraded"
+
     return {
-        "status": "ok",
+        "status": status,
+        "version": os.getenv("APP_VERSION", "1.0.0"),
         "uptime_seconds": int(time.time() - START_TIME),
+        "integrations": integrations,
     }
 
 
