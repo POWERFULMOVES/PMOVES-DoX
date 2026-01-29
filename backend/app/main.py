@@ -348,12 +348,20 @@ async def list_tasks():
     }
 
 
-@app.get("/health")
+@app.get("/healthz")
 async def health():
+    """Health check endpoint for PMOVES.AI standard compliance."""
     return {
         "status": "ok",
         "uptime_seconds": int(time.time() - START_TIME),
     }
+
+
+@app.get("/health")
+async def health_legacy():
+    """Legacy health endpoint - redirects to /healthz for backwards compatibility."""
+    from fastapi.responses import RedirectResponse
+    return RedirectResponse(url="/healthz", status_code=301)
 
 
 @app.get("/artifacts")
