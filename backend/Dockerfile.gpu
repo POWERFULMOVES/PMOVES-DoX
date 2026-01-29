@@ -32,6 +32,12 @@ COPY app ./app
 # Ensure runtime dirs exist (also mounted as volumes in compose)
 RUN mkdir -p /app/uploads /app/artifacts
 
+# Create non-root user for Hardened compliance
+RUN useradd -m -u 1001 -s /bin/bash pmoves && \
+    chown -R pmoves:pmoves /app
+
+USER pmoves
+
 EXPOSE 8000
 
 CMD ["python", "-m", "app.main"]
