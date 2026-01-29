@@ -41,8 +41,8 @@ def main():
         except subprocess.CalledProcessError:
             time.sleep(3)
             run(["docker", "compose", "-f", compose_file] + compose_flags + ["up", "-d", "backend"], cwd=repo_root)
-        if not wait_health(f"{api_base}/health", tries=45, delay=2):
-            print("[FAIL] backend /health did not become ready")
+        if not wait_health(f"{api_base}/healthz", tries=45, delay=2):
+            print("[FAIL] backend /healthz did not become ready")
             sys.exit(1)
         # Run the existing smoke tests
         env = os.environ.copy()

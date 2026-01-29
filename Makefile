@@ -140,11 +140,11 @@ test-standalone: ensure-standalone-networks
 	@sleep 15
 	@echo ""
 	@echo "Testing backend health..."
-	@curl -sf http://localhost:8484/health > /dev/null || { \
+	@curl -sf http://localhost:8484/healthz > /dev/null || { \
 		echo "❌ Backend health check failed"; \
 		exit 1; \
 	}
-	@echo "✅ Backend: http://localhost:8484/health"
+	@echo "✅ Backend: http://localhost:8484/healthz"
 	@echo ""
 	@echo "Testing frontend..."
 	@curl -sf http://localhost:3001 > /dev/null || { \
@@ -183,11 +183,11 @@ test-docked:
 	@sleep 15
 	@echo ""
 	@echo "Testing backend health..."
-	@curl -sf http://localhost:8484/health > /dev/null || { \
+	@curl -sf http://localhost:8484/healthz > /dev/null || { \
 		echo "❌ Backend health check failed"; \
 		exit 1; \
 	}
-	@echo "✅ Backend: http://localhost:8484/health"
+	@echo "✅ Backend: http://localhost:8484/healthz"
 	@echo ""
 	@echo "Testing DoX Agent Zero MCP endpoint..."
 	@curl -sf http://localhost:50051/health > /dev/null || { \
