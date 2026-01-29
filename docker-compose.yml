@@ -12,7 +12,7 @@ services:
       - ./backend/data:/app/data
       - hf-cache:/root/.cache/huggingface
     env_file:
-      - path: ../pmoves/env.shared
+      - path: env.shared
         required: false
       - .env.local
     environment:
@@ -90,7 +90,7 @@ services:
         NEXT_PUBLIC_NATS_WS_URL: ws://localhost:9223
     container_name: pmoves-dox-frontend
     env_file:
-      - path: ../pmoves/env.shared
+      - path: env.shared
         required: false
       - .env.local
     environment:
@@ -133,7 +133,7 @@ services:
     image: supabase/postgres:15.1.0.117
     container_name: supabase-db
     env_file:
-      - path: ../pmoves/env.shared
+      - path: env.shared
         required: false
       - .env.local
     environment:
@@ -153,7 +153,7 @@ services:
     image: postgrest/postgrest:v11.1.0
     container_name: supabase-rest
     env_file:
-      - path: ../pmoves/env.shared
+      - path: env.shared
         required: false
       - .env.local
     environment:
@@ -370,7 +370,7 @@ services:
       context: ./external/PMOVES-BotZ-gateway/sample-servers/mcp-proxy
     container_name: pmoves-botz-postman
     env_file:
-      - path: ../pmoves/env.shared
+      - path: env.shared
         required: false
       - .env.local
     environment:
@@ -412,7 +412,7 @@ services:
     volumes:
       - ./tensorzero.toml:/app/config/tensorzero.toml
     env_file:
-      - path: ../pmoves/env.shared
+      - path: env.shared
         required: false
       - .env.local
     environment:
