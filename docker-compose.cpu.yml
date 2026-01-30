@@ -18,6 +18,7 @@ services:
       - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-false}
     ports:
       - "8484:8484"
+      - "8000:8484"  # Map port 8000 to 8484 for CI smoke test compatibility
     volumes:
       - ./backend/uploads:/app/uploads
       - ./backend/artifacts:/app/artifacts
