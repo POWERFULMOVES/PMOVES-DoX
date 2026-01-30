@@ -5,6 +5,35 @@ import numpy as np
 import faiss  # type: ignore
 from sentence_transformers import SentenceTransformer
 
+# Base directory under which all ingestion paths must reside.
+# Defaults to the current working directory but can be overridden
+# via the INGEST_ROOT environment variable.
+INGEST_ROOT = os.path.abspath(os.getenv("INGEST_ROOT", "."))
+
+
+def _resolve_ingest_path(user_path: str) -> str:
+    """
+    Resolve a user-supplied path to a safe absolute path under INGEST_ROOT.
+
+    Raises a ValueError if the resolved path would escape INGEST_ROOT.
+    """
+    if not user_path:
+        raise ValueError("Path must not be empty.")
+
+    # Treat the user path as relative to INGEST_ROOT to avoid trusting
+    # arbitrary absolute paths provided by the client.
+    combined = os.path.join(INGEST_ROOT, user_path)
+    resolved = os.path.abspath(combined)
+
+    # Ensure the resolved path is within INGEST_ROOT.
+    root = os.path.commonpath([INGEST_ROOT])
+    target = os.path.commonpath([INGEST_ROOT, resolved])
+    if root != target:
+        raise ValueError("Requested path is outside of the allowed ingestion root.")
+
+    return resolved
+
+
 class RAGIndex:
     def __init__(self, dim: int = 384, model_name: str = "sentence-transformers/all-MiniLM-L6-v2"):
         self.model = SentenceTransformer(model_name)
@@ -61,7 +90,10 @@ GLOBAL_INDEX = None
 
 def ingest_path(path: str):
     global GLOBAL_INDEX
-    chunks = load_folder(path)
+    # Normalize and validate the user-supplied path to ensure it stays
+    # within the configured INGEST_ROOT directory.
+    safe_path = _resolve_ingest_path(path)
+    chunks = load_folder(safe_path)
     if not chunks:
         GLOBAL_INDEX = None
         return 0
