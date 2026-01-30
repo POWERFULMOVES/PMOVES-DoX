@@ -246,8 +246,9 @@ class Database:
             created_at=summary.get("created_at")
             or datetime.utcnow().isoformat(timespec="seconds") + "Z",
         )
+        result_id = payload.id  # Capture the pre-generated ID
         with Session(self.engine) as s:
-            existing = s.get(SummaryRow, payload.id)
+            existing = s.get(SummaryRow, result_id)
             if existing:
                 existing.scope = payload.scope
                 existing.scope_key = payload.scope_key
@@ -261,7 +262,7 @@ class Database:
             else:
                 s.add(payload)
             s.commit()
-        return payload.id
+        return result_id
 
     def get_summary(self, scope_key: str, style: str) -> Optional[Dict]:
         with Session(self.engine) as s:
