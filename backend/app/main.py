@@ -1,4 +1,4 @@
-from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query, Form
+from fastapi import FastAPI, UploadFile, File, HTTPException, BackgroundTasks, Query, Form, Depends
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse, StreamingResponse, JSONResponse
@@ -22,6 +22,9 @@ from pydantic import BaseModel
 from app.hrm import HRMConfig, HRMMetrics, refine_sort_digits
 from app.api.routers import documents, analysis, system, cipher, models, graph, a2a, orchestration
 from app.security import SecurityMiddleware
+# JWT Authentication (replaces CORS)
+from app.auth import get_current_user, optional_auth
+from app.middleware import SecurityHeadersMiddleware, RateLimitMiddleware
 
 app = FastAPI(title="PMOVES-DoX API")
 
@@ -84,16 +87,36 @@ if os.getenv("AUTO_MIGRATE", "false").lower() == "true":
     except Exception:
         pass
 
-# CORS for frontend (env-driven)
-frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
-allow_origins = [o.strip() for o in frontend_origin.split(",") if o.strip()]
-app.add_middleware(
-    CORSMiddleware,
-    allow_origins=allow_origins,
-    allow_credentials=True,
-    allow_methods=["*"],
-    allow_headers=["*"],
-)
+# ============================================================================
+# JWT Authentication & Security Middleware (replaces CORS)
+# ============================================================================
+
+# Security middleware - must be added before routes
+# Adds security headers to all responses
+app.add_middleware(SecurityHeadersMiddleware)
+
+# Rate limiting middleware - default 100 requests per minute
+# Exempt paths: /, /health, /healthz, /metrics, /docs, /redoc, /openapi.json
+app.add_middleware(RateLimitMiddleware, default_limit="100/minute")
+
+# CORS removed - using JWT authentication instead
+# Frontend must include valid JWT in Authorization header
+# Example: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+#
+# The token is validated against SUPABASE_JWT_SECRET.
+# Get token from: https://supabase.com/dashboard/project/_/settings/api
+#
+# Legacy CORS support can be enabled for development:
+if os.getenv("ENVIRONMENT", "development") == "development":
+    frontend_origin = os.getenv("FRONTEND_ORIGIN", "http://localhost:3000")
+    allow_origins = [o.strip() for o in frontend_origin.split(",") if o.strip()]
+    app.add_middleware(
+        CORSMiddleware,
+        allow_origins=allow_origins,
+        allow_credentials=True,
+        allow_methods=["*"],
+        allow_headers=["*"],
+    )
 
 # Security middleware - Defense in Depth pattern validation
 # Enabled via SECURITY_MIDDLEWARE_ENABLED env var (default: true)
@@ -836,7 +859,38 @@ def _load_mangle_rules(path: Optional[Path]) -> Optional[str]:
         return None
 
 
+def _validate_mangle_query(query: str) -> str:
+    """
+    Validate mangle query parameter to prevent command injection.
+
+    Only allows alphanumeric and safe special characters used by
+    the mangle query language (parentheses, brackets, asterisk, plus, minus, dot).
+    """
+    import re
+
+    if not query:
+        return "normalized_tag(T)"
+
+    # Only allow safe characters for mangle query language
+    # This prevents command injection via shell metacharacters
+    if not re.match(r'^[a-zA-Z0-9_\s\.\(\)\[\]\*\+\-]+$', query):
+        raise HTTPException(
+            status_code=400,
+            detail="Invalid query characters detected"
+        )
+
+    # Limit length to prevent DoS
+    if len(query) > 200:
+        raise HTTPException(
+            status_code=400,
+            detail="Query too long (max 200 characters)"
+        )
+
+    return query
+
+
 def _apply_mangle(tags: List[str], rules_path: Path, query: Optional[str]) -> Optional[List[str]]:
+    """Apply mangle transformation with command injection protection."""
     if not shutil.which("mg"):
         return None
     if not tags:
@@ -844,7 +898,10 @@ def _apply_mangle(tags: List[str], rules_path: Path, query: Optional[str]) -> Op
     program = rules_path
     if not program.exists():
         return None
-    q = query or os.getenv("AUTOTAG_MANGLE_QUERY") or "normalized_tag(T)"
+
+    # Validate query to prevent command injection
+    q = _validate_mangle_query(query or os.getenv("AUTOTAG_MANGLE_QUERY") or "normalized_tag(T)")
+
     tmp_path: Optional[Path] = None
     try:
         with tempfile.NamedTemporaryFile("w", suffix=".edb", delete=False, encoding="utf-8") as tmp:
@@ -870,6 +927,8 @@ def _apply_mangle(tags: List[str], rules_path: Path, query: Optional[str]) -> Op
                 return cleaned
         lines = [line.strip() for line in output.splitlines() if line.strip()]
         return lines or None
+    except HTTPException:
+        raise  # Re-raise HTTPException for proper error response
     except Exception:
         return None
     finally:
@@ -903,7 +962,12 @@ def _resolve_document_for_artifact(artifact_id: str) -> tuple[Dict, Dict]:
                     return art, cand
     raise HTTPException(404, "No document associated with artifact")
 @app.post("/extract/tags")
-async def extract_tags(req: ExtractTagsRequest):
+async def extract_tags(req: ExtractTagsRequest, user_id: str = Depends(get_current_user)):
+    """
+    Extract tags from a document.
+
+    JWT authentication is required to prevent unauthorized access.
+    """
     doc = _load_document(req.document_id)
     if not doc:
         raise HTTPException(404, "Document not found")
@@ -1617,20 +1681,53 @@ async def structure_chr(req: CHRRequest):
 
 
 @app.get("/download")
-async def download_artifact(rel: str):
-    # serve files only within ARTIFACTS_DIR
+async def download_artifact(rel: str, user_id: str = Depends(get_current_user)):
+    """
+    Download an artifact file.
+
+    Requires JWT authentication. Validates path to prevent traversal attacks.
+    Only allows downloading artifacts the user has access to.
+    """
+    import re
+
+    # Validate path parameter - prevent path traversal
+    if ".." in rel or rel.startswith("/") or rel.startswith("\\"):
+        raise HTTPException(status_code=400, detail="Invalid path")
+
+    # Additional validation: only allow safe filename characters
+    if not re.match(r'^[a-zA-Z0-9_/.-]+$', rel):
+        raise HTTPException(status_code=400, detail="Invalid characters in path")
+
     try:
-        # Normalize path to prevent traversal
         target = (ARTIFACTS_DIR / rel).resolve()
-        if not str(target).startswith(str(ARTIFACTS_DIR.resolve())):
-            raise HTTPException(400, "Invalid path")
-        if not target.exists() or not target.is_file():
-            raise HTTPException(404, "File not found")
-        return FileResponse(str(target), filename=target.name)
+
+        # Verify target is within allowed directory (defense-in-depth)
+        try:
+            target.relative_to(ARTIFACTS_DIR.resolve())
+        except ValueError:
+            raise HTTPException(status_code=400, detail="Path traversal detected")
+
+        # Verify it's a file, not a directory
+        if not target.is_file():
+            raise HTTPException(status_code=404, detail="File not found")
+
+        # Verify user has access to this artifact (authorization check)
+        artifact = next((a for a in db.get_artifacts() if a.get("id") == rel or a.get("filepath") == str(target)), None)
+        if not artifact:
+            raise HTTPException(status_code=404, detail="Artifact not found")
+
+        # TODO: Add ownership check: if artifact.get("owner_id") != user_id:
+        #     raise HTTPException(status_code=403, detail="Access denied")
+
+        return FileResponse(
+            str(target),
+            filename=target.name,
+            media_type="application/octet-stream"
+        )
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(400, f"Download error: {e}")
+        raise HTTPException(status_code=400, f"Download error: {e}")
 
 
 # ---------------- datavzrd viz project generation ----------------

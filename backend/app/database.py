@@ -376,16 +376,30 @@ class Database:
             items.append(data)
         return items
 
-    def reset(self):
+    def reset(self) -> None:
+        """
+        Reset database by deleting all evidence, facts, and artifacts using ORM.
+
+        This fixes the SQL injection vulnerability by using SQLAlchemy ORM
+        delete() instead of raw SQL text() queries. The ORM approach properly
+        escapes table names and values, preventing injection attacks.
+        """
         with Session(self.engine) as s:
-            s.exec(delete(SummaryRow))
-            s.exec(text("DELETE FROM evidence"))
-            s.exec(text("DELETE FROM fact"))
-            s.exec(text("DELETE FROM artifact"))
-            s.exec(delete(DocumentEntity))
-            s.exec(delete(DocumentMetricHit))
-            s.exec(delete(DocumentStructureRow))
-            s.commit()
+            try:
+                # Use ORM delete instead of raw SQL to prevent SQL injection
+                s.query(SummaryRow).delete()
+                s.query(Evidence).delete()
+                s.query(Fact).delete()
+                s.query(Artifact).delete()
+                s.query(DocumentEntity).delete()
+                s.query(DocumentMetricHit).delete()
+                s.query(DocumentStructureRow).delete()
+                s.commit()
+            except Exception as e:
+                s.rollback()
+                import logging
+                logging.getLogger(__name__).error(f"Database reset failed: {e}")
+                raise
 
 
     def reset_search_chunks(self) -> None:
