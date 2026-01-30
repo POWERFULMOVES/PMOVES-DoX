@@ -387,20 +387,31 @@ async def list_tasks():
 @app.get("/healthz")
 async def health():
     """Health check endpoint for PMOVES.AI standard compliance."""
-    from app.utils.integration_health import IntegrationHealth
+    try:
+        from app.utils.integration_health import IntegrationHealth
 
-    health_check = IntegrationHealth()
-    integrations = await health_check.get_status()
+        health_check = IntegrationHealth()
+        integrations = await health_check.get_status()
 
-    all_healthy = all(integration["healthy"] for integration in integrations.values())
-    status = "healthy" if all_healthy else "degraded"
+        all_healthy = all(integration["healthy"] for integration in integrations.values())
+        status = "healthy" if all_healthy else "degraded"
 
-    return {
-        "status": status,
-        "version": os.getenv("APP_VERSION", "1.0.0"),
-        "uptime_seconds": int(time.time() - START_TIME),
-        "integrations": integrations,
-    }
+        return {
+            "status": status,
+            "version": os.getenv("APP_VERSION", "1.0.0"),
+            "uptime_seconds": int(time.time() - START_TIME),
+            "integrations": integrations,
+        }
+    except Exception as e:
+        # Return degraded status if health check fails
+        logging.getLogger(__name__).warning(f"Health check failed: {e}")
+        return {
+            "status": "degraded",
+            "version": os.getenv("APP_VERSION", "1.0.0"),
+            "uptime_seconds": int(time.time() - START_TIME),
+            "error": str(e),
+            "integrations": {},
+        }
 
 
 @app.get("/health")
