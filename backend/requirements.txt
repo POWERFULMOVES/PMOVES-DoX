@@ -27,7 +27,8 @@ supabase>=2.4.0,<3.0.0
 # Knowledge Graph
 neo4j>=5.0.0
 # Colab/Local AI Support
-torch>=2.2.0
+torch>=2.3.0
+torchvision>=0.18.0
 accelerate>=0.27.0
 bitsandbytes>=0.43.0; sys_platform != "win32" 
 # Dev-only dependencies (moved to avoid nbconvert vulnerability in prod image)

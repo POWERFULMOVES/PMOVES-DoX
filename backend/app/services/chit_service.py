@@ -43,18 +43,13 @@ def _convert_numpy_types(obj: Any) -> Any:
         return [_convert_numpy_types(item) for item in obj]
     return obj
 
-# Check for SentenceTransformers (loaded lazily)
-HAS_SENTENCE_TRANSFORMERS = False
-try:
-    from sentence_transformers import SentenceTransformer
-    HAS_SENTENCE_TRANSFORMERS = True
-except ImportError:
-    pass
-
 logger = logging.getLogger(__name__)
 
 # Default model for local embeddings
 DEFAULT_EMBEDDING_MODEL = "all-MiniLM-L6-v2"
+
+# Check for SentenceTransformers availability (deferred to avoid opencv GL dependency)
+# This is checked lazily when _get_embedding_model() is called
 
 
 class ChitService:
@@ -96,8 +91,10 @@ class ChitService:
             logger.debug("Local embeddings disabled (set CHIT_USE_LOCAL_EMBEDDINGS=true to enable)")
             return None
 
-        if not HAS_SENTENCE_TRANSFORMERS:
-            logger.warning("sentence-transformers not installed, cannot use local embeddings")
+        try:
+            from sentence_transformers import SentenceTransformer
+        except ImportError as e:
+            logger.warning(f"sentence-transformers not available: {e}")
             return None
 
         try:
