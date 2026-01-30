@@ -32,7 +32,7 @@ anon_payload = {
 svc = jwt.encode(service_role_payload, secret, algorithm="HS256")
 anon = jwt.encode(anon_payload, secret, algorithm="HS256")
 
-print(f"PGRST_JWT_SECRET={secret}")
+print(f"PGRST_JWT_SECRET=<redacted> (length={len(secret)})")
 print(f"SERVICE_KEY={svc}")
 print(f"ANON_KEY={anon}")
 
