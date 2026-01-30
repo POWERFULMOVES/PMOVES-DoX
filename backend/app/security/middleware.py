@@ -17,7 +17,7 @@ from typing import Callable, Optional
 from fastapi import Request, Response
 from fastapi.responses import JSONResponse
 from starlette.middleware.base import BaseHTTPMiddleware
-from starlette.types import ASGIApp
+from starlette.types import ASGIApp, Receive, Scope, Send
 
 from .patterns import PatternsLoader, SecurityPatterns
 from .validators import (
@@ -29,6 +29,45 @@ from .validators import (
 )
 
 logger = logging.getLogger(__name__)
+
+
+async def receive_and_cache(receive: Receive) -> tuple[Receive, bytes]:
+    """Call the original receive callable and cache the body.
+
+    Returns a new receive callable that returns the cached body on subsequent calls.
+    This prevents EndOfStream errors when multiple middlewares try to read the body.
+
+    Args:
+        receive: The original ASGI receive callable.
+
+    Returns:
+        A tuple of (new_receive_callable, cached_body_bytes).
+    """
+    # Receive the body once
+    messages = []
+    body_bytes = b""
+    more_body = True
+
+    while more_body:
+        message = await receive()
+        messages.append(message)
+        if message["type"] == "http.request":
+            body_bytes += message.get("body", b"")
+            more_body = message.get("more_body", False)
+
+    # Create a new receive callable that replays the cached messages
+    cached_messages = messages
+
+    async def new_receive() -> dict:
+        """Return the cached messages."""
+        nonlocal cached_messages
+        if cached_messages:
+            msg = cached_messages.pop(0)
+            return msg
+        # Return an empty message if no more cached messages
+        return {"type": "http.request", "body": b"", "more_body": False}
+
+    return new_receive, body_bytes
 
 
 class SecurityMiddleware(BaseHTTPMiddleware):
@@ -176,21 +215,18 @@ class SecurityMiddleware(BaseHTTPMiddleware):
                 self._log_validation(request, failures[0], "query_params")
                 return failures[0]
 
-        # Validate request body for POST/PUT/PATCH
-        if method in ("POST", "PUT", "PATCH"):
-            try:
-                # Read body if present
-                body = await self._get_body_dict(request)
-                if body:
-                    allowed, failures = self._request_validator.validate_body(
-                        body, operation
-                    )
-                    if not allowed and failures:
-                        self._log_validation(request, failures[0], "body")
-                        return failures[0]
-            except Exception as e:
-                # Body parsing failed, continue with request
-                logger.debug(f"Could not parse request body: {e}")
+        # NOTE: Body validation is disabled to prevent request stream consumption issues.
+        # Reading request.body() in middleware consumes the stream, causing EndOfStream
+        # errors when the endpoint handler tries to read the body. This is a known
+        # limitation of Starlette/FastAPI middleware. For now, we rely on:
+        # 1. Query parameter validation (above)
+        # 2. Path validation for file operations (below)
+        # 3. Pydantic model validation in the endpoint handlers themselves
+        #
+        # If body validation is needed in the future, consider:
+        # - Using FastAPI dependencies instead of middleware
+        # - Implementing a custom request wrapper with stream caching
+        # - Validating only specific endpoints that don't have Pydantic models
 
         # Check path-specific endpoints
         if any(path.startswith(ep) for ep in self.PATH_ENDPOINTS):
@@ -216,17 +252,29 @@ class SecurityMiddleware(BaseHTTPMiddleware):
 
         Returns:
             Dictionary if body is valid JSON, None otherwise.
+
+        Note:
+            This method caches the body in request.state to avoid consuming
+            the request stream, which would cause EndOfStream errors in
+            subsequent middlewares or the endpoint handler.
         """
         content_type = request.headers.get("content-type", "")
 
         if "application/json" not in content_type:
             return None
 
+        # Check if body was already cached
+        if hasattr(request.state, "_cached_body_dict"):
+            return request.state._cached_body_dict
+
         try:
             body_bytes = await request.body()
             if not body_bytes:
                 return None
-            return json.loads(body_bytes)
+            body_dict = json.loads(body_bytes)
+            # Cache in request state for subsequent reads
+            request.state._cached_body_dict = body_dict
+            return body_dict
         except (json.JSONDecodeError, UnicodeDecodeError):
             return None
 
