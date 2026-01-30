@@ -507,6 +507,7 @@ class CipherMemory(SQLModel, table=True):
     category: str
     content_json: str  # JSONB
     context_json: str | None = None  # JSONB
+    user_id: str | None = None  # Maps to auth.uid() for RLS scoping
     created_at: str | None = None
 
 
@@ -851,13 +852,20 @@ class ExtendedDatabase(Database):
 
 
     # ---- Cipher / Memory Methods ----
-    def add_memory(self, category: str, content: Dict, context: Optional[Dict] = None) -> str:
+    def add_memory(
+        self,
+        category: str,
+        content: Dict,
+        context: Optional[Dict] = None,
+        user_id: Optional[str] = None
+    ) -> str:
         mid = str(uuid.uuid4())
         row = CipherMemory(
             id=mid,
             category=category,
             content_json=json.dumps(content, ensure_ascii=False),
             context_json=json.dumps(context, ensure_ascii=False) if context else None,
+            user_id=user_id,
             created_at=datetime.utcnow().isoformat(timespec="seconds") + "Z"
         )
         with Session(self.engine) as s:
@@ -866,19 +874,22 @@ class ExtendedDatabase(Database):
         return mid
 
     def search_memory(
-        self, 
-        category: Optional[str] = None, 
-        limit: int = 10, 
-        q: Optional[str] = None
+        self,
+        category: Optional[str] = None,
+        limit: int = 10,
+        q: Optional[str] = None,
+        user_id: Optional[str] = None
     ) -> List[Dict]:
         with Session(self.engine) as s:
             stmt = select(CipherMemory)
             if category:
                 stmt = stmt.where(CipherMemory.category == category)
+            if user_id:
+                stmt = stmt.where(CipherMemory.user_id == user_id)
             # Naive sorting by recency as we don't have vector search in SQLite here
             stmt = stmt.order_by(CipherMemory.created_at.desc()).limit(limit)
             rows = s.exec(stmt).all()
-        
+
         results = []
         for r in rows:
             content = {}
@@ -897,6 +908,7 @@ class ExtendedDatabase(Database):
                 "category": r.category,
                 "content": content,
                 "context": json.loads(r.context_json) if r.context_json else {},
+                "user_id": r.user_id,
                 "created_at": r.created_at
             })
         return results
@@ -972,7 +984,7 @@ class ExtendedDatabase(Database):
             if enabled_only:
                 stmt = stmt.where(SkillRegistry.enabled == True)
             rows = s.exec(stmt).all()
-        
+
         out = []
         for r in rows:
             out.append({
@@ -985,3 +997,31 @@ class ExtendedDatabase(Database):
                 "created_at": r.created_at
             })
         return out
+
+    def update_skill(self, skill_id: str, enabled: bool) -> Optional[Dict]:
+        """Update a skill's enabled status.
+
+        Args:
+            skill_id: The skill ID to update.
+            enabled: The new enabled status.
+
+        Returns:
+            The updated skill dict if found, None otherwise.
+        """
+        with Session(self.engine) as s:
+            row = s.get(SkillRegistry, skill_id)
+            if not row:
+                return None
+            row.enabled = enabled
+            s.add(row)
+            s.commit()
+            s.refresh(row)
+            return {
+                "id": row.id,
+                "name": row.name,
+                "description": row.description,
+                "parameters": json.loads(row.parameters_json) if row.parameters_json else {},
+                "workflow_def": json.loads(row.workflow_def_json) if row.workflow_def_json else {},
+                "enabled": row.enabled,
+                "created_at": row.created_at
+            }

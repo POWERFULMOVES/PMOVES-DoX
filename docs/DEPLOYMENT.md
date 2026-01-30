@@ -9,17 +9,28 @@ PMOVES-DoX supports **two deployment modes**:
 
 ## Quick Start
 
+The recommended way to deploy PMOVES-DoX is via Makefile targets. These handle network setup, environment loading, and service orchestration automatically.
+
 ```bash
 # Clone the repository
 git clone https://github.com/POWERFULMOVES/PMOVES-DoX.git
 cd PMOVES-DoX
 
-# Standalone mode (default)
+# Bootstrap credentials from parent PMOVES.AI (if available)
+make env-bootstrap
+
+# Standalone mode (default) - all local services
 make standalone
 
-# Or docked mode (within PMOVES.AI)
+# Docked mode (within PMOVES.AI) - shares parent infrastructure
 make docked
 ```
+
+**Important:** Always use `make standalone` or `make docked` instead of raw `docker compose` commands. The Makefile handles:
+- External network creation/verification
+- Environment file loading (`.env.local`)
+- Proper compose file layering for docked mode
+- Service health checks
 
 ---
 
@@ -27,13 +38,26 @@ make docked
 
 Run PMOVES-DoX independently with all local services.
 
-### Starting
+### Starting (Recommended)
 
 ```bash
 make standalone
-# or
-PMOVES_MODE=standalone docker compose up -d --build
 ```
+
+This command:
+1. Creates external networks (`pmoves_api`, `pmoves_app`, `pmoves_bus`, `pmoves_data`) if they don't exist
+2. Loads environment from `.env.local`
+3. Starts all services with `PMOVES_MODE=standalone`
+
+### Alternative (Manual)
+
+If you need to run docker compose directly:
+
+```bash
+PMOVES_MODE=standalone docker compose --env-file .env.local up -d --build
+```
+
+**Note:** You must manually create networks first with `make ensure-standalone-networks`.
 
 ### Services
 
@@ -74,14 +98,43 @@ Run as submodule within PMOVES.AI, sharing parent services.
 
 - PMOVES.AI repository must be checked out at `../pmoves`
 - Parent PMOVES.AI services must be running
+- Parent networks must exist (verified automatically)
 
-### Starting
+### Verify Parent Networks
+
+Before starting docked mode, verify parent networks are available:
+
+```bash
+make check-parent
+```
+
+This command verifies that the following parent networks exist:
+- `pmoves_api` - TensorZero Gateway (:3030)
+- `pmoves_bus` - Parent NATS (:4222)
+- `pmoves_data` - Parent ClickHouse, Neo4j
+- `pmoves_app` - Parent services
+
+If any network is missing, you'll receive instructions to start parent PMOVES.AI first.
+
+### Starting (Recommended)
 
 ```bash
 make docked
-# or
-PMOVES_MODE=docked docker compose -f docker-compose.yml -f docker-compose.docked.yml up -d --build
 ```
+
+This command:
+1. Runs `check-parent` to verify parent networks exist
+2. Loads environment from `.env.local` (which inherits from `env.shared`)
+3. Starts services with both `docker-compose.yml` and `docker-compose.docked.yml`
+4. Sets `PMOVES_MODE=docked`
+
+### Alternative (Manual)
+
+```bash
+PMOVES_MODE=docked docker compose -f docker-compose.yml -f docker-compose.docked.yml --env-file .env.local up -d --build
+```
+
+**Note:** You must manually verify parent networks first with `make check-parent`.
 
 ### Services (DoX Local)
 
@@ -120,6 +173,45 @@ docker compose -f docker-compose.yml -f docker-compose.docked.yml down
 ---
 
 ## Environment Variables
+
+### Environment File Inheritance
+
+PMOVES-DoX uses a tiered environment configuration system that inherits from parent PMOVES.AI:
+
+```
+env.shared (parent PMOVES.AI)     # Base configuration for all PMOVES services
+    └── env.tier-agent            # Tier-specific overrides (agent tier)
+        └── .env.local            # Local/deployment-specific values
+```
+
+**env.shared** (`env.shared` in repo root):
+- Contains common configuration for all PMOVES.AI tiers
+- Defines service discovery URLs (NATS, TensorZero, Qdrant, Neo4j)
+- Sets default timeouts, health check intervals, logging configuration
+- Should NOT be modified directly - inherits from parent PMOVES.AI
+
+**Key variables inherited from env.shared:**
+| Variable | Default | Description |
+|----------|---------|-------------|
+| `NATS_URL` | `nats://nats:4222` | Parent NATS message bus |
+| `TENSORZERO_URL` | `http://tensorzero-gateway:3030` | LLM gateway |
+| `NEO4J_URL` | `http://neo4j:7474` | Knowledge graph |
+| `QDRANT_URL` | `http://qdrant:6333` | Vector database |
+| `AGENT_ZERO_URL` | `http://agent-zero:8080` | Parent Agent Zero |
+
+**Bootstrap credentials from parent:**
+```bash
+# Windows
+.\scripts\bootstrap_env.ps1
+
+# Linux/Mac
+./scripts/bootstrap_env.sh
+
+# Or via Makefile
+make env-bootstrap
+```
+
+This copies API keys (OpenRouter, Google, Anthropic, etc.) from parent PMOVES.AI `.env` files.
 
 ### Mode Selection
 

@@ -129,11 +129,14 @@ PMOVES-DoX includes experimental geometric data visualization powered by hyperbo
   - Canvas-based visualization with configurable amplitudes
 
 **NATS Geometry Bus**:
-- Service: `pmoves-dox-nats` (port 4222, WebSocket 9223)
+- Service: `pmoves-dox-nats` (port 4222, WebSocket varies by mode)
 - Stream: `GEOMETRY` captures `tokenism.cgp.>` and `geometry.>` subjects
 - Frontend: `frontend/lib/nats-context.tsx` provides WebSocket connection
 - Backend: `NATS_URL=nats://nats:4222`
-- Frontend: `NEXT_PUBLIC_NATS_WS_URL=ws://localhost:9223`
+- **WebSocket URLs by mode:**
+  - **Standalone mode**: `ws://localhost:9223` (DoX-local NATS)
+  - **Docked mode**: `ws://localhost:9222` (Parent PMOVES.AI NATS)
+- Frontend env: `NEXT_PUBLIC_NATS_WS_URL=ws://localhost:9223` (standalone) or `ws://localhost:9222` (docked)
 
 **Integration with Pmoves-hyperdimensions**:
 - Submodule: `external/Pmoves-hyperdimensions`
@@ -271,6 +274,37 @@ Artifacts  Pages/       Chunks with         Structured   FAISS/NumPy
   - Settings file: `external/PMOVES-Agent-Zero/tmp/settings.json`
 - **Pattern similarity**: Follows same env-based switching as Supabase (database_factory.py) and Neo4j (PsyFeR knowledge graph)
 
+## Credentials Bootstrap
+
+PMOVES-DoX includes a universal credentials bootstrap script that loads API keys from multiple sources with a precedence chain:
+
+```powershell
+# Windows PowerShell
+.\scripts\bootstrap_env.ps1              # Auto-detect mode
+.\scripts\bootstrap_env.ps1 -Mode local  # Force local dev mode
+.\scripts\bootstrap_env.ps1 -Validate    # Validate only, don't write
+
+# Linux/Mac
+./scripts/bootstrap_env.sh
+```
+
+**Precedence order (highest to lowest):**
+1. Docker secrets (`/run/secrets/`) - container runtime
+2. GitHub Actions secrets (CI environment variables)
+3. CHIT Vault (HTTP API) - proprietary vault
+4. Environment variables
+5. Parent PMOVES.AI repo files (local dev fallback)
+
+**Managed credentials:**
+- LLM API Keys: `OPENROUTER_API_KEY`, `GOOGLE_API_KEY`, `ANTHROPIC_API_KEY`, `OPENAI_API_KEY`
+- Service API Keys: `POSTMAN_API_KEY`, `HF_API_KEY`, `HUGGINGFACE_HUB_TOKEN`
+- Database: `NEO4J_PASSWORD`, `SUPABASE_ANON_KEY`, `SUPABASE_SERVICE_KEY`
+- TensorZero: `TENSORZERO_PROVIDER_OPENROUTER_API_KEY`, `GOOGLE_AI_STUDIO_API_KEY`
+
+**Required for minimal operation:** `OPENROUTER_API_KEY`, `GOOGLE_API_KEY`
+
+The script writes to `.env.local` with source comments for debugging.
+
 ## Important Environment Variables
 
 **Backend** (`backend/.env`):
@@ -290,7 +324,9 @@ Artifacts  Pages/       Chunks with         Structured   FAISS/NumPy
 
 **Frontend** (`frontend/.env.local`):
 - `NEXT_PUBLIC_API_BASE`: Backend URL (default: `http://localhost:8000`)
-- `NEXT_PUBLIC_NATS_WS_URL`: NATS WebSocket URL (default: `ws://localhost:9223`)
+- `NEXT_PUBLIC_NATS_WS_URL`: NATS WebSocket URL
+  - Standalone: `ws://localhost:9223` (DoX-local NATS)
+  - Docked: `ws://localhost:9222` (Parent PMOVES.AI NATS)
 
 ## Submodules
 
@@ -328,6 +364,9 @@ Initialize with: `git submodule update --init --recursive`
 7. **GPU Memory**: Ollama models can exceed Jetson Nano 4GB; use quantized models
 8. **NATS Connection**: Geometric visualizations require NATS service running (`docker compose --profile ollama up`)
 9. **Three.js SSR**: `Manifold3D` is dynamically imported with `ssr: false` to avoid hydration issues
+10. **NATS WebSocket Port**: Use `9223` for standalone mode, `9222` for docked mode (parent PMOVES.AI)
+11. **Credentials Missing**: Run `.\scripts\bootstrap_env.ps1` to copy API keys from parent PMOVES.AI
+12. **Docked Mode Networks**: Run `make check-parent` before `make docked` to verify parent networks exist
 
 ## Integration Points
 

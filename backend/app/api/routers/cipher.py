@@ -5,8 +5,12 @@ Defines the endpoints for:
 - Memory management (adding/searching memories).
 - Skills registry (listing/toggling skills).
 - A2UI demo generation.
+
+Memory operations support user_id for RLS (Row Level Security) scoping.
+When using Supabase backend with RLS enabled, user_id should be provided
+via the X-User-ID header or in the request body to ensure proper data isolation.
 """
-from fastapi import APIRouter, Depends, HTTPException, Query, Body
+from fastapi import APIRouter, Depends, HTTPException, Query, Body, Header
 from typing import List, Optional, Dict, Any
 from pydantic import BaseModel
 from app.services.cipher_service import CipherService
@@ -24,36 +28,57 @@ from app.database_factory import get_db_interface
 
 router = APIRouter(prefix="/cipher", tags=["cipher", "memory", "skills", "a2ui"])
 
+
 class MemoryRequest(BaseModel):
     category: str
     content: Any
+    user_id: Optional[str] = None  # Optional in body, can also come from header
+
 
 class SkillRequest(BaseModel):
     enabled: bool
 
+
 @router.post("/memory", response_model=Dict[str, str])
-def add_memory(req: MemoryRequest):
-    service = CipherService()
-    # Direct DB access via service wrapper logic
-    # In service: return self.db.add_memory("fact", content, context)
-    # The service method signature is: add_memory(category, content, context) in DB
-    # Service has: add_fact(content, source) -> calls db.add_memory('fact'...)
-    # We want generic access here.
-    
-    # Let's use the DB directly or exposed service method if generic.
-    # Service 'search' exists, but 'add_memory' generic isn't explicitly on Service class yet 
-    # (it has add_fact, add_preference).
-    # Let's use the DB interface directly for generic 'add_memory' to match the flexible API.
+def add_memory(
+    req: MemoryRequest,
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID")
+):
+    """Add a memory entry.
+
+    User identification for RLS scoping can be provided via:
+    - X-User-ID header (recommended for authenticated requests)
+    - user_id field in request body
+
+    Header takes precedence over body if both are provided.
+
+    TODO: In production, validate X-User-ID against authenticated JWT identity
+    to prevent spoofing. Currently trusts client-provided values.
+    """
+    # Determine user_id: header takes precedence over body
+    # TODO: Validate against authenticated context (JWT/session) to prevent spoofing
+    user_id = x_user_id or req.user_id
+
     db = get_db_interface()
-    mid = db.add_memory(req.category, req.content)
+    mid = db.add_memory(req.category, req.content, user_id=user_id)
     if not mid:
         raise HTTPException(status_code=500, detail="Failed to store memory")
     return {"id": mid, "status": "stored"}
 
+
 @router.get("/memory")
-def search_memory(q: Optional[str] = None, category: Optional[str] = None):
+def search_memory(
+    q: Optional[str] = None,
+    category: Optional[str] = None,
+    x_user_id: Optional[str] = Header(None, alias="X-User-ID")
+):
+    """Search memory entries.
+
+    User identification for RLS scoping can be provided via X-User-ID header.
+    When provided, only memories belonging to that user will be returned.
+    """
     service = CipherService()
-    return service.search_memory(category=category, q=q)
+    return service.search_memory(category=category, q=q, user_id=x_user_id)
 
 @router.get("/skills")
 def get_skills():
@@ -63,9 +88,16 @@ def get_skills():
 @router.put("/skills/{skill_id}")
 async def toggle_skill(skill_id: str, enabled: bool, db=Depends(get_db_interface)):
     """Enable or disable a skill."""
-    # TODO: Implement database update
-    # For now, we just return the new state
-    return {"id": skill_id, "enabled": enabled}
+    try:
+        updated_skill = db.update_skill(skill_id, enabled)
+        if updated_skill is None:
+            raise HTTPException(status_code=404, detail=f"Skill with id '{skill_id}' not found")
+        return updated_skill
+    except HTTPException:
+        raise
+    except Exception as e:
+        logger.exception("Failed to update skill %s", skill_id)
+        raise HTTPException(status_code=500, detail="Failed to update skill") from e
 
 @router.get("/a2ui/demo")
 async def get_a2ui_demo():

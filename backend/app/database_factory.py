@@ -45,6 +45,7 @@ WRITE_METHODS = {
     "add_memory",
     "set_user_pref",
     "register_skill",
+    "update_skill",
 }
 
 
