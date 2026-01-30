@@ -1727,7 +1727,7 @@ async def download_artifact(rel: str, user_id: str = Depends(get_current_user)):
     except HTTPException:
         raise
     except Exception as e:
-        raise HTTPException(status_code=400, f"Download error: {e}")
+        raise HTTPException(status_code=400, detail=f"Download error: {e}")
 
 
 # ---------------- datavzrd viz project generation ----------------
