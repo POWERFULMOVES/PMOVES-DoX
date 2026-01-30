@@ -102,12 +102,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
         if "X-Powered-By" in response.headers:
             del response.headers["X-Powered-By"]
 
-        return Response(
-            content=response.body,
-            status_code=response.status_code,
-            headers=dict(response.headers),
-            media_type=response.media_type,
-        )
+        return response
 
 
 def get_csp_directives() -> str:
