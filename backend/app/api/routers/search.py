@@ -12,8 +12,16 @@ class SearchRequest(BaseModel):
     types: list[str] | None = None
 
 @router.post("/search")
-async def search_documents(req: SearchRequest, _user_id: str = Depends(optional_auth)):
-    """Search documents (optionally authenticated for user-specific results)."""
+async def search_documents(
+    req: SearchRequest,
+    # TODO: Use user_id for user-scoped search results in future implementation
+    _user_id: str = Depends(optional_auth)
+):
+    """Search documents.
+
+    Authentication: Optional. Currently returns global results.
+    Future: Authenticated users will get user-scoped results.
+    """
     results = search_index.search(req.q, k=req.k)
     return {"results": results}
 

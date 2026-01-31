@@ -93,14 +93,30 @@ class EchoRequest(BaseModel):
 # ---------------- Endpoints ----------------
 
 @router.get("/facts")
-async def get_facts(report_week: str = None, _user_id: str = Depends(optional_auth)):
-    """Get all facts, optionally filtered by report week (optionally authenticated)."""
+async def get_facts(
+    report_week: str = None,
+    # TODO: Use user_id for user-scoped results in future implementation
+    _user_id: str = Depends(optional_auth)
+):
+    """Get all facts, optionally filtered by report week.
+
+    Authentication: Optional. Currently returns global results.
+    Future: Authenticated users will get user-scoped facts.
+    """
     facts = db.get_facts(report_week)
     return {"facts": facts}
 
 @router.get("/analysis/financials")
-async def get_financial_statements(artifact_id: str | None = None, _user_id: str = Depends(optional_auth)):
-    """Return detected financial statements from processed tables (optionally authenticated)."""
+async def get_financial_statements(
+    artifact_id: str | None = None,
+    # TODO: Use user_id for user-scoped results in future implementation
+    _user_id: str = Depends(optional_auth)
+):
+    """Return detected financial statements from processed tables.
+
+    Authentication: Optional. Currently returns global results.
+    Future: Authenticated users will get user-scoped statements.
+    """
     statements: List[Dict[str, Any]] = []
     for ev in db.get_all_evidence():
         if artifact_id and ev.get("artifact_id") != artifact_id:
@@ -140,8 +156,16 @@ async def get_financial_statements(artifact_id: str | None = None, _user_id: str
     return {"statements": statements}
 
 @router.get("/evidence/{evidence_id}")
-async def get_evidence(evidence_id: str, _user_id: str = Depends(optional_auth)):
-    """Get evidence by ID (optionally authenticated)."""
+async def get_evidence(
+    evidence_id: str,
+    # TODO: Use user_id for user-scoped access control in future implementation
+    _user_id: str = Depends(optional_auth)
+):
+    """Get evidence by ID.
+
+    Authentication: Optional. Currently allows global access.
+    Future: Authenticated users will only access their own evidence.
+    """
     evidence = db.get_evidence(evidence_id)
     if not evidence:
         raise HTTPException(404, "Evidence not found")
@@ -151,9 +175,14 @@ async def get_evidence(evidence_id: str, _user_id: str = Depends(optional_auth))
 async def ask_question(
     question: str,
     use_hrm: bool = Query(False, description="Enable HRM sidecar (if supported)"),
+    # TODO: Use user_id for user-scoped context in future implementation
     _user_id: str = Depends(optional_auth),
 ):
-    """Ask a question and get answer with citations (optionally authenticated)."""
+    """Ask a question and get answer with citations.
+
+    Authentication: Optional. Currently searches all documents.
+    Future: Authenticated users will get answers from their own documents.
+    """
     t0 = time.time()
     result = await qa_engine.ask(question)
     if HRM_ENABLED and use_hrm:
@@ -214,8 +243,12 @@ async def extract_tags_text(req: ExtractTagsRequest):
             # Clean up response
             content = content.replace("Tags:", "").replace("tags:", "").strip()
             tags = [t.strip() for t in content.split(",") if t.strip()]
+        else:
+            logger.warning(f"LLM tagging returned non-OK status: {resp.status_code}")
+    except requests.RequestException as e:
+        logger.warning(f"LLM tagging request failed: {e}")
     except Exception as e:
-        print(f"LLM tagging failed: {e}")
+        logger.error(f"LLM tagging unexpected error: {e}", exc_info=True)
     
     # Fallback to simple keywords if LLM fails or returns nothing
     if not tags:
@@ -335,7 +368,8 @@ def _is_ollama_available() -> bool:
     try:
         resp = requests.get(f"{base_url.rstrip('/')}/api/tags", timeout=2.0)
         return resp.status_code == 200
-    except Exception:
+    except requests.RequestException as e:
+        logger.debug(f"Ollama not available: {e}")
         return False
 
 
@@ -388,8 +422,12 @@ Return ONLY the JSON array, no other text."""
             json_match = re.search(r'\[.*\]', response_text, re.DOTALL)
             if json_match:
                 return json.loads(json_match.group())
+    except requests.RequestException as e:
+        logger.warning(f"Ollama API request failed: {e}")
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse Ollama response as JSON: {e}")
     except Exception as e:
-        print(f"[API-DOC] Ollama extraction failed: {e}")
+        logger.error(f"Unexpected error during Ollama extraction: {e}", exc_info=True)
 
     return None
 
@@ -557,8 +595,12 @@ def _parse_existing_spec(content: str, file_ext: str) -> Optional[Dict[str, Any]
         # Validate it's an OpenAPI/Swagger spec
         if isinstance(data, dict) and ("openapi" in data or "swagger" in data):
             return data
+    except json.JSONDecodeError as e:
+        logger.warning(f"Failed to parse JSON spec: {e}")
+    except yaml.YAMLError as e:
+        logger.warning(f"Failed to parse YAML spec: {e}")
     except Exception as e:
-        logger.debug(f"Failed to parse spec: {e}")
+        logger.error(f"Unexpected error parsing spec: {e}", exc_info=True)
 
     return None
 
