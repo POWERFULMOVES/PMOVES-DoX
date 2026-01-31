@@ -1,0 +1,109 @@
+# PMOVES-DoX Docked Mode Override
+# Usage: docker compose -f docker-compose.yml -f docker-compose.docked.yml up -d
+#
+# This file configures PMOVES-DoX to run as a submodule within PMOVES.AI.
+# It connects DoX services to parent infrastructure while maintaining
+# DoX-specific services (backend, frontend, internal agents, etc.)
+#
+# Key Differences from Standalone:
+# - Backend uses parent TensorZero Gateway (:3030) instead of local :3000
+# - Backend uses parent NATS (:4222) instead of local :4223
+# - DoX Agent Zero exposes MCP API for parent coordination
+# - Local nats, tensorzero, ollama services disabled (use parent's)
+
+services:
+  backend:
+    environment:
+      # Use parent TensorZero Gateway instead of local
+      - TENSORZERO_BASE_URL=http://tensorzero-gateway:3030
+      - OPENAI_BASE_URL=http://tensorzero-gateway:3030/openai/v1
+      - TENSORZERO_CLICKHOUSE_URL=http://${CLICKHOUSE_USER:-tensorzero}:${CLICKHOUSE_PASSWORD:-tensorzero}@tensorzero-clickhouse:8123/default
+
+      # Use parent NATS for cross-service messaging
+      - NATS_URL=nats://nats:4222
+
+      # Enable parent Neo4j dual-write (keep local for DoX-specific graphs)
+      - NEO4J_PARENT_URI=bolt://pmoves-neo4j-1:7687
+      - NEO4J_PARENT_USER=neo4j
+
+      # Expose parent network connectivity (include localhost:3001 for browser access)
+      - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001,http://localhost:3001,http://127.0.0.1:3001
+      - DOCKED_MODE=true
+    networks:
+      - pmoves_api      # Parent API tier
+      - pmoves_app      # Parent application tier
+      - pmoves_bus      # Parent NATS message bus
+      - pmoves_data     # Parent data services
+    depends_on:
+      - supabase-db
+      # Remove local dependencies when docked:
+      # - nats (use parent nats://nats:4222)
+
+  frontend:
+    environment:
+      # Connect to parent NATS WebSocket
+      - NEXT_PUBLIC_NATS_WS_URL=ws://localhost:9222
+    networks:
+      - pmoves_api      # For backend proxy
+      - pmoves_app      # Parent app tier access
+
+  # DoX Agent Zero: Enable MCP API when docked
+  # This allows parent Agent Zero to coordinate with DoX Agent Zero
+  agent-zero:
+    environment:
+      # Enable MCP server for parent to call
+      - MCP_SERVER_ENABLED=true
+      - MCP_SERVER_TOKEN=${AGENT_ZERO_MCP_TOKEN}
+      # TensorZero integration - use parent gateway
+      - TENSORZERO_API_BASE=http://tensorzero-gateway:3030/v1
+      - DOCKED_MODE=true
+    networks:
+      - pmoves_api      # Parent can reach DoX Agent Zero
+      - pmoves_app
+      - pmoves_bus
+      - pmoves_data
+
+  # Remove local services that parent provides
+  # These services run in PMOVES.AI and are available via parent networks
+  nats:
+    # Use parent NATS at nats://nats:4222
+    networks: []
+
+  tensorzero:
+    # Use parent TensorZero Gateway at http://tensorzero-gateway:3030
+    networks: []
+
+  ollama:
+    # Use parent Ollama if available at http://ollama:11434
+    # Otherwise DoX can run its own ollama for document processing
+    networks:
+      - pmoves_app      # Keep on app tier for internal use
+
+  # cipher-service: Keep local (DoX-specific memory/geometry)
+  # cipher (BoTZ agent): Keep local (DoX Agent Zero tool)
+  # postman-agent (BoTZ agent): Keep local (DoX Agent Zero tool)
+  # docling (BoTZ agent): Keep local (DoX Agent Zero tool)
+  # neo4j: Keep local (DoX-specific knowledge graphs, dual-write to parent)
+  # supabase-db: Keep local (DoX document storage)
+  # supabase-rest: Keep local (DoX document API)
+  # glances: Keep local (DoX monitoring)
+  # datavzrd, schemavzrd: Keep local (DoX visualization tools)
+  # frontend: Keep local (DoX UI)
+
+networks:
+  # Connect to parent PMOVES.AI networks
+  pmoves_api:
+    external: true
+    name: pmoves_api
+
+  pmoves_app:
+    external: true
+    name: pmoves_app
+
+  pmoves_bus:
+    external: true
+    name: pmoves_bus
+
+  pmoves_data:
+    external: true
+    name: pmoves_data

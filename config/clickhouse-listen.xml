@@ -1,0 +1,5 @@
+<?xml version="1.0"?>
+<clickhouse>
+    <!-- Listen on IPv4 only (fixes IPv6 not supported error) -->
+    <listen_host>0.0.0.0</listen_host>
+</clickhouse>

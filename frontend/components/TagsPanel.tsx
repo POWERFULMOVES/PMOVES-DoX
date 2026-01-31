@@ -199,7 +199,7 @@ export default function TagsPanel() {
   }
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
+    <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">Application Tags</h2>
       <div className="grid grid-cols-1 md:grid-cols-7 gap-2 mb-3">
         <select className="border rounded px-2 py-1" value={docId} onChange={e=>setDocId(e.target.value)}>
@@ -228,7 +228,7 @@ export default function TagsPanel() {
           <div className="text-xs text-gray-600 mt-1">Examples loaded: {presetExamples?.length ?? 0}</div>
           <div className="mt-2 flex gap-2">
             <button onClick={async ()=>{ await savePreset(); if (docId) localStorage.removeItem(`lms_prompt_draft_${docId}`); setLastSavedAt(new Date().toISOString()); }} className="bg-gray-800 text-white rounded px-3 py-1">Save Prompt</button>
-            <button onClick={openHistory} className="bg-gray-500 text-white rounded px-3 py-1">History</button>
+            <button onClick={openHistory} className="bg-gray-50 dark:bg-gray-800 text-gray-900 dark:text-white rounded px-3 py-1">History</button>
             <select className="border rounded px-2 py-1 text-xs" id="pomlVariant">
               <option value="generic">Generic</option>
               <option value="troubleshoot">Troubleshoot</option>
@@ -250,7 +250,7 @@ export default function TagsPanel() {
 
       {showHistory && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-20" onClick={()=>setShowHistory(false)}>
-          <div className="bg-white rounded shadow max-w-2xl w-full p-4" onClick={e=>e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded shadow max-w-2xl w-full p-4" onClick={e=>e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-semibold">Prompt History</h3>
               <button onClick={()=>setShowHistory(false)} className="px-2">✕</button>
@@ -268,10 +268,10 @@ export default function TagsPanel() {
               </div>
               <div>
                 <div className="text-xs text-gray-600 mb-1">Diff vs current editor</div>
-                <div className="text-xs bg-gray-50 border rounded p-2 max-h-96 overflow-auto whitespace-pre-wrap">
+                <div className="text-xs bg-gray-50 dark:bg-gray-800 border rounded p-2 max-h-96 overflow-auto whitespace-pre-wrap">
                   {selectedHistory ? (
                     diffLines(selectedHistory.prompt_text || '', presetPrompt).map((d,i)=> (
-                      <div key={i} className={d.type==='add'?'text-green-700':d.type==='del'?'text-red-700':'text-gray-800'}>
+                      <div key={i} className={d.type==='add'?'text-green-700 dark:text-green-400':d.type==='del'?'text-red-700 dark:text-red-400':'text-gray-800 dark:text-gray-200'}>
                         {d.type==='add'?'+ ': d.type==='del'?'- ':'  '}{d.text}
                       </div>
                     ))
@@ -290,7 +290,7 @@ export default function TagsPanel() {
       {loading ? <div>Loading…</div> : (
         <div className="max-h-80 overflow-auto border rounded">
           <table className="min-w-full text-left text-xs">
-            <thead><tr className="bg-gray-50"><th className="px-2 py-1">tag</th><th className="px-2 py-1">score</th><th className="px-2 py-1">document</th><th className="px-2 py-1">source</th><th className="px-2 py-1">hrm</th></tr></thead>
+            <thead><tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">tag</th><th className="px-2 py-1">score</th><th className="px-2 py-1">document</th><th className="px-2 py-1">source</th><th className="px-2 py-1">hrm</th></tr></thead>
             <tbody>
               {tags.map((t,i)=> (
                 <tr key={i} className="border-t">

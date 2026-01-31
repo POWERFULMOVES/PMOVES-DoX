@@ -23,7 +23,7 @@ async function waitUrl(url, tries=60, delayMs=2000) {
   try {
     run('docker', ['compose', '-f', compose, '--compatibility', 'build', 'backend', 'frontend']);
     run('docker', ['compose', '-f', compose, '--compatibility', 'up', '-d', 'backend', 'frontend']);
-    const okApi = await waitUrl('http://localhost:8000/health', 45, 2000);
+    const okApi = await waitUrl('http://localhost:8000/healthz', 45, 2000);
     const okWeb = await waitUrl('http://localhost:3000/', 45, 2000);
     if (!okApi || !okWeb) process.exit(1);
     // install browsers and run tests

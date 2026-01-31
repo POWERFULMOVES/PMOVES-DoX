@@ -37,6 +37,10 @@ out/
 # OS
 .DS_Store
 Thumbs.db
+desktop.ini
+**/desktop.ini
+nul
+**/nul
 
 # Logs
 *.log
@@ -56,3 +60,9 @@ watch/
 uploads/
 .db.sqlite3
 .supabase/
+docker-compose.override.yml.bak
+
+db.sqlite3
+backend_logs.txt
+backend_errors.txt
+*.pdf

@@ -74,11 +74,11 @@ def ok(msg: str):
 def main():
     # 1) health
     try:
-        h = r.get(f"{API}/health", timeout=10)
+        h = r.get(f"{API}/healthz", timeout=10)
         h.raise_for_status()
-        ok("/health")
+        ok("/healthz")
     except Exception as e:
-        fail(f"/health error: {e}")
+        fail(f"/healthz error: {e}")
 
     # 2) upload sample.csv
     sample = ROOT / "samples" / "sample.csv"

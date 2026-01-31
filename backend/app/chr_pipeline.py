@@ -60,7 +60,23 @@ def _softmax(x: np.ndarray, axis: int = 1) -> np.ndarray:
 
 
 def _entropy(arr: np.ndarray, bins: int = 16) -> float:
-    hist, _ = np.histogram(arr, bins=bins, density=True)
+    # Handle edge case: if all values are identical, entropy is 0
+    data_range = arr.max() - arr.min()
+    if data_range == 0:
+        return 0.0
+    # Limit bins to the number of unique values to avoid numpy error
+    unique_vals = len(np.unique(arr))
+    bins = min(bins, unique_vals) if unique_vals > 0 else 1
+    try:
+        hist, _ = np.histogram(arr, bins=bins, density=True)
+    except ValueError:
+        # If histogram fails (e.g., edge case with few unique values),
+        # fall back to simpler entropy calculation or return 0
+        try:
+            hist, _ = np.histogram(arr, bins="auto", density=True)
+        except ValueError:
+            # Data has too little variation for any binning - return 0 entropy
+            return 0.0
     p = hist / (hist.sum() + 1e-9)
     p = p[p > 0]
     return float(-(p * np.log(p)).sum())

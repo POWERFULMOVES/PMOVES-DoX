@@ -64,7 +64,7 @@ export default function APIsPanel() {
   };
 
   return (
-    <div className="bg-white p-6 rounded-lg shadow">
+    <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 p-6 rounded-lg shadow">
       <h2 className="text-2xl font-bold mb-4">APIs</h2>
       <div className="grid grid-cols-1 md:grid-cols-5 gap-2 mb-3">
         <input className="border rounded px-2 py-1" placeholder="tag" value={tag} onChange={e=>setTag(e.target.value)} />
@@ -75,10 +75,10 @@ export default function APIsPanel() {
       {loading ? <div>Loading…</div> : (
         <div className="max-h-80 overflow-auto border rounded">
           <table className="min-w-full text-left text-xs">
-            <thead><tr className="bg-gray-50"><th className="px-2 py-1">method</th><th className="px-2 py-1">path</th><th className="px-2 py-1">summary</th><th className="px-2 py-1">tags</th></tr></thead>
+            <thead><tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">method</th><th className="px-2 py-1">path</th><th className="px-2 py-1">summary</th><th className="px-2 py-1">tags</th></tr></thead>
             <tbody>
               {apis.map((a,i)=> (
-                <tr key={i} className="border-t hover:bg-gray-50 cursor-pointer" onClick={()=>openDetail(a.id)}>
+                <tr key={i} className="border-t hover:bg-muted cursor-pointer" onClick={()=>openDetail(a.id)}>
                   <td className="px-2 py-1">{a.method}</td>
                   <td className="px-2 py-1">{a.path}</td>
                   <td className="px-2 py-1">{a.summary}</td>
@@ -92,7 +92,7 @@ export default function APIsPanel() {
 
       {selected && (
         <div className="fixed inset-0 bg-black/40 flex items-center justify-center z-20" onClick={()=>setSelected(null)}>
-          <div className="bg-white rounded shadow max-w-2xl w-full p-4" onClick={e=>e.stopPropagation()}>
+          <div className="bg-white dark:bg-gray-900 text-gray-900 dark:text-gray-100 rounded shadow max-w-2xl w-full p-4" onClick={e=>e.stopPropagation()}>
             <div className="flex justify-between items-center mb-2">
               <h3 className="font-semibold">{selected.method} {selected.path}</h3>
               <button onClick={()=>setSelected(null)} className="px-2">✕</button>
@@ -100,11 +100,11 @@ export default function APIsPanel() {
             {selected.summary && <p className="text-sm mb-2">{selected.summary}</p>}
             <div className="mb-2">
               <div className="text-xs font-semibold">Parameters</div>
-              <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-40">{JSON.stringify(selected.parameters, null, 2)}</pre>
+              <pre className="text-xs bg-gray-50 dark:bg-gray-800 p-2 rounded overflow-auto max-h-40">{JSON.stringify(selected.parameters, null, 2)}</pre>
             </div>
             <div className="mb-2">
               <div className="text-xs font-semibold">Responses</div>
-              <pre className="text-xs bg-gray-50 p-2 rounded overflow-auto max-h-40">{JSON.stringify(selected.responses, null, 2)}</pre>
+              <pre className="text-xs bg-gray-50 dark:bg-gray-800 p-2 rounded overflow-auto max-h-40">{JSON.stringify(selected.responses, null, 2)}</pre>
             </div>
             <div className="flex gap-2 justify-end">
               <button onClick={copyCurl} className="bg-gray-800 text-white rounded px-3 py-1">Copy cURL</button>

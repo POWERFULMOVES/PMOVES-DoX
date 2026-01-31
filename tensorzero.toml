@@ -1,0 +1,114 @@
+# TensorZero gateway config for PMOVES-DoX
+# Aligned with PMOVES.AI Agentic Architecture
+#
+# Architecture: Local/Cloud Hybrid with 3-Function Pattern
+# - Cloud: OpenRouter, Google AI, Ollama Cloud Models
+# - Local: Host Ollama (functiongemma, qwen3-vl), Container Ollama (embeddings)
+# Per docs/agents/PMOVES.AI Agentic Architecture Deep Dive.md
+
+[gateway]
+bind_address = "0.0.0.0:3000"
+
+# Observability (ClickHouse)
+[gateway.observability]
+enabled = true
+async_writes = true
+
+[gateway.export.otlp.traces]
+enabled = false
+
+# -----------------
+# Cloud Providers
+# -----------------
+
+# OpenRouter (cloud LLMs - Nemotron, Claude, etc.)
+# API key via TENSORZERO_PROVIDER_OPENROUTER_API_KEY env var
+[models.openrouter_nemotron]
+routing = ["openrouter"]
+
+[models.openrouter_nemotron.providers.openrouter]
+type = "openai"
+api_base = "https://openrouter.ai/api/v1"
+model_name = "nvidia/llama-3.1-nemotron-70b-instruct"
+
+# Google AI (Gemini Flash - fast cloud)
+# API key via GOOGLE_AI_STUDIO_API_KEY env var
+[models.gemini_flash]
+routing = ["google_ai"]
+
+[models.gemini_flash.providers.google_ai]
+type = "google_ai_studio_gemini"
+model_name = "gemini-2.0-flash"
+
+# -----------------
+# Local/Hybrid Providers (Ollama)
+# -----------------
+
+# Host Ollama - Cloud models via Ollama API
+# Includes: deepseek-v3:cloud, kimi-k2:1t-cloud, qwen3-next:80b-cloud
+# URL configurable via OLLAMA_HOST_URL env var (default: host.docker.internal:11434)
+[models.ollama_cloud]
+routing = ["ollama_host"]
+
+[models.ollama_cloud.providers.ollama_host]
+type = "openai"
+model_name = "deepseek-v3:cloud"
+api_key_location = "none"
+
+# Host Ollama - Local models
+# Includes: functiongemma, qwen3-vl:8b
+[models.ollama_local]
+routing = ["ollama_host"]
+
+[models.ollama_local.providers.ollama_host]
+type = "openai"
+model_name = "functiongemma"
+api_key_location = "none"
+
+# Container Ollama (embeddings only)
+# URL: http://ollama:11434 (internal Docker network)
+[models.ollama_embed]
+routing = ["ollama_container"]
+
+[models.ollama_embed.providers.ollama_container]
+type = "openai"
+api_base = "http://ollama:11434/v1"
+model_name = "qwen3-embedding:8b"
+api_key_location = "none"
+
+# -----------------
+# Functions (Core Three per PMOVES.AI Architecture)
+# -----------------
+
+# Orchestrator: Main reasoning (Opus-tier tasks)
+# Routing: Cloud (OpenRouter/Gemini) with local fallback
+[functions.orchestrator]
+type = "chat"
+
+[functions.orchestrator.variants.openrouter]
+type = "chat_completion"
+model = "openrouter_nemotron"
+weight = 0.4
+
+[functions.orchestrator.variants.gemini]
+type = "chat_completion"
+model = "gemini_flash"
+weight = 0.4
+
+[functions.orchestrator.variants.ollama_cloud]
+type = "chat_completion"
+model = "ollama_cloud"
+weight = 0.2
+
+# Utility: Fast tasks (Haiku-tier)
+# Routing: Local Ollama (functiongemma) for speed
+[functions.utility]
+type = "chat"
+
+[functions.utility.variants.local]
+type = "chat_completion"
+model = "ollama_local"
+weight = 1.0
+
+# Embed: Reference only - embeddings handled by backend SearchIndex
+# Backend uses EMBEDDING_OLLAMA_URL for qwen3-embedding:8b via SentenceTransformers

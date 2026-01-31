@@ -1,3 +1,23 @@
+"""SQLite database models and operations for PMOVES-DoX.
+
+This module provides SQLModel-based database schemas for documents,
+artifacts, evidence, facts, and other application data. It includes
+both core tables (Artifact, Evidence, Fact) and extended tables
+(Document, APIEndpoint, LogEntry, etc.) for advanced features.
+
+Classes:
+    Artifact: Uploaded file metadata
+    Evidence: Extracted content chunks with coordinates
+    Fact: Structured data extracted from evidence
+    SummaryRow: Generated summaries with scope/style
+    Document: Extended document metadata
+    APIEndpoint: Discovered API endpoint definitions
+    LogEntry: System and application logs
+    TagRow: Extracted tags from documents
+    Database: Core database operations (SQLite)
+    ExtendedDatabase: Extended database with additional methods
+"""
+
 import os
 import json
 import uuid
@@ -5,10 +25,22 @@ from datetime import datetime
 from typing import List, Dict, Optional, Any
 from pathlib import Path
 
-from sqlmodel import SQLModel, Field, create_engine, Session, select, delete
+from sqlmodel import SQLModel, Field, create_engine, Session, select, delete, text
 
 
 class Artifact(SQLModel, table=True):
+    """Uploaded file metadata.
+
+    Attributes:
+        id: Unique artifact identifier
+        filename: Original filename
+        filepath: Path to stored file
+        filetype: File extension or MIME type
+        report_week: Optional reporting week identifier
+        status: Processing status (queued, processing, completed, error)
+        source_url: URL if file was downloaded
+        extra_json: Additional metadata as JSON string
+    """
     id: str = Field(primary_key=True)
     filename: str
     filepath: str
@@ -20,6 +52,17 @@ class Artifact(SQLModel, table=True):
 
 
 class Evidence(SQLModel, table=True):
+    """Extracted content chunk from a document.
+
+    Attributes:
+        id: Unique evidence identifier
+        artifact_id: Parent artifact reference
+        locator: Page/section reference (e.g., "page 5")
+        preview: Text preview of the content
+        content_type: MIME type of original content
+        coordinates_json: Bounding box coordinates as JSON
+        full_data_json: Complete extracted data as JSON
+    """
     id: str = Field(primary_key=True)
     artifact_id: str
     locator: Optional[str] = None
@@ -30,6 +73,16 @@ class Evidence(SQLModel, table=True):
 
 
 class Fact(SQLModel, table=True):
+    """Structured metric extracted from document evidence.
+
+    Attributes:
+        id: Unique fact identifier
+        artifact_id: Parent artifact reference
+        report_week: Optional reporting week identifier
+        entity: Named entity associated with the metric
+        metrics_json: Metric data as JSON string
+        evidence_id: Source evidence reference
+    """
     id: str = Field(primary_key=True)
     artifact_id: str
     report_week: Optional[str] = None
@@ -39,6 +92,20 @@ class Fact(SQLModel, table=True):
 
 
 class SummaryRow(SQLModel, table=True):
+    """Generated document summary with configurable scope and style.
+
+    Attributes:
+        id: Unique summary identifier
+        scope: Summary scope (workspace, document, custom)
+        scope_key: Scope-specific key for grouping
+        style: Summary style (bullet, detailed, executive)
+        provider: LLM provider used for generation
+        prompt: Optional custom prompt used
+        summary_text: Generated summary content
+        artifact_ids_json: Referenced artifact IDs as JSON
+        evidence_ids_json: Referenced evidence IDs as JSON
+        created_at: ISO timestamp of generation
+    """
     __tablename__ = "summaries"
 
     id: str = Field(primary_key=True)
@@ -54,9 +121,22 @@ class SummaryRow(SQLModel, table=True):
 
 
 class Database:
-    """SQLite-backed database with a similar interface as the prior in-memory DB."""
+    """SQLite-backed database with SQLModel ORM.
+
+    Provides CRUD operations for artifacts, evidence, facts, and summaries.
+    Handles schema migrations for backward compatibility.
+
+    Attributes:
+        db_url: SQLAlchemy database URL
+        engine: SQLAlchemy engine instance
+    """
 
     def __init__(self, db_path: Optional[str] = None):
+        """Initialize the SQLite database.
+
+        Args:
+            db_path: Path to SQLite file. Defaults to DB_PATH env var or "db.sqlite3".
+        """
         db_path = db_path or os.getenv("DB_PATH", "db.sqlite3")
         self.db_url = f"sqlite:///{db_path}"
         self.engine = create_engine(self.db_url, echo=False)
@@ -83,6 +163,14 @@ class Database:
                 conn.exec_driver_sql("ALTER TABLE artifact ADD COLUMN extra_json TEXT")
 
     def add_artifact(self, artifact: Dict) -> str:
+        """Add a new artifact to the database.
+
+        Args:
+            artifact: Dictionary containing artifact metadata.
+
+        Returns:
+            The artifact ID.
+        """
         payload = dict(artifact)
         extras = payload.pop("extras", None) or payload.pop("metadata", None)
         if extras is not None:
@@ -158,8 +246,9 @@ class Database:
             created_at=summary.get("created_at")
             or datetime.utcnow().isoformat(timespec="seconds") + "Z",
         )
+        result_id = payload.id  # Capture the pre-generated ID
         with Session(self.engine) as s:
-            existing = s.get(SummaryRow, payload.id)
+            existing = s.get(SummaryRow, result_id)
             if existing:
                 existing.scope = payload.scope
                 existing.scope_key = payload.scope_key
@@ -173,7 +262,7 @@ class Database:
             else:
                 s.add(payload)
             s.commit()
-        return payload.id
+        return result_id
 
     def get_summary(self, scope_key: str, style: str) -> Optional[Dict]:
         with Session(self.engine) as s:
@@ -288,16 +377,30 @@ class Database:
             items.append(data)
         return items
 
-    def reset(self):
+    def reset(self) -> None:
+        """
+        Reset database by deleting all evidence, facts, and artifacts using ORM.
+
+        This fixes the SQL injection vulnerability by using SQLAlchemy ORM
+        delete() instead of raw SQL text() queries. The ORM approach properly
+        escapes table names and values, preventing injection attacks.
+        """
         with Session(self.engine) as s:
-            s.exec(delete(SummaryRow))
-            s.exec("DELETE FROM evidence")
-            s.exec("DELETE FROM fact")
-            s.exec("DELETE FROM artifact")
-            s.exec(delete(DocumentEntity))
-            s.exec(delete(DocumentMetricHit))
-            s.exec(delete(DocumentStructureRow))
-            s.commit()
+            try:
+                # Use ORM delete instead of raw SQL to prevent SQL injection
+                s.query(SummaryRow).delete()
+                s.query(Evidence).delete()
+                s.query(Fact).delete()
+                s.query(Artifact).delete()
+                s.query(DocumentEntity).delete()
+                s.query(DocumentMetricHit).delete()
+                s.query(DocumentStructureRow).delete()
+                s.commit()
+            except Exception as e:
+                s.rollback()
+                import logging
+                logging.getLogger(__name__).error(f"Database reset failed: {e}")
+                raise
 
 
     def reset_search_chunks(self) -> None:
@@ -331,7 +434,7 @@ class DocTable(SQLModel, table=True):
     id: str = Field(primary_key=True)
     document_id: str
     order: int
-    json: str  # rows/cells JSON
+    table_content_json: str  # rows/cells JSON
 
 
 class APIEndpoint(SQLModel, table=True):
@@ -356,7 +459,7 @@ class DocumentEntity(SQLModel, table=True):
     start_char: int | None = None
     end_char: int | None = None
     page: int | None = None
-    context: str | None = None
+    entity_context: str | None = None
     source_index: int | None = None
 
 
@@ -374,7 +477,7 @@ class DocumentMetricHit(SQLModel, table=True):
     document_id: str
     type: str
     value: str | None = None
-    context: str | None = None
+    metric_context: str | None = None
     position: int | None = None
     page: int | None = None
     source_index: int | None = None
@@ -409,6 +512,40 @@ class TagPrompt(SQLModel, table=True):
     author: str | None = None
 
 
+
+# -------- Cipher / Memory Models --------
+
+class CipherMemory(SQLModel, table=True):
+    __tablename__ = "cipher_memory"
+
+    id: str = Field(primary_key=True)
+    category: str
+    content_json: str  # JSONB
+    context_json: str | None = None  # JSONB
+    user_id: str | None = None  # Maps to auth.uid() for RLS scoping
+    created_at: str | None = None
+
+
+class UserPref(SQLModel, table=True):
+    __tablename__ = "user_prefs"
+
+    user_id: str = Field(primary_key=True)
+    preferences_json: str  # JSONB
+    updated_at: str | None = None
+
+
+class SkillRegistry(SQLModel, table=True):
+    __tablename__ = "skills_registry"
+
+    id: str = Field(primary_key=True)
+    name: str = Field(unique=True)
+    description: str
+    parameters_json: str  # JSONB
+    workflow_def_json: str  # JSONB
+    enabled: bool = True
+    created_at: str | None = None
+
+
 def _ensure_extended(engine):
     SQLModel.metadata.create_all(engine)
 
@@ -433,7 +570,10 @@ class ExtendedDatabase(Database):
 
     def add_table(self, table: Dict):
         with Session(self.engine) as s:
-            s.add(DocTable(**table))
+            t_data = dict(table)
+            if "json" in t_data:
+                t_data["table_content_json"] = t_data.pop("json")
+            s.add(DocTable(**t_data))
             s.commit()
 
     def add_api(self, api: Dict):
@@ -463,7 +603,7 @@ class ExtendedDatabase(Database):
                     start_char=entity.get("start_char"),
                     end_char=entity.get("end_char"),
                     page=entity.get("page"),
-                    context=entity.get("context"),
+                    entity_context=entity.get("context"),
                     source_index=entity.get("source_index"),
                 )
                 s.add(row)
@@ -489,7 +629,7 @@ class ExtendedDatabase(Database):
                     document_id=document_id,
                     type=str(metric.get("type") or ""),
                     value=metric.get("value"),
-                    context=metric.get("context"),
+                    metric_context=metric.get("context"),
                     position=metric.get("position"),
                     page=metric.get("page"),
                     source_index=metric.get("source_index"),
@@ -514,7 +654,7 @@ class ExtendedDatabase(Database):
                 "start_char": r.start_char,
                 "end_char": r.end_char,
                 "page": r.page,
-                "context": r.context,
+                "context": r.entity_context,
                 "source_index": r.source_index,
             }
             for r in rows
@@ -541,7 +681,7 @@ class ExtendedDatabase(Database):
                 "document_id": r.document_id,
                 "type": r.type,
                 "value": r.value,
-                "context": r.context,
+                "context": r.metric_context,
                 "position": r.position,
                 "page": r.page,
                 "source_index": r.source_index,
@@ -724,3 +864,179 @@ class ExtendedDatabase(Database):
         with Session(self.engine) as s:
             rows = s.exec(select(LogEntry).where(LogEntry.document_id == document_id)).all()
         return [r.message for r in rows if r.message]
+
+
+    # ---- Cipher / Memory Methods ----
+    def add_memory(
+        self,
+        category: str,
+        content: Dict,
+        context: Optional[Dict] = None,
+        user_id: Optional[str] = None
+    ) -> str:
+        mid = str(uuid.uuid4())
+        row = CipherMemory(
+            id=mid,
+            category=category,
+            content_json=json.dumps(content, ensure_ascii=False),
+            context_json=json.dumps(context, ensure_ascii=False) if context else None,
+            user_id=user_id,
+            created_at=datetime.utcnow().isoformat(timespec="seconds") + "Z"
+        )
+        with Session(self.engine) as s:
+            s.add(row)
+            s.commit()
+        return mid
+
+    def search_memory(
+        self,
+        category: Optional[str] = None,
+        limit: int = 10,
+        q: Optional[str] = None,
+        user_id: Optional[str] = None
+    ) -> List[Dict]:
+        with Session(self.engine) as s:
+            stmt = select(CipherMemory)
+            if category:
+                stmt = stmt.where(CipherMemory.category == category)
+            if user_id:
+                stmt = stmt.where(CipherMemory.user_id == user_id)
+            # Naive sorting by recency as we don't have vector search in SQLite here
+            stmt = stmt.order_by(CipherMemory.created_at.desc()).limit(limit)
+            rows = s.exec(stmt).all()
+
+        results = []
+        for r in rows:
+            content = {}
+            if r.content_json:
+                try:
+                    content = json.loads(r.content_json)
+                except Exception:
+                    pass
+            # Simple in-memory filter for 'q' if provided (inefficient but works for small local DB)
+            if q:
+                if q.lower() not in json.dumps(content).lower():
+                    continue
+
+            results.append({
+                "id": r.id,
+                "category": r.category,
+                "content": content,
+                "context": json.loads(r.context_json) if r.context_json else {},
+                "user_id": r.user_id,
+                "created_at": r.created_at
+            })
+        return results
+
+    def get_user_prefs(self, user_id: str) -> Dict:
+        with Session(self.engine) as s:
+            row = s.get(UserPref, user_id)
+        if row and row.preferences_json:
+            return json.loads(row.preferences_json)
+        return {}
+
+    def set_user_pref(self, user_id: str, key: str, value: Any) -> None:
+        with Session(self.engine) as s:
+            row = s.get(UserPref, user_id)
+            existing = {}
+            if row and row.preferences_json:
+                existing = json.loads(row.preferences_json)
+            
+            existing[key] = value
+            
+            if not row:
+                row = UserPref(
+                    user_id=user_id,
+                    preferences_json=json.dumps(existing, ensure_ascii=False),
+                    updated_at=datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                )
+                s.add(row)
+            else:
+                row.preferences_json = json.dumps(existing, ensure_ascii=False)
+                row.updated_at = datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                s.add(row)
+            s.commit()
+
+    def register_skill(
+        self, 
+        name: str, 
+        description: str, 
+        parameters: Dict, 
+        workflow_def: Dict,
+        enabled: bool = True
+    ) -> str:
+        # Pre-generate ID if needed, but for upsert logic we need to be careful
+        # We'll just return the ID we find or create
+        target_id = ""
+        with Session(self.engine) as s:
+            # Check exist first to handle 'upsert' logic
+            existing = s.exec(select(SkillRegistry).where(SkillRegistry.name == name)).first()
+            if existing:
+                existing.description = description
+                existing.parameters_json = json.dumps(parameters, ensure_ascii=False)
+                existing.workflow_def_json = json.dumps(workflow_def, ensure_ascii=False)
+                existing.enabled = enabled
+                row = existing
+                target_id = existing.id
+            else:
+                target_id = str(uuid.uuid4())
+                row = SkillRegistry(
+                    id=target_id,
+                    name=name,
+                    description=description,
+                    parameters_json=json.dumps(parameters, ensure_ascii=False),
+                    workflow_def_json=json.dumps(workflow_def, ensure_ascii=False),
+                    enabled=enabled,
+                    created_at=datetime.utcnow().isoformat(timespec="seconds") + "Z"
+                )
+                s.add(row)
+            s.commit()
+        return target_id
+
+    def list_skills(self, enabled_only: bool = True) -> List[Dict]:
+        with Session(self.engine) as s:
+            stmt = select(SkillRegistry)
+            if enabled_only:
+                stmt = stmt.where(SkillRegistry.enabled == True)
+            rows = s.exec(stmt).all()
+
+        out = []
+        for r in rows:
+            out.append({
+                "id": r.id,
+                "name": r.name,
+                "description": r.description,
+                "parameters": json.loads(r.parameters_json) if r.parameters_json else {},
+                "workflow_def": json.loads(r.workflow_def_json) if r.workflow_def_json else {},
+                "enabled": r.enabled,
+                "created_at": r.created_at
+            })
+        return out
+
+    def update_skill(self, skill_id: str, enabled: bool) -> Optional[Dict]:
+        """Update a skill's enabled status.
+
+        Args:
+            skill_id: The skill ID to update.
+            enabled: The new enabled status.
+
+        Returns:
+            The updated skill dict if found, None otherwise.
+        """
+        with Session(self.engine) as s:
+            row = s.get(SkillRegistry, skill_id)
+            if not row:
+                return None
+            row.enabled = enabled
+            s.add(row)
+            s.commit()
+            s.refresh(row)
+            return {
+                "id": row.id,
+                "name": row.name,
+                "description": row.description,
+                "parameters": json.loads(row.parameters_json) if row.parameters_json else {},
+                "workflow_def": json.loads(row.workflow_def_json) if row.workflow_def_json else {},
+                "enabled": row.enabled,
+                "created_at": row.created_at
+            }

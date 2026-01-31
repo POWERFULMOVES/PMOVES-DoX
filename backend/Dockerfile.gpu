@@ -9,7 +9,7 @@ ENV PYTHONDONTWRITEBYTECODE=1 \
 
 WORKDIR /app
 
-# System deps for PDF/OCR
+# System deps for PDF/OCR/OpenCV
 RUN apt-get update && apt-get install -y --no-install-recommends \
     build-essential \
     wget \
@@ -19,6 +19,8 @@ RUN apt-get update && apt-get install -y --no-install-recommends \
     tesseract-ocr-eng \
     ghostscript \
     pandoc \
+    libgl1-mesa-glx \
+    libglib2.0-0 \
   && rm -rf /var/lib/apt/lists/*
 
 COPY requirements.txt ./
@@ -29,6 +31,12 @@ COPY app ./app
 
 # Ensure runtime dirs exist (also mounted as volumes in compose)
 RUN mkdir -p /app/uploads /app/artifacts
+
+# Create non-root user for Hardened compliance
+RUN useradd -m -u 1001 -s /bin/bash pmoves && \
+    chown -R pmoves:pmoves /app
+
+USER pmoves
 
 EXPOSE 8000
 

@@ -1,0 +1,36 @@
+# syntax=docker/dockerfile:1
+# Jetson Orin Nano (ARM64) backend image for latest JetPack (L4T r35/r36 series).
+# Uses NVIDIA L4T ML base which includes CUDA/cuDNN and PyTorch builds for ARM64.
+
+ARG BASE_IMAGE=nvcr.io/nvidia/l4t-ml:r36.3.0-py3
+FROM ${BASE_IMAGE}
+
+ENV PYTHONDONTWRITEBYTECODE=1 \
+    PYTHONUNBUFFERED=1 \
+    PIP_DISABLE_PIP_VERSION_CHECK=1
+
+WORKDIR /app
+
+# System deps for PDF/OCR
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    build-essential \
+    wget \
+    ca-certificates \
+    poppler-utils \
+    tesseract-ocr \
+    tesseract-ocr-eng \
+    ghostscript \
+    pandoc \
+  && rm -rf /var/lib/apt/lists/*
+
+# Python deps (Torch provided by base image)
+COPY requirements.txt ./
+RUN pip install --no-cache-dir -r requirements.txt
+
+COPY app ./app
+
+RUN mkdir -p /app/uploads /app/artifacts
+
+EXPOSE 8000
+CMD ["python3", "-m", "app.main"]
+

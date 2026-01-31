@@ -9,6 +9,15 @@ create table if not exists artifacts (
   filetype text not null,
   report_week text,
   status text,
+  source_url text,
+  extras jsonb default '{}'::jsonb,
+  table_evidence int default 0,
+  chart_evidence int default 0,
+  formula_evidence int default 0,
+  media_transcripts int default 0,
+  media_metadata int default 0,
+  web_pages int default 0,
+  image_ocr int default 0,
   created_at timestamptz default now()
 );
 
@@ -115,3 +124,20 @@ create table if not exists search_chunks (
 
 create index if not exists idx_search_chunks_document on search_chunks(document_id);
 create index if not exists idx_search_chunks_embedding on search_chunks using ivfflat (embedding vector_cosine_ops) with (lists = 100);
+
+-- Summaries table for generated document summaries
+create table if not exists summaries (
+  id text primary key,
+  scope text not null,
+  scope_key text,
+  style text not null,
+  provider text,
+  prompt text,
+  summary_text text,
+  artifact_ids jsonb default '[]'::jsonb,
+  evidence_ids jsonb default '[]'::jsonb,
+  created_at text
+);
+
+create index if not exists idx_summaries_scope_key on summaries(scope_key);
+create index if not exists idx_summaries_style on summaries(style);

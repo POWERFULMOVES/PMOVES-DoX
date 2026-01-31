@@ -1,0 +1,22 @@
+name: "PMOVES-DoX CodeQL Configuration"
+
+# Paths to exclude from analysis
+paths-ignore:
+  - '**/node_modules/**'
+  - '**/venv/**'
+  - '**/__pycache__/**'
+  - '**/dist/**'
+  - '**/build/**'
+  - '**/.next/**'
+  - '**/coverage/**'
+  - '**/*.min.js'
+  - '**/*.bundle.js'
+
+# Query suites to use
+queries:
+  - uses: security-and-quality
+  - uses: security-extended
+
+# Threat models to consider
+threat-models:
+  - remote

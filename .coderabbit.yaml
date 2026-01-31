@@ -1,0 +1,18 @@
+# CodeRabbit Configuration for PMOVES-DoX
+# Settings for automated code reviews
+
+reviews:
+  # Enable reviews
+  review_status: true
+  auto_review:
+    enabled: true
+    # Additional base branches to review (default branch is always included)
+    base_branches:
+      - "PMOVES.AI-Edition-Hardened"
+      - "feat/.*"
+      - "fix/.*"
+      - "docs/.*"
+      - "chore/.*"
+
+# Language setting
+language: "en-US"

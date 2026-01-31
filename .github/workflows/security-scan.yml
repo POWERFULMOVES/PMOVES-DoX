@@ -1,0 +1,68 @@
+name: Security Scan
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  schedule:
+    - cron: '0 6 * * 1'  # Weekly Monday 6AM UTC
+
+permissions:
+  contents: read
+  security-events: write
+
+jobs:
+  trivy-scan:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Run Trivy vulnerability scanner
+        uses: aquasecurity/trivy-action@0.33.1
+        with:
+          scan-type: 'fs'
+          scanners: 'vuln,secret'
+          format: 'sarif'
+          output: 'trivy-results.sarif'
+          severity: 'CRITICAL,HIGH,MEDIUM'
+
+      - name: Upload Trivy scan results to GitHub Security tab
+        uses: github/codeql-action/upload-sarif@v4
+        if: always()
+        with:
+          sarif_file: 'trivy-results.sarif'
+
+  secret-detection:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v6
+
+      - name: Check for hardcoded secrets in docker-compose files
+        run: |
+          echo "Checking for hardcoded credentials in docker-compose files..."
+
+          # Check for hardcoded passwords (not using ${VAR} syntax)
+          if grep -rE "(password|PASSWORD)=[^$\{][a-zA-Z0-9]+" docker-compose*.yml 2>/dev/null; then
+            echo "ERROR: Found hardcoded passwords in docker-compose files"
+            exit 1
+          fi
+
+          # Check for hardcoded API keys
+          if grep -rE "(api_key|API_KEY)=[^$\{][a-zA-Z0-9]+" docker-compose*.yml 2>/dev/null; then
+            echo "ERROR: Found hardcoded API keys in docker-compose files"
+            exit 1
+          fi
+
+          echo "No hardcoded secrets found in docker-compose files"
+
+      - name: Check for secrets in .env files committed
+        run: |
+          # Ensure no .env files with actual values are committed
+          if [ -f ".env" ] && grep -qE "^[A-Z_]+=[^$\{].+" .env 2>/dev/null; then
+            echo "ERROR: .env file found with values - this should not be committed"
+            exit 1
+          fi
+          echo "Secret check completed"

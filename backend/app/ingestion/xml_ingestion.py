@@ -112,12 +112,12 @@ def process_xml(file_path: Path) -> Tuple[Dict, List[Dict]]:
                 "document_id": doc_id,
                 "ts": get_text(el, 'ts') or get_text(el, 'timestamp') or get_text(el, 'time'),
                 "level": (get_text(el, 'level') or get_text(el, 'severity')),
-            "code": get_text(el, 'code') or get_text(el, 'error') or get_text(el, 'status'),
-            "component": get_text(el, 'component') or get_text(el, 'service') or get_text(el, 'module'),
-            "message": get_text(el, 'message') or get_text(el, 'msg') or get_text(el, 'text'),
-            "attrs_json": None,
-        }
-        rows.append(row)
+                "code": get_text(el, 'code') or get_text(el, 'error') or get_text(el, 'status'),
+                "component": get_text(el, 'component') or get_text(el, 'service') or get_text(el, 'module'),
+                "message": get_text(el, 'message') or get_text(el, 'msg') or get_text(el, 'text'),
+                "attrs_json": None,
+            }
+            rows.append(row)
 
     # Fallback: treat any child with text as message
     if not rows:

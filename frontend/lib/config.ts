@@ -1,9 +1,12 @@
 export function getApiBase(): string {
-  if (typeof window !== 'undefined') {
-    const v = localStorage.getItem('lms_api_base');
-    if (v && v.trim()) return v.trim();
+  // Server-side (SSR)
+  if (typeof window === 'undefined') {
+    return process.env.API_URL || process.env.NEXT_PUBLIC_API_BASE || 'http://backend:8484';
   }
-  return process.env.NEXT_PUBLIC_API_BASE || 'http://localhost:8484';
+  // Client-side
+  const v = localStorage.getItem('lms_api_base');
+  if (v && v.trim()) return v.trim();
+  return process.env.NEXT_PUBLIC_API_BASE || '/api';
 }
 
 export function setApiBase(v: string) {
@@ -107,5 +110,23 @@ export function getHRMMmin(): number {
 export function setHRMMmin(n: number) {
   if (typeof window !== 'undefined') {
     localStorage.setItem('lms_hrm_mmin', String(n));
+  }
+}
+
+// NATS WebSocket configuration
+export function getNatsWsUrl(): string {
+  // Client-side WebSocket URL for NATS
+  // Default to localhost:9223 (mapped from container's 4222)
+  const wsUrl = typeof window !== 'undefined'
+    ? localStorage.getItem('lms_nats_ws_url')
+    : null;
+  if (wsUrl && wsUrl.trim()) return wsUrl.trim();
+  // Use environment variable or default
+  return process.env.NEXT_PUBLIC_NATS_WS_URL || 'ws://localhost:9223';
+}
+
+export function setNatsWsUrl(v: string) {
+  if (typeof window !== 'undefined') {
+    localStorage.setItem('lms_nats_ws_url', v);
   }
 }

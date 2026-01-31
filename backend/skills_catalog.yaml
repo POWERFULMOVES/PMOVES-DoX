@@ -1,0 +1,84 @@
+version: "1.0"
+description: "PMOVES-DoX Backend Service Skills Catalog"
+doctrine: "POWERFULMOVES Agentic Architecture"
+
+# This catalog maps backend services to their SKILL.md pivot files
+# following the BoTZ doctrine pattern for agent skill discovery.
+
+services:
+  chit_service:
+    name: "CHIT Geometry Bus"
+    skill_file: app/services/SKILL_chit_service.md
+    source_file: app/services/chit_service.py
+    thread_type: "Base Thread"
+    mcp_tools: []
+    capabilities:
+      - "NATS JetStream connection"
+      - "CGP publishing and decoding"
+      - "Manifold parameter broadcasting"
+      - "Text embedding generation"
+      - "Document-to-CGP conversion"
+    dependencies:
+      - nats-py
+      - sentence-transformers (optional)
+    environment:
+      - NATS_URL
+      - DOCKED_MODE
+      - CHIT_USE_LOCAL_EMBEDDINGS
+      - CHIT_EMBEDDING_MODEL
+
+  cipher_service:
+    name: "Cipher Memory & Skill Management"
+    skill_file: app/services/SKILL_cipher_service.md
+    source_file: app/services/cipher_service.py
+    thread_type: "Base Thread"
+    mcp_tools: []
+    capabilities:
+      - "Memory storage by category"
+      - "Memory search and retrieval"
+      - "Skill registration and listing"
+      - "User preference management"
+      - "Fact extraction storage"
+    dependencies:
+      - database_factory
+    environment:
+      - DB_BACKEND
+      - SUPABASE_URL
+      - SUPABASE_ANON_KEY
+      - SUPABASE_DUAL_WRITE
+
+  geometry_engine:
+    name: "Geometry Engine (Curvature Analysis)"
+    skill_file: app/services/SKILL_geometry_engine.md
+    source_file: app/services/geometry_engine.py
+    thread_type: "Base Thread"
+    mcp_tools: []
+    capabilities:
+      - "Curvature analysis from embeddings"
+      - "Exact delta-hyperbolicity computation"
+      - "Riemann Zeta spectrum derivation"
+      - "CHIT manifold configuration generation"
+      - "Surface function generation for Three.js"
+    dependencies:
+      - numpy
+    environment:
+      - EXACT_DELTA
+
+# Integration points with parent PMOVES.AI system
+integration:
+  nats_subjects:
+    - "tokenism.cgp.ready.v1"
+    - "geometry.event.manifold_update"
+  nats_stream: "GEOMETRY"
+  visualization_mount: "/hyperdimensions"
+
+# Skill loading pattern
+# Agents should:
+# 1. Read this catalog to discover available skills
+# 2. Load the relevant SKILL.md for context priming
+# 3. Use the source_file methods as documented in the SKILL.md
+skill_loading:
+  pattern: "Pivot File Pattern"
+  discovery: "Read skills_catalog.yaml first"
+  priming: "Load SKILL.md before calling methods"
+  execution: "Call singleton methods on service instances"

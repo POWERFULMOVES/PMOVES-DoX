@@ -89,6 +89,36 @@ class SupabaseDatabase:
         )
         return artifact["id"]
 
+    def update_artifact(self, artifact_id: str, **fields: Any) -> None:
+        """Update an artifact's fields, merging extras if provided."""
+        extras = fields.pop("extras", None)
+
+        # If extras provided, fetch current and merge
+        if extras is not None:
+            rows = self._run(
+                self._table("artifacts").select("extras").eq("id", artifact_id),
+                operation="get_artifact_extras",
+            )
+            if rows:
+                current_extras = rows[0].get("extras") or {}
+                if isinstance(current_extras, str):
+                    try:
+                        current_extras = json.loads(current_extras)
+                    except json.JSONDecodeError:
+                        current_extras = {}
+                current_extras.update(extras)
+                fields["extras"] = current_extras
+            else:
+                fields["extras"] = extras
+
+        if not fields:
+            return
+
+        self._run(
+            self._table("artifacts").update(fields).eq("id", artifact_id),
+            operation="update_artifact",
+        )
+
     def add_fact(self, fact: Dict) -> None:
         payload = {**fact, "metrics": fact.get("metrics", {})}
         self._run(self._table("facts").upsert(payload, on_conflict="id"), operation="add_fact")
@@ -116,12 +146,29 @@ class SupabaseDatabase:
 
     def add_api(self, api: Dict) -> None:
         payload = api.copy()
+        # Handle tags_json -> tags mapping (SQLite uses tags_json, Supabase uses tags)
+        if "tags_json" in payload:
+            tags_value = payload.pop("tags_json")
+            if tags_value is not None:
+                # tags_json is stored as JSON string, parse it for JSONB column
+                if isinstance(tags_value, str):
+                    try:
+                        payload["tags"] = json.loads(tags_value)
+                    except json.JSONDecodeError:
+                        payload["tags"] = []
+                else:
+                    payload["tags"] = tags_value
         if isinstance(payload.get("tags"), list):
             payload["tags"] = payload["tags"]
         self._run(self._table("api_endpoints").upsert(payload, on_conflict="id"), operation="add_api")
 
     def add_log(self, log: Dict) -> None:
         payload = log.copy()
+        # Handle attrs_json -> attrs mapping (SQLite uses attrs_json, Supabase uses attrs)
+        if "attrs_json" in payload:
+            attrs_value = payload.pop("attrs_json")
+            if attrs_value is not None:
+                payload["attrs"] = attrs_value
         if isinstance(payload.get("attrs"), (dict, list)):
             payload["attrs"] = payload["attrs"]
         self._run(self._table("log_entries").upsert(payload, on_conflict="id"), operation="add_log")
@@ -534,3 +581,125 @@ class SupabaseDatabase:
             "evidence_ids": evidence_ids or [],
             "created_at": row.get("created_at", self._now_iso()),
         }
+
+    # ----------------------------------------------------------------- Cipher / Memory
+    def add_memory(
+        self,
+        category: str,
+        content: Dict,
+        context: Optional[Dict] = None,
+        user_id: Optional[str] = None
+    ) -> str:
+        payload = {
+            "category": category,
+            "content": content,
+            "context": context or {},
+            "created_at": self._now_iso(),
+        }
+        # Include user_id for RLS scoping if provided
+        if user_id:
+            payload["user_id"] = user_id
+        # If accessing the native supabase client returning the inserted row:
+        # data = self._table("cipher_memory").insert(payload).execute()
+        # But we use the helper _run which returns a list of rows if configured correctly,
+        # or we might need to fetch the ID depending on the client config.
+        # Assuming defaults that return inserted data:
+        rows = self._run(self._table("cipher_memory").insert(payload).select(), operation="add_memory")
+        if rows and len(rows) > 0:
+            return rows[0]["id"]
+        return ""
+
+    def search_memory(
+        self,
+        category: Optional[str] = None,
+        limit: int = 10,
+        q: Optional[str] = None,  # TODO: Text search not yet implemented for Supabase
+        user_id: Optional[str] = None
+    ) -> List[Dict]:
+        query = self._table("cipher_memory").select("*")
+        if category:
+            query = query.eq("category", category)
+        # Filter by user_id for RLS scoping if provided
+        if user_id:
+            query = query.eq("user_id", user_id)
+
+        # NOTE: Text search parameter 'q' is currently ignored.
+        # Full-text search on JSONB requires pg_trgm or dedicated search index.
+        # For now, we return recent items. Real semantic search requires the vector extension.
+        query = query.order("created_at", desc=True).limit(limit)
+
+        return self._run(query, operation="search_memory")
+
+    def get_user_prefs(self, user_id: str) -> Dict:
+        rows = self._run(
+            self._table("user_prefs").select("*").eq("user_id", user_id), 
+            operation="get_user_prefs"
+        )
+        if rows:
+            return rows[0].get("preferences", {})
+        return {}
+
+    def set_user_pref(self, user_id: str, key: str, value: Any) -> None:
+        # First get existing
+        existing = self.get_user_prefs(user_id)
+        existing[key] = value
+        
+        payload = {
+            "user_id": user_id,
+            "preferences": existing,
+            "updated_at": self._now_iso()
+        }
+        self._run(self._table("user_prefs").upsert(payload), operation="set_user_pref")
+
+    def register_skill(
+        self, 
+        name: str, 
+        description: str, 
+        parameters: Dict, 
+        workflow_def: Dict,
+        enabled: bool = True
+    ) -> str:
+        payload = {
+            "name": name,
+            "description": description,
+            "parameters": parameters,
+            "workflow_def": workflow_def,
+            "enabled": enabled,
+            "created_at": self._now_iso()
+        }
+        # Upsert by name if possible, but standard upsert needs unique constraint/index
+        # We assume 'name' has a unique constraint in schema
+        rows = self._run(
+            self._table("skills_registry").upsert(payload, on_conflict="name").select(), 
+            operation="register_skill"
+        )
+        if rows:
+            return rows[0]["id"]
+        return ""
+
+    def list_skills(self, enabled_only: bool = True) -> List[Dict]:
+        query = self._table("skills_registry").select("*")
+        if enabled_only:
+            query = query.eq("enabled", True)
+        return self._run(query, operation="list_skills")
+
+    def update_skill(self, skill_id: str, enabled: bool) -> Optional[Dict]:
+        """Update a skill's enabled status.
+
+        Args:
+            skill_id: The skill ID to update.
+            enabled: The new enabled status.
+
+        Returns:
+            The updated skill dict if found, None otherwise.
+        """
+        rows = self._run(
+            self._table("skills_registry")
+            .update({"enabled": enabled})
+            .eq("id", skill_id)
+            .select(),
+            operation="update_skill",
+        )
+        if rows:
+            return rows[0]
+        return None

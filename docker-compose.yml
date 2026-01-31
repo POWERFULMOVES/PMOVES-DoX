@@ -1,37 +1,69 @@
-services:
-  ollama:
-    image: ollama/ollama:latest
-    profiles: ["ollama"]
-    volumes:
-      - ollama:/root/.ollama
-    restart: unless-stopped
 
+services:
   backend:
     build:
       context: ./backend
       dockerfile: Dockerfile.gpu
     container_name: pmoves-dox-backend
+    volumes:
+      - ./backend/uploads:/app/uploads
+      - ./backend/artifacts:/app/artifacts
+      - ./backend/app:/app/app
+      - ./backend/data:/app/data
+      - hf-cache:/root/.cache/huggingface
+    env_file:
+      - path: env.shared
+        required: false
+      - .env.local
     environment:
-      - FRONTEND_ORIGIN=http://localhost:3737
-      - PORT=8484
+      # Override default values (env_file provides the actual values)
+      - DATABASE_URL=postgresql://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      - SUPABASE_URL=${SUPABASE_URL:-http://supabase-proxy:3000}
+      # Map parent env variable names to DoX expected names
+      # Support both SUPABASE_SERVICE_KEY (our standard) and SUPABASE_SERVICE_ROLE_KEY (Supabase CLI)
+      - SUPABASE_ANON_KEY=${SUPABASE_ANON_KEY}
+      - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_SERVICE_ROLE_KEY}}
+      - REDIS_URL=redis://redis:6379
+      - DB_BACKEND=${DB_BACKEND:-supabase}
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001,http://localhost:3001,http://127.0.0.1:3001
+      - PORT=${BACKEND_PORT:-8484}
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
       - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}
-      - OLLAMA_BASE_URL=http://ollama:11434
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_OLLAMA_URL=${EMBEDDING_OLLAMA_URL:-http://ollama:11434}
       - AUTO_MIGRATE=${AUTO_MIGRATE:-false}
+      # Device selection - defaults to cpu for CI/staging, override in .env for GPU
+      - DEFAULT_DEVICE=${DEFAULT_DEVICE:-cpu}
+      - SEARCH_DEVICE=${SEARCH_DEVICE:-${DEFAULT_DEVICE:-cpu}}
+      - DOCLING_DEVICE=${DOCLING_DEVICE:-${DEFAULT_DEVICE:-cpu}}
       - HRM_ENABLED=${HRM_ENABLED:-false}
       - HRM_MMAX=${HRM_MMAX:-6}
       - HRM_MMIN=${HRM_MMIN:-2}
       - XML_XPATH_MAP=${XML_XPATH_MAP:-}
       - XML_XPATH_MAP_FILE=${XML_XPATH_MAP_FILE:-}
-      - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-false}
+      - OPEN_PDF_ENABLED=${OPEN_PDF_ENABLED:-true}
+      - LANGEXTRACT_API_KEY=${GOOGLE_API_KEY:-}
+      # Use TensorZero gateway as OpenAI-compatible endpoint
+      - OPENAI_BASE_URL=${TENSORZERO_URL:-http://tensorzero-gateway:3030}/openai/v1
+      - TENSORZERO_BASE_URL=${TENSORZERO_URL:-http://tensorzero-gateway:3030}
+      - OPENAI_API_KEY=${OPENAI_API_KEY}
+      # TensorZero Embeddings (for SearchIndex - uses GPU Orchestrator)
+      - TENSORZERO_EMBEDDING_MODEL=${TENSORZERO_EMBEDDING_MODEL:-qwen3_embedding_8b_local}
+      # Neo4j Knowledge Graph - Local (DoX container)
+      - NEO4J_LOCAL_URI=bolt://neo4j:7687
+      - NEO4J_LOCAL_USER=neo4j
+      # Neo4j Knowledge Graph - Parent (PMOVES.AI shared)
+      - NEO4J_PARENT_URI=bolt://pmoves-neo4j-1:7687
+      - NEO4J_PARENT_USER=neo4j
     ports:
       - "8484:8484"
-    volumes:
-      - ./backend/uploads:/app/uploads
-      - ./backend/artifacts:/app/artifacts
-      - ./samples:/app/samples
-      - ./watch:/app/watch
-      - hf-cache:/root/.cache/huggingface
+    networks:
+      - api_tier
+      - app_tier
+      - bus_tier
+      - data_tier
+      - pmoves_data  # Connect to parent PMOVES.AI services (TensorZero, Neo4j)
     deploy:
       resources:
         reservations:
@@ -39,26 +71,237 @@ services:
             - driver: nvidia
               count: all
               capabilities: [gpu]
-    healthcheck:
-      test: ["CMD", "wget", "-qO", "-", "http://localhost:8484/"]
-      interval: 15s
-      timeout: 5s
-      retries: 5
+    depends_on:
+      - supabase-db
+      - nats
     restart: unless-stopped
-    # No hard dependency on ollama; backend works without it
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8484/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
 
   frontend:
     build:
       context: ./frontend
       dockerfile: Dockerfile
+      args:
+        NEXT_PUBLIC_API_BASE: /api
+        NEXT_PUBLIC_NATS_WS_URL: ws://localhost:9223
     container_name: pmoves-dox-frontend
+    env_file:
+      - path: env.shared
+        required: false
+      - .env.local
     environment:
-      - NEXT_PUBLIC_API_BASE=http://localhost:8484
-      - PORT=3737
+      - API_URL=http://backend:8484
+      - NEXT_PUBLIC_API_BASE=/api
+      - NEXT_PUBLIC_NATS_WS_URL=ws://localhost:9223
+      - PORT=3001
     ports:
-      - "3737:3737"
+      - "3001:3001"
+    networks:
+      - api_tier
     depends_on:
       - backend
+    restart: unless-stopped
+
+  nats:
+    image: nats:latest
+    container_name: pmoves-dox-nats
+    command: -c /etc/nats/nats.conf
+    ports:
+      - "4223:4222"
+      - "8223:8222"
+      - "9223:9222"
+    volumes:
+      - ./backend/nats-config/nats.conf:/etc/nats/nats.conf
+    networks:
+      - bus_tier
+      - api_tier
+    restart: unless-stopped
+    healthcheck:
+      # NOTE: NATS scratch image has no shell tools. --help verifies binary exists
+      # but doesn't confirm the server is listening. Enable http_port: 8222 for
+      # monitoring endpoint if a more robust healthcheck is required.
+      test: ["CMD", "nats-server", "--help"]
+      interval: 30s
+      timeout: 5s
+      retries: 3
+
+  supabase-db:
+    image: supabase/postgres:15.1.0.117
+    container_name: supabase-db
+    env_file:
+      - path: env.shared
+        required: false
+      - .env.local
+    environment:
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+    networks:
+      - data_tier
+    volumes:
+      - supabase_data:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD", "pg_isready", "-U", "postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  supabase-rest:
+    image: postgrest/postgrest:v11.1.0
+    container_name: supabase-rest
+    env_file:
+      - path: env.shared
+        required: false
+      - .env.local
+    environment:
+      PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
+      PGRST_DB_SCHEMA: public,storage,graphql_public
+      PGRST_DB_ANON_ROLE: anon
+      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      # Serve API at /rest/v1 prefix for Supabase Python client compatibility
+      PGRST_SERVER_UNIX_SOCKET_MODE: ""
+      PGRST_OPENAPI_SERVER_PROXY_URI: http://localhost:54321/rest/v1
+    # No host port - accessed via supabase-proxy
+    networks:
+      - api_tier
+      - data_tier
+    depends_on:
+      - supabase-db
+
+  # Nginx proxy to route /rest/v1/* to PostgREST root (for supabase-py compatibility)
+  supabase-proxy:
+    image: nginx:alpine
+    container_name: supabase-proxy
+    volumes:
+      - ./nginx/supabase-proxy.conf:/etc/nginx/conf.d/default.conf:ro
+    ports:
+      - "54321:3000"
+    networks:
+      - api_tier
+      - data_tier
+    depends_on:
+      - supabase-rest
+
+  cipher-service:
+    container_name: pmoves-dox-cipher
+    build:
+      context: ./external/PMOVES-BoTZ/features/cipher/pmoves_cipher
+      dockerfile: Dockerfile
+    # Internal service: No ports exposed to host. Reachable via http://cipher-service:3000 on app_tier
+    networks:
+      - app_tier
+    environment:
+      - CIPHER_API_PREFIX=""
+      - NODE_ENV=production
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - SEARCH_DEVICE=cpu
+    volumes:
+      - ./external/PMOVES-BoTZ/features/cipher/pmoves_cipher/memAgent/cipher.yml:/app/memAgent/cipher.yml
+      - cipher-data:/app/.cipher
+    depends_on:
+      - ollama
+      - nats
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "nc", "-z", "127.0.0.1", "3000"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  ollama:
+    image: ollama/ollama:latest
+    container_name: pmoves-dox-ollama-1
+    ports:
+      - "11435:11434"
+    volumes:
+      - ollama_data:/root/.ollama
+    networks:
+      - api_tier
+      - app_tier
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+    restart: unless-stopped
+
+  neo4j:
+    image: neo4j:5.15-community
+    container_name: pmoves-dox-neo4j
+    # Note: Don't use env_file - Neo4j interprets all NEO4J_* vars as config settings
+    environment:
+      # Minimal Neo4j 5.x community config (no EULA needed for community)
+      - NEO4J_AUTH=neo4j/${NEO4J_PASSWORD}
+      - NEO4J_dbms_memory_heap_initial__size=512m
+      - NEO4J_dbms_memory_heap_max__size=1G
+      - NEO4J_dbms_memory_pagecache_size=512m
+      - NEO4J_dbms_connector_bolt_advertised__address=:17687
+      - NEO4J_dbms_connector_http_advertised__address=:17474
+    ports:
+      - "17474:7474"  # HTTP (different port to avoid conflict with parent)
+      - "17687:7687"  # Bolt protocol
+    volumes:
+      - neo4j-data:/data
+      - neo4j-logs:/logs
+    networks:
+      - data_tier
+      - pmoves_data  # Connect to parent Neo4j for shared knowledge graphs
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://localhost:7474 || exit 1"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    restart: unless-stopped
+
+  # ClickHouse - TensorZero Observability Backend (TIER 4)
+  # Enables full observability for standalone mode with metrics and traces
+  clickhouse:
+    image: clickhouse/clickhouse-server:24.12-alpine
+    container_name: pmoves-dox-clickhouse
+    hostname: tensorzero-clickhouse
+    environment:
+      CLICKHOUSE_USER: ${CLICKHOUSE_USER}
+      CLICKHOUSE_PASSWORD: ${CLICKHOUSE_PASSWORD}
+      CLICKHOUSE_DEFAULT_ACCESS_MANAGEMENT: 1
+      CLICKHOUSE_DB: default
+    ports:
+      - "8123:8123"   # HTTP API
+      - "9000:9000"   # Native protocol
+    volumes:
+      - clickhouse-data:/var/lib/clickhouse
+      - ./config/clickhouse-listen.xml:/etc/clickhouse-server/config.d/listen.xml:ro
+    networks:
+      - data_tier
+      - app_tier
+    healthcheck:
+      test: ["CMD-SHELL", "wget -qO- http://127.0.0.1:8123/ping || curl -sf http://127.0.0.1:8123/ping"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 30s
+    restart: unless-stopped
+
+  glances:
+    image: nicolargo/glances:latest-full
+    container_name: pmoves-dox-glancer
+    ports:
+      - "61208:61208"
+    volumes:
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+      - ./external/Pmoves-Glancer/conf/glances.conf:/glances/conf/glances.conf
+    environment:
+      - GLANCES_OPT=-C /glances/conf/glances.conf -w
+      - TZ=America/New_York
+    networks:
+      - api_tier
+      - app_tier
+      - bus_tier
     restart: unless-stopped
 
   datavzrd:
@@ -73,6 +316,8 @@ services:
       - ./backend/artifacts:/app/artifacts
     ports:
       - "5173:5173"
+    networks:
+      - app_tier
     depends_on:
       - backend
     restart: unless-stopped
@@ -84,17 +329,225 @@ services:
     container_name: schemavzrd
     profiles: ["tools"]
     environment:
-      - DB_URL=${DB_URL:-}
+      - DB_URL=
       - OUTPUT_DIR=/app/out/schema
     volumes:
       - ./backend/artifacts:/app/out
     ports:
       - "5174:5174"
+    networks:
+      - app_tier
     restart: unless-stopped
 
+
+  # Phase 9: Internal BoTZ Agents
+
+  cipher:
+    build:
+      context: ./external/PMOVES-BotZ-gateway/sample-servers/mcp-proxy
+    container_name: pmoves-botz-cipher
+    environment:
+      - MCP_COMMAND=python
+      - MCP_ARGS=/app/cipher/app_memory.py
+    ports:
+      - "3025:8000"
+    volumes:
+      - ./external/PMOVES-BoTZ/features/cipher:/app/cipher
+      - cipher-data:/data
+    command: ["/usr/local/bin/fastmcp", "run", "src/main.py:app", "--transport", "streamable-http", "--port", "8000", "--host", "0.0.0.0"]
+    healthcheck:
+      # FastMCP streamable-http - check MCP endpoint with required headers
+      test: ["CMD-SHELL", "curl -sf -X POST -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' http://localhost:8000/mcp -d '{}'"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+    networks:
+      - app_tier
+      - api_tier
+    restart: unless-stopped
+
+  postman-agent:
+    build:
+      context: ./external/PMOVES-BotZ-gateway/sample-servers/mcp-proxy
+    container_name: pmoves-botz-postman
+    env_file:
+      - path: env.shared
+        required: false
+      - .env.local
+    environment:
+      - MCP_COMMAND=npx
+      - MCP_ARGS=@postman/postman-mcp-server@latest --full
+      - POSTMAN_API_KEY=${POSTMAN_API_KEY}
+    ports:
+      - "3026:8000"
+    networks:
+      - app_tier
+      - api_tier
+    restart: unless-stopped
+
+  docling:
+    build:
+      context: ./external/PMOVES-BoTZ/features/docling
+      dockerfile: Dockerfile.docling-mcp
+    container_name: pmoves-botz-docling
+    ports:
+      - "3020:8020"
+    command: ["python", "docling_mcp_server.py", "--transport", "streamable-http", "--port", "8020", "--host", "0.0.0.0"]
+    networks:
+      - app_tier
+      - api_tier
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8020/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  tensorzero:
+    image: tensorzero/gateway:latest
+    container_name: pmoves-botz-tensorzero
+    command: ["--config-file", "/app/config/tensorzero.toml"]
+    ports:
+      # Only expose 3030 - port 3000 reserved for Tokenism
+      - "3030:3000"  # TensorZero gateway (internal container uses :3000)
+    volumes:
+      - ./tensorzero.toml:/app/config/tensorzero.toml
+    env_file:
+      - path: env.shared
+        required: false
+      - .env.local
+    environment:
+      - TENSORZERO_PROVIDER_OPENROUTER_API_KEY=${OPENROUTER_API_KEY}
+      - GOOGLE_AI_STUDIO_API_KEY=${GOOGLE_API_KEY}
+      - TENSORZERO_CLICKHOUSE_URL=http://${CLICKHOUSE_USER}:${CLICKHOUSE_PASSWORD}@tensorzero-clickhouse:8123/default
+    extra_hosts:
+      - "host.docker.internal:host-gateway"
+    networks:
+      app_tier:
+        aliases:
+          - tensorzero-gateway  # Network alias for service discovery
+      api_tier:
+        aliases:
+          - tensorzero-gateway
+      data_tier:
+    depends_on:
+      clickhouse:
+        condition: service_healthy
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:3000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  agent-zero:
+    build:
+      context: ./external/PMOVES-Agent-Zero
+      dockerfile: DockerfileLocal
+    container_name: pmoves-agent-zero
+    ports:
+      - "50051:50051" # Agent Zero MCP/Web UI endpoint
+    volumes:
+      - ./external/PMOVES-Agent-Zero:/app
+      - agent-zero-data:/data
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: all
+              capabilities: [gpu]
+    environment:
+      PROFILE: pmoves_custom
+      # MCP Server Configuration (docking pattern)
+      # Enable MCP server so UI instance can connect to API MCP instance
+      MCP_SERVER_ENABLED: "${AGENT_ZERO_MCP_ENABLED:-true}"
+      MCP_SERVER_TOKEN: "${AGENT_ZERO_MCP_TOKEN}"
+      # Web UI available on WEB_UI_PORT (runs alongside MCP server)
+      # MCP endpoint: http://pmoves-agent-zero:50051/mcp/t-{token}/sse
+      WEB_UI_PORT: "50051"
+      # TensorZero integration for LLM orchestration
+      TENSORZERO_API_BASE: http://tensorzero-gateway:3030/v1
+    networks:
+      - app_tier
+      - api_tier
+      - bus_tier
+    depends_on:
+      - tensorzero
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:50051/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
 networks:
-  default:
-    name: pmoves-dox-net
+  # PMOVES-DoX Standalone Networks (namespaced to avoid conflicts with parent PMOVES.AI)
+  # In docked mode, these are overridden to connect to parent networks
+  api_tier:
+    driver: bridge
+    name: pmoves_dox_api
+    ipam:
+      config:
+        - subnet: 172.31.1.0/24  # Different from parent's 172.30.1.0/24
+
+  app_tier:
+    driver: bridge
+    name: pmoves_dox_app
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.2.0/24  # Different from parent's 172.30.2.0/24
+
+  bus_tier:
+    driver: bridge
+    name: pmoves_dox_bus
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.3.0/24  # Different from parent's 172.30.3.0/24
+
+  data_tier:
+    driver: bridge
+    name: pmoves_dox_data
+    internal: true
+    ipam:
+      config:
+        - subnet: 172.31.4.0/24  # DoX-only data tier
+
+  monitoring_tier:
+    driver: bridge
+    name: pmoves_dox_monitoring
+    ipam:
+      config:
+        - subnet: 172.31.5.0/24  # DoX-only monitoring tier
+
+  # External parent networks (for docked mode - connected via docker-compose.docked.yml)
+  pmoves_api:
+    external: true
+    name: pmoves_api
+
+  pmoves_app:
+    external: true
+    name: pmoves_app
+
+  pmoves_bus:
+    external: true
+    name: pmoves_bus
+
+  pmoves_data:
+    external: true
+    name: pmoves_data
+
 volumes:
   hf-cache:
   ollama:
+  cipher-data:
+  supabase_data:
+  nats_data:
+  ollama_data:
+  neo4j-data:
+  neo4j-logs:
+  agent-zero-data:
+  clickhouse-data:
