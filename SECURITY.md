@@ -70,6 +70,32 @@ We take security vulnerabilities seriously. If you discover a security issue, pl
 - Validate all inputs
 - Keep dependencies updated
 
+#### JWT Authentication (v1.5.0+)
+
+PMOVES-DoX implements JWT-based authentication using Supabase JWT validation:
+
+- **Algorithm**: HS256 (HMAC-SHA256) with shared secret
+- **Dependency**: `python-jose[cryptography] >= 3.5.0` (CVE fixes included)
+- **Environment Variables**:
+  - `SUPABASE_JWT_SECRET`: Required for JWT validation in production
+  - `ENVIRONMENT`: Defaults to `production` (set to `development` for bypass mode)
+  - `FRONTEND_ORIGIN`: CORS-allowed origins (comma-separated)
+
+- **Authentication Modes**:
+  - `require_auth`: Requires valid JWT, rejects anonymous tokens
+  - `get_current_user`: Returns authenticated user ID
+  - `optional_auth`: Allows anonymous access with logging
+
+- **Production Safeguards**:
+  - Startup raises `RuntimeError` if `python-jose` not installed in production
+  - Startup raises `RuntimeError` if `SUPABASE_JWT_SECRET` not configured in production
+  - Anonymous Supabase tokens (role="anon") are explicitly rejected
+
+- **Protected Endpoints**:
+  - `/search/rebuild` - Search index rebuild (authentication required)
+  - `/documents/delete/*` - Document deletion (authentication required)
+  - Database reset operations (authentication required)
+
 ## Known Security Considerations
 
 ### Standalone Mode
