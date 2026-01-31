@@ -1,4 +1,4 @@
-from fastapi import APIRouter, HTTPException, Query, Body, UploadFile, File, Form
+from fastapi import APIRouter, HTTPException, Query, Body, UploadFile, File, Form, Depends
 from pydantic import BaseModel, Field
 from typing import List, Dict, Any, Optional, Literal
 import asyncio
@@ -20,6 +20,7 @@ from app.globals import (
     ARTIFACTS_DIR, env_flag, UPLOAD_DIR
 )
 from app.hrm import HRMConfig, refine_sort_digits
+from app.auth import get_current_user, optional_auth
 # from app.ingestion.poml_builder import build_poml
 
 router = APIRouter()
@@ -92,14 +93,14 @@ class EchoRequest(BaseModel):
 # ---------------- Endpoints ----------------
 
 @router.get("/facts")
-async def get_facts(report_week: str = None):
-    """Get all facts, optionally filtered by report week"""
+async def get_facts(report_week: str = None, _user_id: str = Depends(optional_auth)):
+    """Get all facts, optionally filtered by report week (optionally authenticated)."""
     facts = db.get_facts(report_week)
     return {"facts": facts}
 
 @router.get("/analysis/financials")
-async def get_financial_statements(artifact_id: str | None = None):
-    """Return detected financial statements from processed tables."""
+async def get_financial_statements(artifact_id: str | None = None, _user_id: str = Depends(optional_auth)):
+    """Return detected financial statements from processed tables (optionally authenticated)."""
     statements: List[Dict[str, Any]] = []
     for ev in db.get_all_evidence():
         if artifact_id and ev.get("artifact_id") != artifact_id:
@@ -139,8 +140,8 @@ async def get_financial_statements(artifact_id: str | None = None):
     return {"statements": statements}
 
 @router.get("/evidence/{evidence_id}")
-async def get_evidence(evidence_id: str):
-    """Get evidence by ID"""
+async def get_evidence(evidence_id: str, _user_id: str = Depends(optional_auth)):
+    """Get evidence by ID (optionally authenticated)."""
     evidence = db.get_evidence(evidence_id)
     if not evidence:
         raise HTTPException(404, "Evidence not found")
@@ -150,8 +151,9 @@ async def get_evidence(evidence_id: str):
 async def ask_question(
     question: str,
     use_hrm: bool = Query(False, description="Enable HRM sidecar (if supported)"),
+    _user_id: str = Depends(optional_auth),
 ):
-    """Ask a question and get answer with citations."""
+    """Ask a question and get answer with citations (optionally authenticated)."""
     t0 = time.time()
     result = await qa_engine.ask(question)
     if HRM_ENABLED and use_hrm:
@@ -169,8 +171,8 @@ async def ask_question(
     return result
 
 @router.delete("/reset")
-async def reset_database():
-    """Clear all data"""
+async def reset_database(_user_id: str = Depends(get_current_user)):
+    """Clear all data (authentication required)."""
     db.reset()
     return {"status": "Database reset"}
 

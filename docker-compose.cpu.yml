@@ -42,6 +42,7 @@ services:
       - NEXT_PUBLIC_POLL_INTERVAL_MS=3000
     ports:
       - "3737:3737"
+      - "3000:3737"  # Map port 3000 to 3737 for CI UI smoke test compatibility
     depends_on:
       - backend
     restart: unless-stopped

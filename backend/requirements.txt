@@ -41,6 +41,5 @@ google-cloud-aiplatform>=1.38.0
 aiohttp>=3.13.3
 urllib3>=2.6.3
 filelock>=3.20.3
-# JWT Authentication and security dependencies
-python-jose[cryptography]>=3.3.0  # JWT validation
-python-multipart>=0.0.5            # Secure file uploads
+# JWT Authentication (>=3.5.0 for CVE fixes)
+python-jose[cryptography]>=3.5.0
