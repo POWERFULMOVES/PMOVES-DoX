@@ -44,8 +44,22 @@ except ImportError:
 # Supabase JWT secret (shared with PMOVES.AI)
 JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
 
-# Development mode flag
-DEV_MODE = os.getenv("ENVIRONMENT", "development") == "development"
+# Development mode flag - defaults to production for security
+# Explicitly set ENVIRONMENT=development to enable dev mode bypass
+DEV_MODE = os.getenv("ENVIRONMENT", "production") == "development"
+
+# Startup security guard
+if not DEV_MODE and not HAS_JOSE:
+    raise RuntimeError(
+        "python-jose is required in production mode. "
+        "Install with: pip install 'python-jose[cryptography]>=3.5.0'"
+    )
+
+if not DEV_MODE and not JWT_SECRET:
+    raise RuntimeError(
+        "SUPABASE_JWT_SECRET must be configured in production mode. "
+        "Set the SUPABASE_JWT_SECRET environment variable."
+    )
 
 # Log configuration status at startup
 if not JWT_SECRET:
@@ -54,10 +68,8 @@ if not JWT_SECRET:
             "SUPABASE_JWT_SECRET not configured - using dev mode bypass. "
             "Configure SUPABASE_JWT_SECRET for proper authentication."
         )
-    else:
-        logger.error(
-            "SUPABASE_JWT_SECRET not configured in production - authentication will FAIL"
-        )
+else:
+    logger.info("JWT authentication configured properly")
 
 
 def validate_jwt_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]], str]:
@@ -140,7 +152,7 @@ def validate_jwt_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]], str]
         return False, None, "CONFIG_ERROR"
 
 
-def require_auth(auth_header: str = Header(...)) -> Dict[str, Any]:
+def require_auth(authorization: Optional[str] = Header(None)) -> Dict[str, Any]:
     """
     Validate Authorization header and extract user info.
 
@@ -150,7 +162,7 @@ def require_auth(auth_header: str = Header(...)) -> Dict[str, Any]:
     FastAPI dependency that validates JWT and returns user payload.
 
     Args:
-        auth_header: Authorization header value (e.g., "Bearer <token>")
+        authorization: Authorization header value (e.g., "Bearer <token>")
 
     Returns:
         Dict with JWT payload containing user info
@@ -158,16 +170,17 @@ def require_auth(auth_header: str = Header(...)) -> Dict[str, Any]:
     Raises:
         HTTPException: 401 if authentication fails
     """
-    is_valid, payload, message = _extract_and_validate_token(auth_header)
+    if not authorization:
+        raise HTTPException(
+            status_code=401,
+            detail="Missing Authorization header",
+            headers={"WWW-Authenticate": "Bearer"},
+        )
+
+    is_valid, payload, message = _extract_and_validate_token(authorization)
 
     if not is_valid:
-        if message == "MISSING_AUTH_HEADER":
-            raise HTTPException(
-                status_code=401,
-                detail="Missing Authorization header",
-                headers={"WWW-Authenticate": "Bearer"},
-            )
-        elif message == "MISSING_TOKEN":
+        if message == "MISSING_TOKEN":
             raise HTTPException(
                 status_code=401,
                 detail="No token provided",

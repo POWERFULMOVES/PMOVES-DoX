@@ -94,9 +94,9 @@ class EchoRequest(BaseModel):
 
 @router.get("/facts")
 async def get_facts(
-    report_week: str = None,
+    report_week: Optional[str] = None,
     # TODO: Use user_id for user-scoped results in future implementation
-    _user_id: str = Depends(optional_auth)
+    _user_id: Optional[str] = Depends(optional_auth)
 ):
     """Get all facts, optionally filtered by report week.
 
@@ -110,7 +110,7 @@ async def get_facts(
 async def get_financial_statements(
     artifact_id: str | None = None,
     # TODO: Use user_id for user-scoped results in future implementation
-    _user_id: str = Depends(optional_auth)
+    _user_id: Optional[str] = Depends(optional_auth)
 ):
     """Return detected financial statements from processed tables.
 
@@ -159,7 +159,7 @@ async def get_financial_statements(
 async def get_evidence(
     evidence_id: str,
     # TODO: Use user_id for user-scoped access control in future implementation
-    _user_id: str = Depends(optional_auth)
+    _user_id: Optional[str] = Depends(optional_auth)
 ):
     """Get evidence by ID.
 
@@ -176,7 +176,7 @@ async def ask_question(
     question: str,
     use_hrm: bool = Query(False, description="Enable HRM sidecar (if supported)"),
     # TODO: Use user_id for user-scoped context in future implementation
-    _user_id: str = Depends(optional_auth),
+    _user_id: Optional[str] = Depends(optional_auth),
 ):
     """Ask a question and get answer with citations.
 

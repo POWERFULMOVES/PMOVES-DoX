@@ -5,7 +5,7 @@ services:
       dockerfile: Dockerfile
     container_name: pmoves-dox-backend-cpu
     environment:
-      - FRONTEND_ORIGIN=http://localhost:3737
+      - FRONTEND_ORIGIN=http://localhost:3737,http://localhost:3000
       - PORT=8484
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
       - DOCLING_VLM_REPO=${DOCLING_VLM_REPO:-}

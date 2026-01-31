@@ -1,5 +1,6 @@
 from fastapi import APIRouter, Depends
 from pydantic import BaseModel
+from typing import Optional
 import time
 from app.globals import search_index
 from app.auth import get_current_user, optional_auth
@@ -15,7 +16,7 @@ class SearchRequest(BaseModel):
 async def search_documents(
     req: SearchRequest,
     # TODO: Use user_id for user-scoped search results in future implementation
-    _user_id: str = Depends(optional_auth)
+    _user_id: Optional[str] = Depends(optional_auth)
 ):
     """Search documents.
 
