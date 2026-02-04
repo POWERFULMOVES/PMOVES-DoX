@@ -1,4 +1,4 @@
-create extension if not exists "uuid-ossp";
+-- gen_random_uuid() is built-in (PostgreSQL 13+), no extension needed
 create extension if not exists "pgcrypto";
 create extension if not exists "vector";
 
