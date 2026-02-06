@@ -71,7 +71,7 @@ PostgREST Configuration:
 PGRST_JWT_SECRET=xxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxxx
 
 Service Role Key (sample payload):
-eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
+<base64-encoded-jwt-with-role-service_role>
 ```
 
 ### Environment Configuration
