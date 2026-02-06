@@ -10,8 +10,8 @@
 #   DOCKED MODE:   Loads from parent PMOVES.AI
 #   STANDALONE:    Active Fetcher -> GitHub Secrets -> Parent -> Manual
 #
-# Usage: source scripts/bootstrap_env.sh
-#        OR ./scripts/bootstrap_env.sh
+# Usage: source scripts/bootstrap_env.sh    # Loads functions only
+#        ./scripts/bootstrap_env.sh         # Runs full bootstrap
 #
 # Platforms: Linux, macOS, WSL2, Git Bash (Windows)
 #
@@ -84,7 +84,7 @@ load_from_active_fetcher() {
     # Execute the parent's credential fetcher
     local temp_output="${output_file}.active"
 
-    if PYTHONPATH="${PARENT_REPO}:$PYTHONPATH" python3 "$fetcher_module" fetch \
+    if PYTHONPATH="${PARENT_REPO}:${PYTHONPATH:-}" python3 "$fetcher_module" fetch \
         --github-owner "$github_owner" \
         --github-repo "$github_repo" \
         --output "$temp_output" \
@@ -93,9 +93,9 @@ load_from_active_fetcher() {
 
         # Merge with output
         if [[ -f "$temp_output" ]]; then
+            local var_count=$(grep -c '^[A-Z_]=' "$temp_output" 2>/dev/null || echo "0")
             cat "$temp_output" >> "$output_file"
             rm -f "$temp_output"
-            local var_count=$(grep -c '^[A-Z_]=' "$temp_output" 2>/dev/null || echo "0")
             log_success "  Fetched $var_count credentials via active fetcher"
             return 0
         fi
@@ -311,7 +311,8 @@ main() {
         # Merge into .env.local
         log_info "Merging into .env.local..."
 
-        for line in $(grep '^[A-Z_]=' "$output_file" 2>/dev/null); do
+        while IFS= read -r line; do
+            [[ -z "$line" ]] && continue
             local key="${line%%=*}"
             local value="${line#*=}"
 
@@ -319,7 +320,7 @@ main() {
             grep -v "^${key}=" "$ENV_LOCAL" > "${ENV_LOCAL}.tmp" 2>/dev/null || true
             mv "${ENV_LOCAL}.tmp" "$ENV_LOCAL" 2>/dev/null || touch "$ENV_LOCAL"
             echo "${key}=${value}" >> "$ENV_LOCAL"
-        done
+        done < <(grep '^[A-Z_]=' "$output_file" 2>/dev/null)
 
         rm -f "$output_file"
     else

@@ -1,5 +1,5 @@
--- gen_random_uuid() is built-in (PostgreSQL 13+), no extension needed
-create extension if not exists "pgcrypto";
+-- PostgreSQL 13+ provides gen_random_uuid() built-in (no uuid-ossp needed)
+-- pgcrypto not used in codebase, removed for PostgreSQL 17 compatibility
 create extension if not exists "vector";
 
 create table if not exists artifacts (
