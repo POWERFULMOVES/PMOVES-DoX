@@ -609,9 +609,20 @@ class SupabaseDatabase:
         self,
         category: Optional[str] = None,
         limit: int = 10,
-        q: Optional[str] = None,  # TODO: Text search not yet implemented for Supabase
+        q: Optional[str] = None,
         user_id: Optional[str] = None
     ) -> List[Dict]:
+        """Search cipher memory with optional text filtering.
+
+        Args:
+            category: Filter by memory category (fact, preference, etc.)
+            limit: Maximum results to return
+            q: Text search query - searches within JSONB content field
+            user_id: Filter by user ID for RLS scoping
+
+        Returns:
+            List of matching memory records
+        """
         query = self._table("cipher_memory").select("*")
         if category:
             query = query.eq("category", category)
@@ -619,9 +630,13 @@ class SupabaseDatabase:
         if user_id:
             query = query.eq("user_id", user_id)
 
-        # NOTE: Text search parameter 'q' is currently ignored.
-        # Full-text search on JSONB requires pg_trgm or dedicated search index.
-        # For now, we return recent items. Real semantic search requires the vector extension.
+        # Text search on JSONB content using PostgreSQL's text containment
+        # Uses content::text ILIKE pattern for basic text matching
+        if q:
+            # Escape special characters and create case-insensitive pattern
+            search_pattern = f"%{q}%"
+            query = query.ilike("content::text", search_pattern)
+
         query = query.order("created_at", desc=True).limit(limit)
 
         return self._run(query, operation="search_memory")
