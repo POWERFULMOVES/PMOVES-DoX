@@ -36,6 +36,7 @@ dependencies = [
     "google-generativeai>=0.4.0",
     "google-cloud-aiplatform>=1.38.0",
     "bitsandbytes>=0.43.0; sys_platform != 'win32'",
+    "python-jose[cryptography]>=3.5.0",
 ]
 
 [project.optional-dependencies]
