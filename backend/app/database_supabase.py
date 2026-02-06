@@ -599,12 +599,8 @@ class SupabaseDatabase:
         # Include user_id for RLS scoping if provided
         if user_id:
             payload["user_id"] = user_id
-        # If accessing the native supabase client returning the inserted row:
-        # data = self._table("cipher_memory").insert(payload).execute()
-        # But we use the helper _run which returns a list of rows if configured correctly,
-        # or we might need to fetch the ID depending on the client config.
-        # Assuming defaults that return inserted data:
-        rows = self._run(self._table("cipher_memory").insert(payload).select(), operation="add_memory")
+        # Insert and return the inserted row (Supabase returns inserted data by default)
+        rows = self._run(self._table("cipher_memory").insert(payload), operation="add_memory")
         if rows and len(rows) > 0:
             return rows[0]["id"]
         return ""
@@ -670,11 +666,11 @@ class SupabaseDatabase:
         # Upsert by name if possible, but standard upsert needs unique constraint/index
         # We assume 'name' has a unique constraint in schema
         rows = self._run(
-            self._table("skills_registry").upsert(payload, on_conflict="name").select(), 
+            self._table("skills_registry").upsert(payload, on_conflict="name"),
             operation="register_skill"
         )
         if rows:
-            return rows[0]["id"]
+            return rows[0].get("id", "")
         return ""
 
     def list_skills(self, enabled_only: bool = True) -> List[Dict]:
@@ -696,8 +692,7 @@ class SupabaseDatabase:
         rows = self._run(
             self._table("skills_registry")
             .update({"enabled": enabled})
-            .eq("id", skill_id)
-            .select(),
+            .eq("id", skill_id),
             operation="update_skill",
         )
         if rows:
