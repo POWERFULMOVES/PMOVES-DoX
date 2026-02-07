@@ -356,8 +356,8 @@ services:
       - cipher-data:/data
     command: ["/usr/local/bin/fastmcp", "run", "src/main.py:app", "--transport", "streamable-http", "--port", "8000", "--host", "0.0.0.0"]
     healthcheck:
-      # FastMCP streamable-http - check MCP endpoint with required headers
-      test: ["CMD-SHELL", "curl -sf -X POST -H 'Accept: application/json, text/event-stream' -H 'Content-Type: application/json' http://localhost:8000/mcp -d '{}'"]
+      # FastMCP streamable-http - check port responds (400 = service running, rejects malformed request)
+      test: ["CMD-SHELL", "curl -s -o /dev/null -w '%{http_code}' http://localhost:8000/mcp | grep -qE '^[2-4][0-9]{2}$'"]
       interval: 30s
       timeout: 10s
       retries: 3
