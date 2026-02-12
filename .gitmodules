@@ -17,14 +17,10 @@
 [submodule "external/conductor"]
 	path = external/conductor
 	url = https://github.com/gemini-cli-extensions/conductor.git
-[submodule "external/PMOVES-Agent-Zero"]
-	path = external/PMOVES-Agent-Zero
-	url = https://github.com/POWERFULMOVES/PMOVES-Agent-Zero.git
-	branch = PMOVES.AI-Edition-Hardened-DoX
-[submodule "external/PMOVES-BoTZ"]
-	path = external/PMOVES-BoTZ
-	url = https://github.com/POWERFULMOVES/PMOVES-BoTZ.git
-	branch = PMOVES.AI-Edition-Hardened
+# NOTE: PMOVES-Agent-Zero and PMOVES-BoTZ removed to avoid circular references.
+# These are available as root-level submodules in the parent PMOVES.AI repository.
+# PMOVES-DoX integrates with these services via networking (NATS/gRPC/HTTP)
+# in docked/standalone/hybrid modes - not as nested git submodules.
 [submodule "external/PMOVES-BotZ-gateway"]
 	path = external/PMOVES-BotZ-gateway
 	url = https://github.com/POWERFULMOVES/PMOVES-BotZ-gateway.git
