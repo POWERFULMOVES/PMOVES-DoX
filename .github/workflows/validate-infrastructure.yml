@@ -1,0 +1,428 @@
+name: Validate Infrastructure Changes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'docker-compose*.yml'
+      - '.env.example'
+      - '.env.local.example'
+      - 'env.shared'
+      - 'Makefile'
+      - 'scripts/validate-changes.sh'
+  pull_request:
+    branches: [main]
+    paths:
+      - 'docker-compose*.yml'
+      - '.env.example'
+      - '.env.local.example'
+      - 'env.shared'
+      - 'Makefile'
+      - 'scripts/validate-changes.sh'
+  workflow_dispatch:  # Allow manual trigger
+
+permissions:
+  contents: read
+
+jobs:
+  validate-configuration:
+    name: Configuration Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: '3.11'
+
+      - name: Install validation dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install pyyaml yamllint
+
+      - name: Validate YAML syntax
+        run: |
+          echo "Checking YAML syntax for docker-compose files..."
+          for file in docker-compose*.yml; do
+            if [ -f "$file" ]; then
+              echo "  Validating $file..."
+              yamllint -d "{extends: default, rules: {line-length: disable}}" "$file" || {
+                echo "::error::YAML syntax error in $file"
+                exit 1
+              }
+            fi
+          done
+
+      - name: Validate docker-compose configuration
+        run: |
+          echo "Validating docker-compose files..."
+          # Install docker compose plugin if needed
+          docker version >/dev/null 2>&1 || {
+            echo "Docker not available in CI, skipping compose validation"
+            exit 0
+          }
+
+          for file in docker-compose*.yml; do
+            if [ -f "$file" ]; then
+              echo "  Checking $file..."
+              docker compose -f "$file" config --quiet 2>&1 || {
+                echo "::warning::$file has potential issues (may require env vars)"
+              }
+            fi
+          done
+
+  validate-environment:
+    name: Environment Variable Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for placeholder values
+        run: |
+          echo "Checking for placeholder values in env files..."
+          PLACEHOLDERS=(
+            "changeme"
+            "your_secret_here"
+            "your_api_key_here"
+            "replace_with_"
+          )
+
+          FILES_TO_CHECK=(".env.example" ".env.local.example")
+          FOUND_PLACEHOLDER=0
+
+          for env_file in "${FILES_TO_CHECK[@]}"; do
+            if [ ! -f "$env_file" ]; then
+              continue
+            fi
+
+            echo "  Checking $env_file..."
+            while IFS='=' read -r key value; do
+              # Skip comments and empty lines
+              [[ "$key" =~ ^#.*$ ]] && continue
+              [[ -z "$key" ]] && continue
+
+              for pattern in "${PLACEHOLDERS[@]}"; do
+                if [[ "$value" =~ $pattern ]]; then
+                  echo "::warning::$env_file: $key contains placeholder pattern '$pattern'"
+                  FOUND_PLACEHOLDER=1
+                fi
+              done
+            done < "$env_file"
+          done
+
+          if [ $FOUND_PLACEHOLDER -eq 0 ]; then
+            echo "  No placeholder values found"
+          fi
+
+      - name: Check for hardcoded secrets in docker-compose
+        run: |
+          echo "Checking docker-compose files for hardcoded secrets..."
+          if grep -rE "(password|PASSWORD|secret|SECRET)=[^$\{][a-zA-Z0-9]+" docker-compose*.yml 2>/dev/null; then
+            echo "::error::Found hardcoded credentials in docker-compose files"
+            exit 1
+          fi
+          echo "  No hardcoded secrets found"
+
+      - name: Validate environment variable consistency
+        run: |
+          echo "Checking environment variable consistency..."
+
+          # Extract vars from docker-compose files
+          USED_VARS=$(grep -roh '\$\{[A-Z_0-9]+' docker-compose*.yml 2>/dev/null | sed 's/\${//' | sort -u)
+
+          # Extract vars from env files
+          DECLARED_VARS=$(cat .env.example .env.local.example 2>/dev/null | grep -oP '^[A-Z_0-9]+' | sort -u)
+
+          # Check for used but not declared vars (skip system vars)
+          MISSING_COUNT=0
+          for var in $USED_VARS; do
+            case "$var" in
+              PATH|HOME|USER|PWD) continue ;;
+            esac
+
+            if ! echo "$DECLARED_VARS" | grep -q "^${var}$"; then
+              echo "::warning::\${$var} used in docker-compose but not declared in env files"
+              MISSING_COUNT=$((MISSING_COUNT + 1))
+            fi
+          done
+
+          if [ $MISSING_COUNT -eq 0 ]; then
+            echo "  All used variables are declared"
+          else
+            echo "  Found $MISSING_COUNT potentially undocumented variables"
+          fi
+
+  validate-network:
+    name: Network Configuration Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for port conflicts
+        run: |
+          echo "Checking for port conflicts in docker-compose files..."
+
+          # Extract all port mappings
+          ALL_PORTS=$(grep -roh '"[0-9]+:[0-9]+' docker-compose*.yml 2>/dev/null | tr -d '"' | cut -d: -f1 | sort -n)
+
+          # Check for duplicates
+          DUPLICATES=$(echo "$ALL_PORTS" | uniq -d)
+
+          if [ -n "$DUPLICATES" ]; then
+            echo "::error::Port conflicts detected:"
+            echo "$DUPLICATES" | while read port; do
+              echo "  Port $port declared multiple times"
+            done
+            exit 1
+          fi
+
+          # Validate port ranges
+          INVALID_PORTS=0
+          for port in $ALL_PORTS; do
+            if [ "$port" -lt 1024 ] || [ "$port" -gt 65535 ]; then
+              echo "::error::Port $port is out of valid range (1024-65535)"
+              INVALID_PORTS=$((INVALID_PORTS + 1))
+            fi
+          done
+
+          if [ $INVALID_PORTS -eq 0 ]; then
+            echo "  All ports are valid and unique"
+          else
+            exit 1
+          fi
+
+      - name: Check network configuration
+        run: |
+          echo "Validating network configuration..."
+
+          # Check for external networks that should exist
+          EXTERNAL_NETWORKS=$(grep -A 5 "^networks:" docker-compose*.yml | grep -c "external: true" || echo "0")
+
+          echo "  Found $EXTERNAL_NETWORKS external network declarations"
+
+          # Check for conflicting network names
+          NETWORK_NAMES=$(grep -roP "name: \K[a-z_]+" docker-compose*.yml | sort)
+          DUPLICATE_NETWORKS=$(echo "$NETWORK_NAMES" | uniq -d)
+
+          if [ -n "$DUPLICATE_NETWORKS" ]; then
+            echo "::warning::Duplicate network names found:"
+            echo "$DUPLICATE_NETWORKS"
+          else
+            echo "  Network configuration is valid"
+          fi
+
+  validate-dependencies:
+    name: Service Dependencies Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for circular dependencies
+        run: |
+          echo "Analyzing service dependencies..."
+
+          # Build dependency graph from docker-compose files
+          python3 << 'EOF'
+          import re
+          import sys
+          from collections import defaultdict
+
+          services = defaultdict(set)
+          all_services = set()
+
+          # Parse docker-compose files
+          for compose_file in ['docker-compose.yml', 'docker-compose.docked.yml']:
+              try:
+                  with open(compose_file, 'r') as f:
+                      content = f.read()
+              except FileNotFoundError:
+                  continue
+
+              # Find service definitions
+              service_matches = re.finditer(r'^  (\w+):', content, re.MULTILINE)
+              current_service = None
+
+              for match in service_matches:
+                  current_service = match.group(1)
+                  all_services.add(current_service)
+
+              # Find depends_on declarations
+              for match in re.finditer(r'depends_on:\s*\n((?:    - .+\n)*)', content):
+                  deps_text = match.group(1)
+                  if current_service:
+                      for dep in re.findall(r'- (\w+)', deps_text):
+                          services[current_service].add(dep)
+
+          # Detect cycles
+          def has_cycle(node, visited=None, rec_stack=None):
+              if visited is None:
+                  visited = set()
+              if rec_stack is None:
+                  rec_stack = set()
+
+              visited.add(node)
+              rec_stack.add(node)
+
+              for neighbor in services.get(node, []):
+                  if neighbor not in visited:
+                      if has_cycle(neighbor, visited, rec_stack):
+                          return True
+                  elif neighbor in rec_stack:
+                      return True
+
+              rec_stack.remove(node)
+              return False
+
+          # Check all services
+          has_error = False
+          for service in all_services:
+              if has_cycle(service):
+                  print(f"::error::Circular dependency detected involving service: {service}")
+                  has_error = True
+
+          if not has_error:
+              print("No circular dependencies found")
+
+          sys.exit(1 if has_error else 0)
+          EOF
+
+      - name: Validate image references
+        run: |
+          echo "Validating Docker image references..."
+
+          # Extract image declarations
+          IMAGES=$(grep -h "^  image:" docker-compose*.yml | sed 's/^  image: //' | sort -u)
+
+          INVALID_COUNT=0
+          for image in $IMAGES; do
+            # Skip local build images
+            if [[ "$image" == local/* ]]; then
+              continue
+            fi
+
+            # Check for placeholder images
+            if [[ "$image" =~ (placeholder|example|test.*image|your.*image) ]]; then
+              echo "::error::Placeholder image found: $image"
+              INVALID_COUNT=$((INVALID_COUNT + 1))
+            fi
+          done
+
+          if [ $INVALID_COUNT -eq 0 ]; then
+            echo "  All image references are valid"
+          else
+            exit 1
+          fi
+
+      - name: Check build context validity
+        run: |
+          echo "Checking build context directories..."
+
+          python3 << 'EOF'
+          import os
+          import re
+          import sys
+
+          contexts = []
+
+          # Find all build contexts
+          for compose_file in ['docker-compose.yml', 'docker-compose.docked.yml']:
+              try:
+                  with open(compose_file, 'r') as f:
+                      content = f.read()
+              except FileNotFoundError:
+                  continue
+
+              for match in re.finditer(r'context: (\S+)', content):
+                  contexts.append((compose_file, match.group(1)))
+
+          # Check if directories exist
+          missing = []
+          for compose_file, context in contexts:
+              if os.path.isdir(context):
+                  print(f"  ✓ {compose_file}: {context}")
+              else:
+                  print(f"::error file={compose_file}::Build context not found: {context}")
+                  missing.append(context)
+
+          sys.exit(1 if missing else 0)
+          EOF
+
+  validate-security:
+    name: Security Validation
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Check for exposed admin ports
+        run: |
+          echo "Checking for potentially exposed admin interfaces..."
+
+          # Common admin service ports
+          ADMIN_PORTS=(
+            "15672"  # RabbitMQ
+            "8083"   # Kafka UI
+            "9000"   # MinIO console
+            "8443"   # Various admin panels
+          )
+
+          for port in "${ADMIN_PORTS[@]}"; do
+            if grep -q ":${port}:" docker-compose*.yml 2>/dev/null; then
+              echo "::warning::Admin port ${port} exposed - ensure proper authentication"
+            fi
+          done
+
+          echo "  Security review complete"
+
+      - name: Check for privileged containers
+        run: |
+          if grep -q "privileged: true" docker-compose*.yml 2>/dev/null; then
+            echo "::error::Privileged containers detected - security risk"
+            exit 1
+          fi
+
+          echo "  No privileged containers found"
+
+      - name: Check for host filesystem mounts
+        run: |
+          HOST_MOUNTS=$(grep -c "/:/\|/host:/\|/root:/\|/home:" docker-compose*.yml 2>/dev/null || echo "0")
+
+          if [ "$HOST_MOUNTS" -gt 0 ]; then
+            echo "::warning::Found $HOST_MOUNTS host filesystem mount(s)"
+          fi
+
+  summary:
+    name: Validation Summary
+    runs-on: ubuntu-latest
+    needs: [validate-configuration, validate-environment, validate-network, validate-dependencies, validate-security]
+    if: always()
+    steps:
+      - name: Check results
+        run: |
+          echo "## Infrastructure Validation Results" >> $GITHUB_STEP_SUMMARY
+          echo "" >> $GITHUB_STEP_SUMMARY
+
+          # Check each job
+          for job in validate-configuration validate-environment validate-network validate-dependencies validate-security; do
+            result="${{ needs.$job.result }}"
+            if [ "$result" = "success" ]; then
+              echo "- $job: OK" >> $GITHUB_STEP_SUMMARY
+            else
+              echo "- $job: FAILED" >> $GITHUB_STEP_SUMMARY
+            fi
+          done
+
+      - name: Fail if any job failed
+        run: |
+          for job in validate-configuration validate-environment validate-network validate-dependencies validate-security; do
+            result="${{ needs.$job.result }}"
+            if [ "$result" != "success" ]; then
+              echo "Job $job failed"
+              exit 1
+            fi
+          done
