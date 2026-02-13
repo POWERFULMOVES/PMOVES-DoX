@@ -52,3 +52,8 @@
 [submodule "external/PMOVES-supabase"]
 	path = external/PMOVES-supabase
 	url = https://github.com/POWERFULMOVES/PMOVES-supabase.git
+
+[submodule "PMOVES-cipher"]
+	path = PMOVES-cipher
+	url = https://github.com/POWERFULMOVES/PMOVES-cipher.git
+	branch = PMOVES.AI-Edition-Hardened
