@@ -28,9 +28,9 @@ def is_docked_mode() -> bool:
 
     # Check NATS URL - parent uses port 4222, standalone uses 4223
     nats_url = os.getenv("NATS_URL", "")
-    if nats_url == "nats://nats:4222":
+    if nats_url in ("nats://nats:4222", "nats://nats:pmoves@nats:4222"):
         return True
-    if nats_url == "nats://nats:4223":
+    if nats_url in ("nats://nats:4223", "nats://nats:pmoves@nats:4223"):
         return False
 
     # Check database backend - supabase typically indicates docked mode
