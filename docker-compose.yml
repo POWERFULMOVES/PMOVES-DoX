@@ -25,7 +25,7 @@ services:
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_SERVICE_ROLE_KEY}}
       - REDIS_URL=redis://redis:6379
       - DB_BACKEND=${DB_BACKEND:-supabase}
-      - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - NATS_URL=${NATS_URL:-nats://nats:pmoves@nats:4222}
       - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001,http://localhost:3001,http://127.0.0.1:3001
       - PORT=${BACKEND_PORT:-8484}
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}

@@ -20,7 +20,7 @@ services:
       - TENSORZERO_CLICKHOUSE_URL=http://${CLICKHOUSE_USER:-tensorzero}:${CLICKHOUSE_PASSWORD:-tensorzero}@tensorzero-clickhouse:8123/default
 
       # Use parent NATS for cross-service messaging
-      - NATS_URL=nats://nats:4222
+      - NATS_URL=nats://nats:pmoves@nats:4222
 
       # Enable parent Neo4j dual-write (keep local for DoX-specific graphs)
       - NEO4J_PARENT_URI=bolt://pmoves-neo4j-1:7687
