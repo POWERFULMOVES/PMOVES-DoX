@@ -22,6 +22,9 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Lowercase repo name
+        id: repo
+        run: echo "name=${GITHUB_REPOSITORY,,}" >> "$GITHUB_OUTPUT"
       - name: Build and push backend (CPU)
         uses: docker/build-push-action@v6
         with:
@@ -29,8 +32,8 @@ jobs:
           file: ./backend/Dockerfile
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/pmoves-dox-backend:latest
-            ghcr.io/${{ github.repository }}/pmoves-dox-backend:${{ github.sha }}
+            ghcr.io/${{ steps.repo.outputs.name }}/pmoves-dox-backend:latest
+            ghcr.io/${{ steps.repo.outputs.name }}/pmoves-dox-backend:${{ github.sha }}
       - name: Build and push backend (GPU)
         uses: docker/build-push-action@v6
         with:
@@ -38,5 +41,5 @@ jobs:
           file: ./backend/Dockerfile.gpu
           push: true
           tags: |
-            ghcr.io/${{ github.repository }}/pmoves-dox-backend-gpu:latest
-            ghcr.io/${{ github.repository }}/pmoves-dox-backend-gpu:${{ github.sha }}
+            ghcr.io/${{ steps.repo.outputs.name }}/pmoves-dox-backend-gpu:latest
+            ghcr.io/${{ steps.repo.outputs.name }}/pmoves-dox-backend-gpu:${{ github.sha }}
