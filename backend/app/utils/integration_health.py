@@ -25,7 +25,7 @@ class IntegrationHealth:
             'TENSORZERO_BASE_URL',
             'http://tensorzero-gateway:3030'
         ).rstrip('/')
-        self.nats_url = os.getenv('NATS_URL', 'nats://nats:4222')
+        self.nats_url = os.getenv('NATS_URL', 'nats://nats:pmoves@nats:4222')
         self.gpu_orchestrator_url = os.getenv('GPU_ORCHESTRATOR_URL')
 
     async def check_tensorzero(self, timeout: float = 2.0) -> bool:

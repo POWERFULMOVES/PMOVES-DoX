@@ -6,7 +6,7 @@ from nats.errors import ConnectionClosedError, TimeoutError, NoRespondersError
 from nats.js.api import StreamConfig
 
 # Default to "nats" hostname for Docker, or can be overridden
-NATS_URL = os.getenv("NATS_URL", "nats://nats:4222")
+NATS_URL = os.getenv("NATS_URL", "nats://nats:pmoves@nats:4222")
 
 async def main():
     print(f"Connecting to NATS at {NATS_URL}...")

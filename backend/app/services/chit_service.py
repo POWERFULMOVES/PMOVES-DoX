@@ -153,11 +153,11 @@ class ChitService:
             return True
         # Check NATS URL - parent uses port 4222, standalone uses 4223
         nats_url = os.getenv("NATS_URL", "")
-        if nats_url == "nats://nats:4222":
+        if nats_url in ("nats://nats:4222", "nats://nats:pmoves@nats:4222"):
             return True
         return False
 
-    async def connect_nats(self, nats_url: str = "nats://nats:4222") -> None:
+    async def connect_nats(self, nats_url: str = "nats://nats:pmoves@nats:4222") -> None:
         """Connect to NATS and JetStream.
 
         In docked mode, connection failures are logged as warnings but don't

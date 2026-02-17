@@ -46,9 +46,9 @@ def is_docked_mode() -> bool:
 
     # Check NATS URL - parent uses port 4222, standalone uses 4223
     nats_url = os.getenv("NATS_URL", "")
-    if nats_url == "nats://nats:4222":
+    if nats_url in ("nats://nats:4222", "nats://nats:pmoves@nats:4222"):
         return True
-    if nats_url == "nats://nats:4223":
+    if nats_url in ("nats://nats:4223", "nats://nats:pmoves@nats:4223"):
         return False
 
     # Default to standalone if not explicitly docked
@@ -121,7 +121,7 @@ async def config():
         "open_pdf_enabled": env_flag("OPEN_PDF_ENABLED", False),
         "deployment": {
             "mode": "docked" if is_docked_mode() else "standalone",
-            "nats_url": os.getenv("NATS_URL", "nats://nats:4222"),
+            "nats_url": os.getenv("NATS_URL", "nats://nats:pmoves@nats:4222"),
             "tensorzero_url": os.getenv("TENSORZERO_BASE_URL", "http://tensorzero-gateway:3030"),
         },
     }

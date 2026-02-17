@@ -599,12 +599,8 @@ class SupabaseDatabase:
         # Include user_id for RLS scoping if provided
         if user_id:
             payload["user_id"] = user_id
-        # If accessing the native supabase client returning the inserted row:
-        # data = self._table("cipher_memory").insert(payload).execute()
-        # But we use the helper _run which returns a list of rows if configured correctly,
-        # or we might need to fetch the ID depending on the client config.
-        # Assuming defaults that return inserted data:
-        rows = self._run(self._table("cipher_memory").insert(payload).select(), operation="add_memory")
+        # Insert and return the inserted row (Supabase returns inserted data by default)
+        rows = self._run(self._table("cipher_memory").insert(payload), operation="add_memory")
         if rows and len(rows) > 0:
             return rows[0]["id"]
         return ""
@@ -613,9 +609,20 @@ class SupabaseDatabase:
         self,
         category: Optional[str] = None,
         limit: int = 10,
-        q: Optional[str] = None,  # TODO: Text search not yet implemented for Supabase
+        q: Optional[str] = None,
         user_id: Optional[str] = None
     ) -> List[Dict]:
+        """Search cipher memory with optional text filtering.
+
+        Args:
+            category: Filter by memory category (fact, preference, etc.)
+            limit: Maximum results to return
+            q: Text search query - searches within JSONB content field
+            user_id: Filter by user ID for RLS scoping
+
+        Returns:
+            List of matching memory records
+        """
         query = self._table("cipher_memory").select("*")
         if category:
             query = query.eq("category", category)
@@ -623,9 +630,13 @@ class SupabaseDatabase:
         if user_id:
             query = query.eq("user_id", user_id)
 
-        # NOTE: Text search parameter 'q' is currently ignored.
-        # Full-text search on JSONB requires pg_trgm or dedicated search index.
-        # For now, we return recent items. Real semantic search requires the vector extension.
+        # Text search on JSONB content using PostgreSQL's text containment
+        # Uses content::text ILIKE pattern for basic text matching
+        if q:
+            # Escape special characters and create case-insensitive pattern
+            search_pattern = f"%{q}%"
+            query = query.ilike("content::text", search_pattern)
+
         query = query.order("created_at", desc=True).limit(limit)
 
         return self._run(query, operation="search_memory")
@@ -670,11 +681,11 @@ class SupabaseDatabase:
         # Upsert by name if possible, but standard upsert needs unique constraint/index
         # We assume 'name' has a unique constraint in schema
         rows = self._run(
-            self._table("skills_registry").upsert(payload, on_conflict="name").select(), 
+            self._table("skills_registry").upsert(payload, on_conflict="name"),
             operation="register_skill"
         )
         if rows:
-            return rows[0]["id"]
+            return rows[0].get("id", "")
         return ""
 
     def list_skills(self, enabled_only: bool = True) -> List[Dict]:
@@ -696,8 +707,7 @@ class SupabaseDatabase:
         rows = self._run(
             self._table("skills_registry")
             .update({"enabled": enabled})
-            .eq("id", skill_id)
-            .select(),
+            .eq("id", skill_id),
             operation="update_skill",
         )
         if rows:

@@ -318,7 +318,7 @@ async def _startup_watch():
     try:
         from app.services.chit_service import chit_service
         # Use NATS_URL from env or default to docker service name
-        nats_url = os.getenv("NATS_URL", "nats://nats:4222")
+        nats_url = os.getenv("NATS_URL", "nats://nats:pmoves@nats:4222")
         asyncio.create_task(chit_service.connect_nats(nats_url))
     except Exception as e:
         print(f"Failed to initiate NATS connection: {e}")

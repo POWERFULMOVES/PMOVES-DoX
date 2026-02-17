@@ -53,3 +53,6 @@
 	path = external/PMOVES-bentopdf
 	url = https://github.com/POWERFULMOVES/PMOVES-bentopdf.git
 	branch = PMOVES.AI-Edition-Hardened-DoX
+[submodule "external/PMOVES-supabase"]
+	path = external/PMOVES-supabase
+	url = https://github.com/POWERFULMOVES/PMOVES-supabase.git
