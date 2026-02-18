@@ -401,3 +401,12 @@ Initialize with: `git submodule update --init --recursive`
 - **Naming**: Explicit function names, small focused files
 - **Comments**: Document complex pipelines (CHR, HRM, geometry engine) and non-obvious integrations
 - **Commits**: Prefix with `feat:`, `fix:`, `chore:`, `docs:`, `ci:`
+
+<!-- PMOVES.AI-CONTEXT-TAGS -->
+## PMOVES.AI Skill Hints
+
+**Primary Skills:** `/langextract:extract`, `/langextract:process`, `/langextract:provider`, `/langextract:status`, `/deploy:up`, `/health:quick`
+**Context Files:** `services-catalog.md`
+**Domain Tags:** `documents`
+**Context Tier:** 2 (On-Demand (Major Subsystem))
+<!-- /PMOVES.AI-CONTEXT-TAGS -->
