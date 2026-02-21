@@ -402,6 +402,15 @@ Initialize with: `git submodule update --init --recursive`
 - **Comments**: Document complex pipelines (CHR, HRM, geometry engine) and non-obvious integrations
 - **Commits**: Prefix with `feat:`, `fix:`, `chore:`, `docs:`, `ci:`
 
+## Security Posture
+
+- **P1 FIXED (Phase H 2026-02-17):** NATS auth block added to nats.conf
+- **P1 FIXED:** Path traversal defense (allowlist at `main.py:1687-1702`)
+- **P2 OPEN:** NATS WebSocket no TLS (`no_tls: true` in standalone nats.conf)
+- **GREEN:** Fail-closed JWT authentication
+- **GREEN:** USER pmoves (UID 1001) in Dockerfile
+- **GREEN:** Multi-stage Dockerfile with minimal attack surface
+
 <!-- PMOVES.AI-CONTEXT-TAGS -->
 ## PMOVES.AI Skill Hints
 
