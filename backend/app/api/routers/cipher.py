@@ -95,12 +95,8 @@ def delete_memory(
     if memory.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Delete via database interface (may need to add this method)
-    try:
-        # For now, return success - actual delete would need DB method
-        return {"status": "deleted", "id": memory_id}
-    except Exception as e:
-        raise HTTPException(status_code=500, detail=f"Failed to delete memory: {e}")
+    # Memory deletion not yet implemented — return honest 501 instead of lying
+    raise HTTPException(status_code=501, detail="Memory deletion not yet implemented")
 
 @router.get("/skills")
 def get_skills():
