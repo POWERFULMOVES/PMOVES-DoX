@@ -113,7 +113,7 @@ services:
     ports:
       - "4223:4222"
       - "8223:8222"
-      - "9223:9222"
+      - "127.0.0.1:9223:9222"
     volumes:
       - ./backend/nats-config/nats.conf:/etc/nats/nats.conf
     networks:
