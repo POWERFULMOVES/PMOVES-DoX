@@ -1,4 +1,3 @@
-import asyncio
 import sys
 from pathlib import Path
 
@@ -103,7 +102,7 @@ def test_chart_processor_collects_metadata(tmp_path: Path):
     doc = DummyDoc(pages=[], pictures=[figure])
 
     processor = ChartProcessor(enable_ocr=False)
-    charts = asyncio.run(processor.process_charts(doc, tmp_path, "sample"))
+    charts = processor.process_charts(doc, tmp_path, "sample")
 
     assert len(charts) == 1
     chart = charts[0]

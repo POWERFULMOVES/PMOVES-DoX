@@ -171,7 +171,7 @@ class CachedAgent:
     @property
     def is_expired(self) -> bool:
         """Check if the cached entry has expired."""
-        return datetime.utcnow() > self.expires_at
+        return datetime.utcnow() >= self.expires_at
 
 
 class AgentDispatcher:
