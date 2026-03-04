@@ -15,6 +15,8 @@ COPY --from=deps /app/node_modules ./node_modules
 COPY . .
 ARG NEXT_PUBLIC_API_BASE
 ENV NEXT_PUBLIC_API_BASE=${NEXT_PUBLIC_API_BASE}
+ARG NEXT_PUBLIC_NATS_WS_URL
+ENV NEXT_PUBLIC_NATS_WS_URL=${NEXT_PUBLIC_NATS_WS_URL}
 RUN mkdir -p public \
     && ls -la
 RUN npm run build

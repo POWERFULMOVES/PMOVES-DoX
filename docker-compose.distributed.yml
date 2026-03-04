@@ -48,6 +48,10 @@ services:
       data_tier:
 
   frontend:
+    build:
+      args:
+        NEXT_PUBLIC_API_BASE: /api
+        NEXT_PUBLIC_NATS_WS_URL: ${NATS_WS_URL:-wss://localhost:9223}
     environment:
       # Backend URL for distributed deployment (may be on same or different host)
       - API_URL=${DOX_BACKEND_URL:-http://backend:8484}
@@ -57,11 +61,15 @@ services:
       - "0.0.0.0:3001:3001"
 
   nats:
+    command: -c /etc/nats/nats.tls.conf
     # Expose on all interfaces for external clients
     ports:
       - "0.0.0.0:4223:4222"  # Core NATS
       - "0.0.0.0:8223:8222"  # HTTP monitoring
       - "0.0.0.0:9223:9222"  # WebSocket
+    volumes:
+      - ./backend/nats-config/nats.tls.conf:/etc/nats/nats.tls.conf:ro
+      - ./backend/nats-config/certs:/etc/nats/certs:ro
     environment:
       - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-true}
 
