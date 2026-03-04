@@ -1,0 +1,127 @@
+# PMOVES-DoX Distributed Deployment Overlay
+#
+# Use this overlay for deploying DoX on separate hardware from other PMOVES submodules.
+# This configuration:
+#   - Binds services to 0.0.0.0 for external access
+#   - Uses environment variables for service discovery
+#   - Optionally includes Tailscale sidecar for VPN mesh
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.distributed.yml up -d
+#
+# With Tailscale:
+#   docker compose -f docker-compose.yml -f docker-compose.distributed.yml --profile tailscale up -d
+
+services:
+  backend:
+    # Override environment for distributed service discovery
+    environment:
+      # Override NATS URL for distributed deployment
+      - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-true}
+      - NATS_TLS_CA=${NATS_TLS_CA:-/app/nats-certs/ca.crt}
+      # TensorZero on remote host
+      - OPENAI_BASE_URL=${TENSORZERO_URL:-http://tensorzero-gateway:3030}/openai/v1
+      - TENSORZERO_BASE_URL=${TENSORZERO_URL:-http://tensorzero-gateway:3030}
+      # Ollama on remote host
+      - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
+      - EMBEDDING_OLLAMA_URL=${EMBEDDING_OLLAMA_URL:-http://ollama:11434}
+      # Allow connections from any host for distributed access
+      - FRONTEND_ORIGIN=*
+      # Neo4j parent instance on remote host
+      - NEO4J_PARENT_URI=${NEO4J_PARENT_URI:-bolt://pmoves-neo4j-1:7687}
+    # Expose on all interfaces for external access
+    ports:
+      - "0.0.0.0:8484:8484"
+    # Add healthcheck that works across networks
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8484/healthz"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+      start_period: 30s
+    # Remove internal network restrictions for distributed access
+    networks:
+      api_tier:
+      app_tier:
+      bus_tier:
+      data_tier:
+
+  frontend:
+    build:
+      args:
+        NEXT_PUBLIC_API_BASE: /api
+        NEXT_PUBLIC_NATS_WS_URL: ${NATS_WS_URL:-wss://localhost:9223}
+    environment:
+      # Backend URL for distributed deployment (may be on same or different host)
+      - API_URL=${DOX_BACKEND_URL:-http://backend:8484}
+      # NATS WebSocket for distributed (must be reachable from browser)
+      - NEXT_PUBLIC_NATS_WS_URL=${NATS_WS_URL:-wss://localhost:9223}
+    ports:
+      - "0.0.0.0:3001:3001"
+
+  nats:
+    command: -c /etc/nats/nats.tls.conf
+    # Expose on all interfaces for external clients
+    ports:
+      - "0.0.0.0:4223:4222"  # Core NATS
+      - "0.0.0.0:8223:8222"  # HTTP monitoring
+      - "0.0.0.0:9223:9222"  # WebSocket
+    volumes:
+      - ./backend/nats-config/nats.tls.conf:/etc/nats/nats.tls.conf:ro
+      - ./backend/nats-config/certs:/etc/nats/certs:ro
+    environment:
+      - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-true}
+
+  # Optional Tailscale sidecar for VPN mesh networking
+  tailscale:
+    image: tailscale/tailscale:latest
+    container_name: pmoves-dox-tailscale
+    hostname: ${TAILSCALE_HOSTNAME:-pmoves-dox}
+    profiles:
+      - tailscale
+    environment:
+      - TS_AUTHKEY=${TAILSCALE_AUTHKEY}
+      - TS_STATE_DIR=/var/lib/tailscale
+      - TS_EXTRA_ARGS=--advertise-routes=${TAILSCALE_ADVERTISE_ROUTES:-172.31.0.0/16}
+      - TS_USERSPACE=false
+    volumes:
+      - tailscale-state:/var/lib/tailscale
+      - /dev/net/tun:/dev/net/tun
+    cap_add:
+      - NET_ADMIN
+      - SYS_MODULE
+    sysctls:
+      - net.ipv4.ip_forward=1
+      - net.ipv6.conf.all.forwarding=1
+    network_mode: host
+    restart: unless-stopped
+
+  # Override Ollama to not expose ports (use remote Ollama instead)
+  ollama:
+    profiles:
+      - local-ollama  # Only start if explicitly requested
+
+  # Remove external network dependencies for standalone distributed mode
+  neo4j:
+    networks:
+      data_tier:
+      # Remove pmoves_data external network dependency
+
+  tensorzero:
+    profiles:
+      - local-tensorzero  # Only start if explicitly requested
+
+# Override networks to not be internal (allow external routing)
+networks:
+  api_tier:
+    internal: false
+  app_tier:
+    internal: false  # Allow external access in distributed mode
+  bus_tier:
+    internal: false  # Allow external NATS clients
+  data_tier:
+    internal: false  # Allow external database access if needed
+
+volumes:
+  tailscale-state:
