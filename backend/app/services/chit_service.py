@@ -14,6 +14,7 @@ import json
 import logging
 import asyncio
 import os
+import ssl
 from typing import Dict, Any, Optional, Callable, List
 import nats
 from nats.js.api import StreamConfig, RetentionPolicy
@@ -157,6 +158,41 @@ class ChitService:
             return True
         return False
 
+    def _create_tls_context(self) -> Optional[ssl.SSLContext]:
+        """Create SSL context for TLS connections if enabled.
+
+        Returns:
+            SSLContext if TLS is enabled and configured, None otherwise.
+        """
+        tls_enabled = os.getenv("NATS_TLS_ENABLED", "").lower() in {"1", "true", "yes"}
+        if not tls_enabled:
+            return None
+
+        try:
+            # Create SSL context
+            ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
+
+            # Load CA certificate if provided
+            ca_file = os.getenv("NATS_TLS_CA", "/app/nats-certs/ca.crt")
+            if os.path.exists(ca_file):
+                ctx.load_verify_locations(ca_file)
+                logger.info(f"Loaded NATS CA certificate from {ca_file}")
+            else:
+                # For development, allow unverified connections with warning
+                logger.warning(f"NATS CA certificate not found at {ca_file}, using default verification")
+
+            # Load client certificate if mutual TLS is configured
+            client_cert = os.getenv("NATS_TLS_CERT", "/app/nats-certs/client.crt")
+            client_key = os.getenv("NATS_TLS_KEY", "/app/nats-certs/client.key")
+            if os.path.exists(client_cert) and os.path.exists(client_key):
+                ctx.load_cert_chain(client_cert, client_key)
+                logger.info("Loaded NATS client certificate for mutual TLS")
+
+            return ctx
+        except Exception as e:
+            logger.error(f"Failed to create TLS context: {e}")
+            return None
+
     async def connect_nats(self, nats_url: str = "nats://nats:4222") -> None:
         """Connect to NATS and JetStream.
 
@@ -164,17 +200,38 @@ class ChitService:
         prevent the service from starting (graceful degradation).
         In standalone mode, NATS is required and errors will be raised.
 
+        TLS Configuration:
+            Set NATS_TLS_ENABLED=true to enable TLS connections.
+            Certificates should be mounted at /app/nats-certs/:
+            - ca.crt: CA certificate for server verification
+            - client.crt/client.key: Optional client cert for mutual TLS
+
         Args:
             nats_url: NATS server URL (default: "nats://nats:4222").
+                      Use "nats+tls://" prefix for explicit TLS.
 
         Raises:
             Exception: If NATS connection fails in standalone mode.
         """
         try:
-            self.nc = await nats.connect(nats_url)
+            # Build connection options
+            connect_options = {}
+
+            # Check for TLS configuration
+            tls_ctx = self._create_tls_context()
+            if tls_ctx:
+                connect_options["tls"] = tls_ctx
+                # Update URL scheme if not already TLS
+                if nats_url.startswith("nats://"):
+                    nats_url = nats_url.replace("nats://", "tls://", 1)
+                    logger.info(f"Upgraded NATS URL to TLS: {nats_url}")
+
+            self.nc = await nats.connect(nats_url, **connect_options)
             self.js = self.nc.jetstream()
             self._nats_available = True
-            logger.info(f"Connected to NATS at {nats_url}")
+
+            tls_status = "with TLS" if tls_ctx else "without TLS"
+            logger.info(f"Connected to NATS at {nats_url} ({tls_status})")
 
             # Ensure the stream exists
             # We want a 'geometry' stream capturing all geometry events
