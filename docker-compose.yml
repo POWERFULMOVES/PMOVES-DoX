@@ -11,6 +11,8 @@ services:
       - ./backend/app:/app/app
       - ./backend/data:/app/data
       - hf-cache:/root/.cache/huggingface
+      # NATS TLS certificates (for distributed deployments)
+      - ./backend/nats-config/certs:/app/nats-certs:ro
     env_file:
       - path: env.shared
         required: false
@@ -26,6 +28,8 @@ services:
       - REDIS_URL=redis://redis:6379
       - DB_BACKEND=${DB_BACKEND:-supabase}
       - NATS_URL=${NATS_URL:-nats://nats:4222}
+      - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-false}
+      - NATS_TLS_CA=/app/nats-certs/ca.crt
       - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001,http://localhost:3001,http://127.0.0.1:3001
       - PORT=${BACKEND_PORT:-8484}
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
@@ -116,6 +120,11 @@ services:
       - "9223:9222"
     volumes:
       - ./backend/nats-config/nats.conf:/etc/nats/nats.conf
+      # TLS certificates (generate with: ./backend/nats-config/generate-certs.sh)
+      - ./backend/nats-config/certs:/etc/nats/certs:ro
+    environment:
+      # Enable TLS for distributed deployments (requires certs in ./backend/nats-config/certs/)
+      - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-false}
     networks:
       - bus_tier
       - api_tier
