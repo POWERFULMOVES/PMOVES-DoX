@@ -2,7 +2,8 @@
 Integration health checker for PMOVES services.
 
 This module provides async health checks for external service dependencies
-used in standalone mode (TensorZero, NATS, GPU Orchestrator).
+used in standalone and distributed modes (TensorZero, NATS, GPU Orchestrator,
+BoTZ Gateway, Tokenism).
 """
 
 import asyncio
@@ -27,6 +28,10 @@ class IntegrationHealth:
         ).rstrip('/')
         self.nats_url = os.getenv('NATS_URL', 'nats://nats:4222')
         self.gpu_orchestrator_url = os.getenv('GPU_ORCHESTRATOR_URL')
+
+        # Sibling submodule services (distributed mode)
+        self.botz_gateway_url = os.getenv('BOTZ_GATEWAY_URL')
+        self.tokenism_url = os.getenv('TOKENISM_URL')
 
     async def check_tensorzero(self, timeout: float = 2.0) -> bool:
         """
@@ -116,6 +121,76 @@ class IntegrationHealth:
             logger.warning(f"GPU Orchestrator health check failed: {e}")
             return False
 
+    async def check_botz_gateway(self, timeout: float = 2.0) -> bool:
+        """
+        Check if BoTZ MCP Gateway is reachable (distributed mode).
+
+        BoTZ hosts Archon (knowledge backbone) and MCP tools.
+
+        Args:
+            timeout: Request timeout in seconds
+
+        Returns:
+            True if BoTZ Gateway is healthy, False if not or not configured
+        """
+        if not self.botz_gateway_url:
+            logger.debug("BoTZ Gateway not configured, skipping check")
+            return False  # Not configured
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.botz_gateway_url.rstrip('/')}/health",
+                    timeout=aiohttp.ClientTimeout(total=timeout)
+                ) as resp:
+                    is_healthy = resp.status == 200
+                    if is_healthy:
+                        logger.debug(f"BoTZ Gateway health check passed: {self.botz_gateway_url}")
+                    else:
+                        logger.warning(f"BoTZ Gateway returned status {resp.status}")
+                    return is_healthy
+        except asyncio.TimeoutError:
+            logger.warning(f"BoTZ Gateway health check timed out: {self.botz_gateway_url}")
+            return False
+        except Exception as e:
+            logger.warning(f"BoTZ Gateway health check failed: {e}")
+            return False
+
+    async def check_tokenism(self, timeout: float = 2.0) -> bool:
+        """
+        Check if Tokenism simulation framework is reachable (distributed mode).
+
+        Tokenism hosts economic simulation and PMOVES-Wealth integration.
+
+        Args:
+            timeout: Request timeout in seconds
+
+        Returns:
+            True if Tokenism is healthy, False if not or not configured
+        """
+        if not self.tokenism_url:
+            logger.debug("Tokenism not configured, skipping check")
+            return False  # Not configured
+
+        try:
+            async with aiohttp.ClientSession() as session:
+                async with session.get(
+                    f"{self.tokenism_url.rstrip('/')}/health",
+                    timeout=aiohttp.ClientTimeout(total=timeout)
+                ) as resp:
+                    is_healthy = resp.status == 200
+                    if is_healthy:
+                        logger.debug(f"Tokenism health check passed: {self.tokenism_url}")
+                    else:
+                        logger.warning(f"Tokenism returned status {resp.status}")
+                    return is_healthy
+        except asyncio.TimeoutError:
+            logger.warning(f"Tokenism health check timed out: {self.tokenism_url}")
+            return False
+        except Exception as e:
+            logger.warning(f"Tokenism health check failed: {e}")
+            return False
+
     async def get_status(self) -> Dict[str, Dict]:
         """
         Get all integration health statuses.
@@ -127,6 +202,8 @@ class IntegrationHealth:
             self.check_tensorzero(),
             self.check_nats(),
             self.check_gpu_orchestrator(),
+            self.check_botz_gateway(),
+            self.check_tokenism(),
             return_exceptions=True
         )
 
@@ -142,5 +219,15 @@ class IntegrationHealth:
             "gpu_orchestrator": {
                 "healthy": results[2] if not isinstance(results[2], Exception) else False,
                 "url": self.gpu_orchestrator_url
+            },
+            "botz_gateway": {
+                "healthy": results[3] if not isinstance(results[3], Exception) else False,
+                "url": self.botz_gateway_url,
+                "description": "MCP Gateway + Archon (knowledge backbone)"
+            },
+            "tokenism": {
+                "healthy": results[4] if not isinstance(results[4], Exception) else False,
+                "url": self.tokenism_url,
+                "description": "Economic simulation + Wealth integration"
             }
         }
