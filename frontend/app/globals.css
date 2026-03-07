@@ -37,6 +37,36 @@
 }
 
 @layer base {
+  [data-edition="unfcu"] {
+    --background: 210 30% 8%;
+    --foreground: 0 0% 98%;
+
+    --card: 206 50% 23%;
+    --card-foreground: 0 0% 98%;
+
+    --popover: 206 50% 23%;
+    --popover-foreground: 0 0% 98%;
+
+    --primary: 216 74% 50%;
+    --primary-foreground: 212 27% 91%;
+
+    --secondary: 206 50% 23%;
+    --secondary-foreground: 212 27% 91%;
+
+    --muted: 206 30% 18%;
+    --muted-foreground: 212 20% 65%;
+
+    --accent: 216 74% 50%;
+    --accent-foreground: 212 27% 91%;
+
+    --destructive: 343 67% 37%;
+    --destructive-foreground: 210 40% 98%;
+
+    --border: 206 40% 20%;
+    --input: 206 40% 20%;
+    --ring: 216 74% 50%;
+  }
+
   * {
     @apply border-border;
   }
@@ -57,6 +87,10 @@
 
   .text-gradient {
     @apply bg-clip-text text-transparent bg-gradient-to-r from-cyan-400 to-purple-600;
+  }
+
+  [data-edition="unfcu"] .text-gradient {
+    @apply bg-gradient-to-r from-sky-400 to-teal-400;
   }
 
   .animate-fade-in {
