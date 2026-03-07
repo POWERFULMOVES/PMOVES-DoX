@@ -4,11 +4,19 @@
 
 /* Warmer glassmorphism with reduced blur for corporate clarity */
 [data-edition="unfcu"] .glass {
-  @apply bg-white/4 backdrop-blur-md border-sky-300/10 shadow-lg;
+  background-color: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-color: rgba(125, 211, 252, 0.1);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
 }
 
 [data-edition="unfcu"] .glass-card {
-  @apply bg-card/70 backdrop-blur-lg border-sky-300/8 shadow-xl;
+  background-color: hsl(var(--card) / 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-color: rgba(125, 211, 252, 0.08);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
 }
 
 /* UN Blue scrollbar track */

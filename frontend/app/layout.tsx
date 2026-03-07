@@ -1,7 +1,5 @@
 import './globals.css';
-if (process.env.NEXT_PUBLIC_DOX_EDITION === 'unfcu') {
-  require('@/themes/unfcu/unfcu-overrides.css');
-}
+import '@/themes/unfcu/unfcu-overrides.css';
 import type { Metadata } from 'next';
 import { Inter, Outfit } from 'next/font/google';
 import Sidebar from '@/components/Sidebar';
