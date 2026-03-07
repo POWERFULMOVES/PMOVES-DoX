@@ -1,0 +1,9 @@
+# UNFCU Edition overlay
+# Usage: docker compose -f docker-compose.yml -f docker-compose.unfcu.yml up
+services:
+  frontend:
+    build:
+      args:
+        NEXT_PUBLIC_DOX_EDITION: unfcu
+    environment:
+      - NEXT_PUBLIC_DOX_EDITION=unfcu
