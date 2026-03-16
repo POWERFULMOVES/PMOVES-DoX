@@ -39,8 +39,8 @@ ARTIFACTS_DIR.mkdir(exist_ok=True)
 
 # Database and Services
 db, DB_BACKEND_META = init_database()
-qa_engine = QAEngine(db)
 search_index = SearchIndex(db)
+qa_engine = QAEngine(db, search_index=search_index)
 summary_service = SummarizationService(db)
 
 # HRM Config

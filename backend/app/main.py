@@ -156,8 +156,8 @@ ARTIFACTS_DIR.mkdir(exist_ok=True)
 MAX_FILE_SIZE = 100 * 1024 * 1024  # 100MB limit for file uploads
 
 db, DB_BACKEND_META = init_database()
-qa_engine = QAEngine(db)
 search_index = SearchIndex(db)
+qa_engine = QAEngine(db, search_index=search_index)
 summary_service = SummarizationService(db)
 # HRM config/metrics (optional features)
 HRM_ENABLED = os.getenv("HRM_ENABLED", "false").lower() == "true"
