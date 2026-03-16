@@ -11,3 +11,7 @@ services:
   backend:
     environment:
       - DOX_EDITION=unfcu
+      - DB_BACKEND=sqlite
+      # Standalone demo JWT — replace with secrets-funnel output for production
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-unfcu-demo-jwt-secret-replace-in-production-64chars-minimum-padding}
+      - JWT_SECRET=${JWT_SECRET:-unfcu-demo-jwt-secret-replace-in-production-64chars-minimum-padding}
