@@ -69,7 +69,9 @@ async def root():
     Returns:
         A dictionary with a message indicating the API name and status.
     """
-    return {"message": "PMOVES-DoX API", "status": "running"}
+    edition = os.getenv("DOX_EDITION", "default")
+    titles = {"default": "PMOVES-DoX API", "unfcu": "UNFCU DocIntel API"}
+    return {"message": titles.get(edition, titles["default"]), "status": "running", "edition": edition}
 
 
 @router.get("/config")
