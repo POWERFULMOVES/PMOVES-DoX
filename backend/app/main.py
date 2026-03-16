@@ -142,7 +142,7 @@ if os.path.exists(hyp_path):
 @app.middleware("http")
 async def _fast_pdf_middleware(request, call_next):
     if request.url.path == "/open/pdf":
-        if _env_flag("FAST_PDF_MODE", True) or not _env_flag("OPEN_PDF_ENABLED", False):
+        if _env_flag("FAST_PDF_MODE", False) or not _env_flag("OPEN_PDF_ENABLED", False):
             return JSONResponse({"detail": "PDF open disabled"}, status_code=403)
     return await call_next(request)
 
@@ -1965,26 +1965,7 @@ async def export_poml(req: ExportPOMLRequest):
     return {"status": "ok", "rel": rel, "path": str(path)}
 
 
-def _process_pdf_fast(file_path: Path, artifacts_dir: Path) -> tuple[list[dict], list[dict], dict]:
-    placeholder = f"Extracted content unavailable for {file_path.name}."
-    md_path = artifacts_dir / f"{file_path.stem}.md"
-    md_path.write_text(placeholder, encoding="utf-8")
-    json_path = artifacts_dir / f"{file_path.stem}.json"
-    json_payload = {"texts": [{"text": placeholder}]}
-    json_path.write_text(json.dumps(json_payload, indent=2), encoding="utf-8")
-    units_path = artifacts_dir / f"{file_path.stem}.text_units.json"
-    units_path.write_text(
-        json.dumps([{ "text": placeholder, "page": 1 }], indent=2),
-        encoding="utf-8",
-    )
-    return [], [], {
-        "entities": [],
-        "structure": None,
-        "metric_hits": [],
-        "tables": [],
-        "charts": [],
-        "formulas": [],
-    }
+from app.api.routers.documents import _process_pdf_fast  # single definition in router
 
 _log = logging.getLogger(__name__)
 
@@ -2452,7 +2433,7 @@ def metrics_prometheus():
     return ("\n".join(lines) + "\n", 200, {"Content-Type": "text/plain; version=0.0.4"})
 @app.get("/open/pdf")
 async def open_pdf(artifact_id: str, page: int | None = None):
-    if _env_flag("FAST_PDF_MODE", True):
+    if _env_flag("FAST_PDF_MODE", False):
         raise HTTPException(403, "PDF open disabled in fast mode")
     if not _env_flag("OPEN_PDF_ENABLED", False):
         raise HTTPException(403, "PDF open is disabled")
