@@ -7,3 +7,7 @@ services:
         NEXT_PUBLIC_DOX_EDITION: unfcu
     environment:
       - NEXT_PUBLIC_DOX_EDITION=unfcu
+
+  backend:
+    environment:
+      - DOX_EDITION=unfcu

@@ -26,7 +26,12 @@ from app.security import SecurityMiddleware
 from app.auth import get_current_user, optional_auth
 from app.middleware import SecurityHeadersMiddleware, RateLimitMiddleware
 
-app = FastAPI(title="PMOVES-DoX API")
+_EDITION = os.getenv("DOX_EDITION", "default")
+_EDITION_TITLES = {
+    "default": "PMOVES-DoX API",
+    "unfcu": "UNFCU DocIntel API",
+}
+app = FastAPI(title=_EDITION_TITLES.get(_EDITION, _EDITION_TITLES["default"]))
 
 app.include_router(documents.router)
 app.include_router(analysis.router)
@@ -325,7 +330,7 @@ async def _startup_watch():
 
 @app.get("/")
 async def root():
-    return {"message": "PMOVES-DoX API", "status": "running"}
+    return {"message": _EDITION_TITLES.get(_EDITION, "PMOVES-DoX API"), "status": "running", "edition": _EDITION}
 
 @app.get("/config")
 async def config():

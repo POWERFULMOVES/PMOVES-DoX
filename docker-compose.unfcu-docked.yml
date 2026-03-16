@@ -1,0 +1,26 @@
+# UNFCU Edition + Docked Mode (Tier 2+)
+# Usage: docker compose -f docker-compose.yml -f docker-compose.docked.yml -f docker-compose.unfcu-docked.yml up -d
+#
+# Combines UNFCU branding with parent PMOVES.AI infrastructure:
+# - Tier 1: UNFCU-branded frontend + backend
+# - Tier 2: Hi-RAG v2, TensorZero, Supabase, Neo4j (via parent)
+# - Tier 3: E2B, CHIT, Observability (via parent profiles)
+# - Tier 4: Agent Zero, SupaSerch, DeepResearch (via parent profiles)
+
+services:
+  frontend:
+    build:
+      args:
+        NEXT_PUBLIC_DOX_EDITION: unfcu
+    environment:
+      - NEXT_PUBLIC_DOX_EDITION=unfcu
+
+  backend:
+    environment:
+      - DOX_EDITION=unfcu
+      # Hi-RAG v2 integration (Tier 2)
+      - HIRAG_V2_URL=http://hirag-gateway-v2-cpu:8086
+      # Extract Worker for indexing (Tier 2)
+      - EXTRACT_WORKER_URL=http://extract-worker:8083
+      # Cipher Memory (Tier 3)
+      - CIPHER_MEMORY_URL=http://cipher-api:8096
