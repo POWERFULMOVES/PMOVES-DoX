@@ -1,5 +1,4 @@
 import './globals.css';
-import '@/themes/unfcu/unfcu-overrides.css';
 import type { Metadata } from 'next';
 import { Inter, Outfit } from 'next/font/google';
 import Sidebar from '@/components/Sidebar';
@@ -26,6 +25,11 @@ export default function RootLayout({
 }) {
   return (
     <html lang="en" className="dark" data-edition={theme.edition} suppressHydrationWarning>
+      <head>
+        {theme.cssOverridePath && (
+          <link rel="stylesheet" href={theme.cssOverridePath} />
+        )}
+      </head>
       <body className={cn(
         "min-h-screen bg-background font-sans antialiased overflow-hidden",
         inter.variable,

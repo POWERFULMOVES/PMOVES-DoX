@@ -11,14 +11,16 @@ services:
   backend:
     environment:
       - DOX_EDITION=unfcu
+      - ENVIRONMENT=production
       - DB_BACKEND=sqlite
       - DB_PATH=/app/uploads/unfcu.sqlite3
       # Full Docling extraction for demo (models cached in docling-models volume)
       - FAST_PDF_MODE=false
       - DOCLING_ARTIFACTS_PATH=/app/models/docling
-      # Standalone demo JWT — replace with secrets-funnel output for production
-      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:-unfcu-demo-jwt-secret-replace-in-production-64chars-minimum-padding}
-      - JWT_SECRET=${JWT_SECRET:-unfcu-demo-jwt-secret-replace-in-production-64chars-minimum-padding}
+      # JWT secrets — MUST be set via .env file or shell environment
+      # Generate with: openssl rand -base64 64
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:?SUPABASE_JWT_SECRET must be set}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
     volumes:
       # Persist SQLite DB and uploads across restarts
       - unfcu-data:/app/data

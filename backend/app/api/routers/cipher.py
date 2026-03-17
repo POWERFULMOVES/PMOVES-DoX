@@ -97,11 +97,11 @@ def delete_memory(
 
     try:
         deleted = db.delete_memory(memory_id)
-    except AttributeError:
-        raise HTTPException(status_code=501, detail="Memory deletion not supported by current database backend")
+    except AttributeError as e:
+        raise HTTPException(status_code=501, detail="Memory deletion not supported by current database backend") from e
     except Exception as e:
         logger.error("Failed to delete memory %s: %s", memory_id, e, exc_info=True)
-        raise HTTPException(status_code=500, detail="Memory deletion failed")
+        raise HTTPException(status_code=500, detail="Memory deletion failed") from None
     if not deleted:
         raise HTTPException(status_code=404, detail="Memory not found or already deleted")
     return {"status": "deleted", "id": memory_id}
@@ -152,7 +152,7 @@ def mask_pii_text(
             raise HTTPException(
                 status_code=500,
                 detail="PII encryption failed; check server logs",
-            )
+            ) from None
 
     return result
 
@@ -185,10 +185,11 @@ def unmask_pii_text(
                 "pii_type": entry.get("pii_type", "unknown"),
                 "original": plaintext,
             })
-        except Exception as e:
+        except Exception:
+            logger.exception("PII decryption failed for entry type=%s", entry.get("pii_type", "unknown"))
             decrypted.append({
                 "pii_type": entry.get("pii_type", "unknown"),
-                "error": str(e),
+                "error": "Decryption failed",
             })
     return {"decrypted": decrypted}
 
@@ -430,7 +431,8 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
         with open(target_path, "w") as f:
             json.dump(config, f, indent=2)
     except Exception as e:
-        raise HTTPException(500, f"Failed to save manifold config: {e}")
+        logger.error("Failed to save manifold config: %s", e, exc_info=True)
+        raise HTTPException(500, "Failed to save manifold config") from None
         
     # 5. Compute zeta spectrum from embeddings
     frequencies, amplitudes = geometry_engine.compute_zeta_spectrum(embeddings)

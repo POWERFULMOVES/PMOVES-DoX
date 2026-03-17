@@ -10,13 +10,13 @@ import os
 import re
 from typing import Any, Dict, List, Optional
 
-import requests
+import httpx
 
 logger = logging.getLogger(__name__)
 
 
 class QAEngine:
-    """RAG-based Q&A engine: search → retrieve → answer with citations."""
+    """RAG-based Q&A engine: search -> retrieve -> answer with citations."""
 
     def __init__(self, database, search_index=None):
         self.db = database
@@ -92,7 +92,7 @@ class QAEngine:
             context_chunks.append(f"[{filename}] {text}")
 
         # Step 2: Try LLM synthesis
-        llm_answer = self._try_llm_answer(question, context_chunks)
+        llm_answer = await self._try_llm_answer(question, context_chunks)
 
         if llm_answer:
             answer = llm_answer
@@ -109,7 +109,7 @@ class QAEngine:
             "metric": None,
         }
 
-    def _try_llm_answer(self, question: str, context_chunks: List[str]) -> Optional[str]:
+    async def _try_llm_answer(self, question: str, context_chunks: List[str]) -> Optional[str]:
         """Try to synthesize an answer using TensorZero or Ollama."""
         if not context_chunks:
             return None
@@ -126,14 +126,14 @@ class QAEngine:
 
         try:
             if self._use_tensorzero:
-                return self._call_tensorzero(prompt)
+                return await self._call_tensorzero(prompt)
             else:
-                return self._call_ollama(prompt)
-        except Exception as e:
+                return await self._call_ollama(prompt)
+        except (httpx.HTTPError, ValueError, KeyError) as e:
             logger.warning("LLM synthesis failed: %s", e)
             return None
 
-    def _call_tensorzero(self, prompt: str) -> Optional[str]:
+    async def _call_tensorzero(self, prompt: str) -> Optional[str]:
         """Call TensorZero OpenAI-compatible endpoint."""
         url = f"{self._llm_base_url.rstrip('/')}/openai/v1/chat/completions"
         payload = {
@@ -142,15 +142,16 @@ class QAEngine:
             "max_tokens": 500,
             "temperature": 0.3,
         }
-        resp = requests.post(url, json=payload, timeout=30)
-        if resp.ok:
-            data = resp.json()
-            choices = data.get("choices", [])
-            if choices:
-                return choices[0].get("message", {}).get("content", "").strip()
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, json=payload)
+            if resp.is_success:
+                data = resp.json()
+                choices = data.get("choices", [])
+                if choices:
+                    return choices[0].get("message", {}).get("content", "").strip()
         return None
 
-    def _call_ollama(self, prompt: str) -> Optional[str]:
+    async def _call_ollama(self, prompt: str) -> Optional[str]:
         """Call Ollama generate endpoint."""
         url = f"{self._llm_base_url.rstrip('/')}/api/generate"
         payload = {
@@ -158,7 +159,8 @@ class QAEngine:
             "prompt": prompt,
             "stream": False,
         }
-        resp = requests.post(url, json=payload, timeout=30)
-        if resp.ok:
-            return resp.json().get("response", "").strip()
+        async with httpx.AsyncClient(timeout=30) as client:
+            resp = await client.post(url, json=payload)
+            if resp.is_success:
+                return resp.json().get("response", "").strip()
         return None

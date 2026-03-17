@@ -37,14 +37,26 @@ RUN mkdir -p /app/uploads /app/artifacts /app/models/docling
 # Uses DOCLING_ARTIFACTS_PATH so models are baked into the image layer.
 # Runtime volume mount at /app/models/docling overrides if present.
 ENV DOCLING_ARTIFACTS_PATH=/app/models/docling
-RUN python -c "\
+ARG DOCLING_WARMUP_STRICT=1
+RUN if [ "$DOCLING_WARMUP_STRICT" = "1" ]; then \
+      python -c "\
 from docling.document_converter import DocumentConverter; \
 from docling.datamodel.pipeline_options import PdfPipelineOptions; \
 from docling.datamodel.base_models import InputFormat; \
 from docling.document_converter import PdfFormatOption; \
 opts = PdfPipelineOptions(do_table_structure=True, do_ocr=False); \
 DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}); \
-print('Docling models cached successfully')" 2>&1 || echo "WARN: Docling warmup skipped (non-fatal)"
+print('Docling models cached successfully')"; \
+    else \
+      python -c "\
+from docling.document_converter import DocumentConverter; \
+from docling.datamodel.pipeline_options import PdfPipelineOptions; \
+from docling.datamodel.base_models import InputFormat; \
+from docling.document_converter import PdfFormatOption; \
+opts = PdfPipelineOptions(do_table_structure=True, do_ocr=False); \
+DocumentConverter(format_options={InputFormat.PDF: PdfFormatOption(pipeline_options=opts)}); \
+print('Docling models cached successfully')" 2>&1 || echo "WARN: Docling warmup skipped (non-fatal)"; \
+    fi
 
 # Create non-root user for Hardened compliance
 RUN useradd -m -u 1001 -s /bin/bash pmoves && \

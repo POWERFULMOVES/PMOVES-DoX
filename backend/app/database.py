@@ -342,6 +342,29 @@ class Database:
             "full_data": json.loads(e.full_data_json) if e.full_data_json else None,
         }
 
+    def update_evidence(self, evidence_id: str, **fields: Any) -> None:
+        """Update an evidence record, merging into full_data if provided."""
+        full_data_update = fields.pop("full_data", None)
+        with Session(self.engine) as s:
+            row = s.get(Evidence, evidence_id)
+            if not row:
+                return
+            for key, value in fields.items():
+                col = key
+                if key in ("locator", "preview", "content_type"):
+                    setattr(row, col, value)
+            if full_data_update is not None:
+                base: Dict[str, Any] = {}
+                if row.full_data_json:
+                    try:
+                        base = json.loads(row.full_data_json)
+                    except json.JSONDecodeError:
+                        base = {}
+                base.update(full_data_update)
+                row.full_data_json = json.dumps(base, ensure_ascii=False)
+            s.add(row)
+            s.commit()
+
     def get_all_evidence(self) -> List[Dict]:
         with Session(self.engine) as s:
             rows = s.exec(select(Evidence)).all()

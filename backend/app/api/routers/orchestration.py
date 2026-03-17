@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -44,44 +44,6 @@ class AgentType(str, Enum):
     ANALYSIS = "analysis"
     REASONING = "reasoning"
     EXTRACTION = "extraction"
-
-
-# =============================================================================
-# In-Memory Task Storage
-# =============================================================================
-
-
-# In-memory storage for tasks (stub implementation)
-_task_store: Dict[str, Dict[str, Any]] = {}
-
-
-def _get_task(task_id: str) -> Optional[Dict[str, Any]]:
-    """Retrieve a task from the in-memory store.
-
-    Args:
-        task_id: The UUID of the task to retrieve.
-
-    Returns:
-        Task dictionary if found, None otherwise.
-    """
-    return _task_store.get(task_id)
-
-
-def _update_task(task_id: str, updates: Dict[str, Any]) -> bool:
-    """Update a task in the in-memory store.
-
-    Args:
-        task_id: The UUID of the task to update.
-        updates: Dictionary of fields to update.
-
-    Returns:
-        True if task was found and updated, False otherwise.
-    """
-    if task_id not in _task_store:
-        return False
-    _task_store[task_id].update(updates)
-    _task_store[task_id]["updated_at"] = datetime.utcnow().isoformat()
-    return True
 
 
 # =============================================================================
@@ -319,6 +281,14 @@ class AggregateResponse(BaseModel):
 router = APIRouter(prefix="/orchestrate", tags=["orchestration"])
 
 
+class NotImplementedResponse(BaseModel):
+    """Response model for stub endpoints planned for future tiers."""
+
+    status: str = "coming_in_tier_4"
+    message: str = "Agent orchestration available in Tier 4"
+    endpoint: str
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -328,11 +298,12 @@ router = APIRouter(prefix="/orchestrate", tags=["orchestration"])
     "/decompose",
     status_code=status.HTTP_501_NOT_IMPLEMENTED,
     summary="Decompose a task into subtasks (Tier 4)",
+    response_model=NotImplementedResponse,
     responses={
-        501: {"description": "Planned for Tier 4"},
+        501: {"description": "Planned for Tier 4", "model": NotImplementedResponse},
     },
 )
-async def decompose_task(request: DecomposeRequest) -> JSONResponse:
+async def decompose_task(request: DecomposeRequest):
     """Break a high-level task into coordinated subtasks.
 
     Note: Agent orchestration is planned for Tier 4.
@@ -351,11 +322,12 @@ async def decompose_task(request: DecomposeRequest) -> JSONResponse:
     "/dispatch",
     status_code=status.HTTP_501_NOT_IMPLEMENTED,
     summary="Dispatch a subtask to an agent (Tier 4)",
+    response_model=NotImplementedResponse,
     responses={
-        501: {"description": "Planned for Tier 4"},
+        501: {"description": "Planned for Tier 4", "model": NotImplementedResponse},
     },
 )
-async def dispatch_subtask(request: DispatchRequest) -> JSONResponse:
+async def dispatch_subtask(request: DispatchRequest):
     """Send a subtask to an appropriate agent for execution.
 
     Note: Agent orchestration is planned for Tier 4.
@@ -374,11 +346,12 @@ async def dispatch_subtask(request: DispatchRequest) -> JSONResponse:
     "/status/{task_id}",
     status_code=status.HTTP_501_NOT_IMPLEMENTED,
     summary="Get task execution status (Tier 4)",
+    response_model=NotImplementedResponse,
     responses={
-        501: {"description": "Planned for Tier 4"},
+        501: {"description": "Planned for Tier 4", "model": NotImplementedResponse},
     },
 )
-async def get_task_status(task_id: str) -> JSONResponse:
+async def get_task_status(task_id: str):
     """Check the execution status of a task or dispatch.
 
     Note: Agent orchestration is planned for Tier 4.
@@ -397,11 +370,12 @@ async def get_task_status(task_id: str) -> JSONResponse:
     "/aggregate",
     status_code=status.HTTP_501_NOT_IMPLEMENTED,
     summary="Aggregate results from subtasks (Tier 4)",
+    response_model=NotImplementedResponse,
     responses={
-        501: {"description": "Planned for Tier 4"},
+        501: {"description": "Planned for Tier 4", "model": NotImplementedResponse},
     },
 )
-async def aggregate_results(request: AggregateRequest) -> JSONResponse:
+async def aggregate_results(request: AggregateRequest):
     """Combine results from multiple subtasks into a unified response.
 
     Note: Agent orchestration is planned for Tier 4.
