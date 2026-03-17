@@ -280,9 +280,15 @@ async def auto_tag_document(document_id: str, req: AutoTagRequest):
     extract_req = ExtractTagsRequest(text=text_content)
     res = await extract_tags_text(extract_req)
     
-    # Store tags (mock storage for now, or use db.add_tag if we want to persist)
-    # We'll just return them
-    return {"status": "success", "document_id": document_id, "tags": res["tags"]}
+    # Persist tags to the artifact record
+    tags = res["tags"]
+    if tags:
+        try:
+            db.update_artifact(document_id, extras={"tags": tags})
+        except Exception as e:
+            logger.warning(f"Failed to persist tags for {document_id}: {e}")
+
+    return {"status": "success", "document_id": document_id, "tags": tags}
 
 @router.get("/tags/presets")
 async def get_tag_presets():

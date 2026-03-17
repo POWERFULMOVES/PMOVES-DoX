@@ -641,6 +641,13 @@ class SupabaseDatabase:
 
         return self._run(query, operation="search_memory")
 
+    def delete_memory(self, memory_id: str) -> bool:
+        result = self._run(
+            self._table("cipher_memory").delete().eq("id", memory_id),
+            operation="delete_memory",
+        )
+        return bool(result)
+
     def get_user_prefs(self, user_id: str) -> Dict:
         rows = self._run(
             self._table("user_prefs").select("*").eq("user_id", user_id), 

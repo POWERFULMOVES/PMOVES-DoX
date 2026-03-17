@@ -334,59 +334,17 @@ router = APIRouter(prefix="/orchestrate", tags=["orchestration"])
         400: {"description": "Invalid request parameters"},
     },
 )
-async def decompose_task(request: DecomposeRequest) -> DecomposeResponse:
+async def decompose_task(request: DecomposeRequest) -> JSONResponse:
     """Break a high-level task into coordinated subtasks.
 
-    This endpoint analyzes a complex task and decomposes it into smaller,
-    actionable subtasks that can be dispatched to specialized agents.
-    The decomposition considers task complexity, agent capabilities,
-    and potential dependencies between subtasks.
-
-    Args:
-        request: DecomposeRequest containing the task and constraints.
-
-    Returns:
-        DecomposeResponse with the generated subtasks and metadata.
-
-    Example:
-        ```json
-        {
-            "task": "Analyze the Q3 financial report and extract key metrics",
-            "context": "Focus on revenue growth and operating margins",
-            "max_subtasks": 4
-        }
-        ```
+    Note: Agent orchestration is planned for Tier 4.
     """
-    task_id = str(uuid4())
-    created_at = datetime.utcnow().isoformat()
-
-    # Generate mock subtasks based on the request
-    mock_subtasks = _generate_mock_subtasks(
-        request.task,
-        request.max_subtasks,
-        request.agent_hints,
-    )
-
-    # Store the task in memory
-    _task_store[task_id] = {
-        "task_id": task_id,
-        "original_task": request.task,
-        "context": request.context,
-        "subtasks": [st.model_dump() for st in mock_subtasks],
-        "status": TaskStatus.PENDING.value,
-        "created_at": created_at,
-        "updated_at": created_at,
-    }
-
-    return DecomposeResponse(
-        task_id=task_id,
-        original_task=request.task,
-        subtasks=mock_subtasks,
-        created_at=created_at,
-        metadata={
-            "decomposition_version": "1.0.0",
-            "strategy": "rule_based_mock",
-            "agent_hints_applied": request.agent_hints is not None,
+    return JSONResponse(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        content={
+            "status": "coming_in_tier_4",
+            "message": "Agent orchestration available in Tier 4",
+            "endpoint": "/orchestrate/decompose",
         },
     )
 
@@ -402,52 +360,18 @@ async def decompose_task(request: DecomposeRequest) -> DecomposeResponse:
         404: {"description": "Subtask not found"},
     },
 )
-async def dispatch_subtask(request: DispatchRequest) -> DispatchResponse:
+async def dispatch_subtask(request: DispatchRequest) -> JSONResponse:
     """Send a subtask to an appropriate agent for execution.
 
-    This endpoint dispatches a subtask to the specified agent type.
-    The dispatch is asynchronous - the endpoint returns immediately
-    with a dispatch ID that can be used to track execution status.
-
-    Args:
-        request: DispatchRequest with subtask details and target agent.
-
-    Returns:
-        DispatchResponse with dispatch confirmation and tracking info.
-
-    Note:
-        This is a stub implementation that simulates dispatch.
-        Full implementation requires agent registry integration.
+    Note: Agent orchestration is planned for Tier 4.
     """
-    dispatch_id = str(uuid4())
-    queued_at = datetime.utcnow().isoformat()
-
-    # Store dispatch information
-    dispatch_key = f"dispatch_{dispatch_id}"
-    _task_store[dispatch_key] = {
-        "dispatch_id": dispatch_id,
-        "subtask_id": request.subtask_id,
-        "task_id": request.task_id,
-        "agent_type": request.agent_type.value,
-        "payload": request.payload,
-        "priority": request.priority,
-        "timeout_seconds": request.timeout_seconds,
-        "status": TaskStatus.PENDING.value,
-        "queued_at": queued_at,
-        "updated_at": queued_at,
-    }
-
-    # Simulate status transition to in_progress
-    _task_store[dispatch_key]["status"] = TaskStatus.IN_PROGRESS.value
-    _task_store[dispatch_key]["started_at"] = datetime.utcnow().isoformat()
-
-    return DispatchResponse(
-        dispatch_id=dispatch_id,
-        subtask_id=request.subtask_id,
-        agent_type=request.agent_type,
-        status=TaskStatus.IN_PROGRESS,
-        queued_at=queued_at,
-        estimated_start=None,
+    return JSONResponse(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        content={
+            "status": "coming_in_tier_4",
+            "message": "Agent orchestration available in Tier 4",
+            "endpoint": "/orchestrate/dispatch",
+        },
     )
 
 
@@ -461,70 +385,18 @@ async def dispatch_subtask(request: DispatchRequest) -> DispatchResponse:
         404: {"description": "Task not found"},
     },
 )
-async def get_task_status(task_id: str) -> TaskStatusResponse:
+async def get_task_status(task_id: str) -> JSONResponse:
     """Check the execution status of a task or dispatch.
 
-    This endpoint returns the current status of a task, including
-    progress percentage, timestamps, and subtask statuses if the
-    task was decomposed.
-
-    Args:
-        task_id: UUID of the task or dispatch to check.
-
-    Returns:
-        TaskStatusResponse with current status and progress info.
-
-    Raises:
-        HTTPException: 404 if task_id is not found.
+    Note: Agent orchestration is planned for Tier 4.
     """
-    # Check for task in store
-    task = _get_task(task_id)
-
-    # Also check dispatch entries
-    if task is None:
-        task = _get_task(f"dispatch_{task_id}")
-
-    if task is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with ID '{task_id}' not found",
-        )
-
-    # Calculate progress based on subtasks if present
-    subtask_statuses = {}
-    progress = 0
-    if "subtasks" in task:
-        subtasks = task["subtasks"]
-        if subtasks:
-            completed = sum(
-                1 for st in subtasks
-                if st.get("status") == TaskStatus.COMPLETED.value
-            )
-            progress = int((completed / len(subtasks)) * 100)
-            subtask_statuses = {
-                st["subtask_id"]: TaskStatus(
-                    st.get("status", TaskStatus.PENDING.value)
-                )
-                for st in subtasks
-            }
-
-    current_status = TaskStatus(task.get("status", TaskStatus.PENDING.value))
-
-    # Simulate completion for demo purposes
-    if current_status == TaskStatus.IN_PROGRESS:
-        progress = 50
-
-    return TaskStatusResponse(
-        task_id=task_id,
-        status=current_status,
-        progress_percent=progress,
-        created_at=task.get("created_at", datetime.utcnow().isoformat()),
-        updated_at=task.get("updated_at", datetime.utcnow().isoformat()),
-        started_at=task.get("started_at"),
-        completed_at=task.get("completed_at"),
-        subtask_statuses=subtask_statuses,
-        result_preview=task.get("result_preview"),
-        error_message=task.get("error_message"),
+    return JSONResponse(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        content={
+            "status": "coming_in_tier_4",
+            "message": "Agent orchestration available in Tier 4",
+            "endpoint": f"/orchestrate/status/{task_id}",
+        },
     )
 
 
@@ -539,82 +411,18 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
         404: {"description": "Task or subtasks not found"},
     },
 )
-async def aggregate_results(request: AggregateRequest) -> AggregateResponse:
+async def aggregate_results(request: AggregateRequest) -> JSONResponse:
     """Combine results from multiple subtasks into a unified response.
 
-    This endpoint aggregates the results from completed subtasks
-    using the specified aggregation strategy. It supports various
-    strategies including merge, concatenation, and weighted combination.
-
-    Args:
-        request: AggregateRequest specifying which subtasks to combine.
-
-    Returns:
-        AggregateResponse with combined results and execution metadata.
-
-    Raises:
-        HTTPException: 404 if task_id is not found.
+    Note: Agent orchestration is planned for Tier 4.
     """
-    # Verify parent task exists
-    task = _get_task(request.task_id)
-    if task is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with ID '{request.task_id}' not found",
-        )
-
-    # Generate mock subtask results
-    subtask_results = []
-    total_time = 0
-    success_count = 0
-    failure_count = 0
-
-    for subtask_id in request.subtask_ids:
-        # Simulate completed subtask results
-        exec_time = 150 + (hash(subtask_id) % 500)  # Mock execution time
-        is_success = hash(subtask_id) % 10 != 0  # 90% success rate
-
-        result = SubtaskResult(
-            subtask_id=subtask_id,
-            status=TaskStatus.COMPLETED if is_success else TaskStatus.FAILED,
-            result={"data": f"Result for {subtask_id[:8]}..."} if is_success else None,
-            execution_time_ms=exec_time,
-            agent_type=AgentType.ANALYSIS,
-        )
-        subtask_results.append(result)
-        total_time += exec_time
-
-        if is_success:
-            success_count += 1
-        else:
-            failure_count += 1
-
-    # Generate aggregated result based on strategy
-    aggregated_result = _aggregate_by_strategy(
-        subtask_results,
-        request.aggregation_strategy,
-    )
-
-    # Update parent task status
-    if failure_count == 0:
-        _update_task(request.task_id, {
-            "status": TaskStatus.COMPLETED.value,
-            "completed_at": datetime.utcnow().isoformat(),
-        })
-    elif success_count == 0:
-        _update_task(request.task_id, {
-            "status": TaskStatus.FAILED.value,
-            "error_message": "All subtasks failed",
-        })
-
-    return AggregateResponse(
-        task_id=request.task_id,
-        aggregated_result=aggregated_result,
-        subtask_results=subtask_results,
-        aggregation_strategy=request.aggregation_strategy,
-        total_execution_time_ms=total_time,
-        success_count=success_count,
-        failure_count=failure_count,
+    return JSONResponse(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        content={
+            "status": "coming_in_tier_4",
+            "message": "Agent orchestration available in Tier 4",
+            "endpoint": "/orchestrate/aggregate",
+        },
     )
 
 

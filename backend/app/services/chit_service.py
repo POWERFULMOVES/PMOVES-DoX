@@ -26,6 +26,13 @@ try:
 except ImportError:
     HAS_NUMPY = False
 
+# Check for SentenceTransformers
+try:
+    import sentence_transformers  # noqa: F401
+    HAS_SENTENCE_TRANSFORMERS = True
+except ImportError:
+    HAS_SENTENCE_TRANSFORMERS = False
+
 
 def _convert_numpy_types(obj: Any) -> Any:
     """Convert numpy types to Python native types for JSON serialization."""

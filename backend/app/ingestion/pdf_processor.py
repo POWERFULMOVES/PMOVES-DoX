@@ -27,6 +27,7 @@ except ImportError:  # pragma: no cover - CPU-only installs may omit this
 from .advanced_table_processor import AdvancedTableProcessor
 from .chart_processor import ChartProcessor
 from .formula_processor import FormulaProcessor
+from .pii_masker import detect_pii, mask_text, encrypt_pii_fields
 
 
 NER_PROCESSOR = NERProcessor()
@@ -451,6 +452,57 @@ def process_pdf(
         analysis_results["entities"] = NER_PROCESSOR.extract_entities(text_elements)
     except Exception:  # pragma: no cover - spaCy optional in CI
         analysis_results["entities"] = []
+
+    # --------------------------- PII masking ---------------------------
+    pii_masking_enabled = os.getenv("PII_MASKING_ENABLED", "true").lower() != "false"
+    pii_passphrase = os.getenv("CHIT_PASSPHRASE", "")
+    pii_mode = "encrypt" if pii_passphrase else "redact"
+
+    if pii_masking_enabled:
+        ner_entities = analysis_results.get("entities", [])
+        pii_vault: List[Dict[str, Any]] = []
+        pii_field_count = 0
+
+        for ev in evidence:
+            if ev.get("content_type") != "text":
+                continue
+            full_data = ev.get("full_data") or {}
+            text_content = full_data.get("text", "")
+            if not text_content:
+                continue
+
+            pii_matches = detect_pii(text_content, ner_entities=ner_entities)
+            if not pii_matches:
+                continue
+
+            # Mask the stored text
+            masked = mask_text(text_content, pii_matches)
+            full_data["text"] = masked
+            ev["preview"] = masked[:300]
+            ev["pii_masked"] = True
+            ev["pii_fields_count"] = len(pii_matches)
+            pii_field_count += len(pii_matches)
+
+            # Encrypt originals if passphrase available
+            if pii_mode == "encrypt":
+                try:
+                    encrypted = encrypt_pii_fields(pii_matches, pii_passphrase)
+                    pii_vault.append({
+                        "evidence_id": ev["id"],
+                        "fields": encrypted,
+                    })
+                except Exception:
+                    pass  # Encryption failure is non-fatal; text is still redacted
+
+        if pii_vault:
+            analysis_results["pii_vault"] = pii_vault
+        analysis_results["pii_stats"] = {
+            "fields_masked": pii_field_count,
+            "mode": pii_mode,
+            "evidence_items_affected": sum(
+                1 for ev in evidence if ev.get("pii_masked")
+            ),
+        }
 
     metric_hits: List[Dict[str, Any]] = []
     for idx, item in enumerate(text_elements):

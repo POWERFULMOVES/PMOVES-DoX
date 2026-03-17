@@ -928,6 +928,15 @@ class ExtendedDatabase(Database):
             })
         return results
 
+    def delete_memory(self, memory_id: str) -> bool:
+        with Session(self.engine) as s:
+            row = s.get(CipherMemory, memory_id)
+            if not row:
+                return False
+            s.delete(row)
+            s.commit()
+        return True
+
     def get_user_prefs(self, user_id: str) -> Dict:
         with Session(self.engine) as s:
             row = s.get(UserPref, user_id)
