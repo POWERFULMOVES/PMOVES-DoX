@@ -492,7 +492,17 @@ def process_pdf(
                         "fields": encrypted,
                     })
                 except Exception:
-                    pass  # Encryption failure is non-fatal; text is still redacted
+                    import logging as _log
+                    _log.getLogger(__name__).error(
+                        "PII encryption failed for evidence_id=%s; "
+                        "text is redacted but originals are NOT recoverable",
+                        ev["id"], exc_info=True,
+                    )
+                    pii_vault.append({
+                        "evidence_id": ev["id"],
+                        "fields": [],
+                        "encryption_failed": True,
+                    })
 
         if pii_vault:
             analysis_results["pii_vault"] = pii_vault

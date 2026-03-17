@@ -178,7 +178,7 @@ BUILTIN_PATTERNS: List[PIIPattern] = [
     ),
     PIIPattern(
         name="ACCOUNT_NUMBER",
-        regex=r"\b\d{8,17}\b",
+        regex=r"(?i)(?:account|acct|member|a/c)[\s#:.-]*(\d{8,17})\b",
         mask_fn=_mask_account,
         entity_type="ACCOUNT_NUMBER",
     ),
@@ -218,8 +218,13 @@ def detect_pii(
     # 1. Regex-based detection
     for pat in patterns:
         for m in re.finditer(pat.regex, text):
-            start, end = m.start(), m.end()
-            matched_text = m.group()
+            # Use capture group if present, otherwise full match
+            if m.lastindex:
+                start, end = m.start(1), m.end(1)
+                matched_text = m.group(1)
+            else:
+                start, end = m.start(), m.end()
+                matched_text = m.group()
             if _overlaps(start, end):
                 continue
             if pat.validate_fn and not pat.validate_fn(matched_text):

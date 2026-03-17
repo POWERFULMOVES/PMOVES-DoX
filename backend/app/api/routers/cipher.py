@@ -96,9 +96,14 @@ def delete_memory(
         raise HTTPException(status_code=403, detail="Access denied")
 
     try:
-        db.delete_memory(memory_id)
+        deleted = db.delete_memory(memory_id)
     except AttributeError:
         raise HTTPException(status_code=501, detail="Memory deletion not supported by current database backend")
+    except Exception as e:
+        logger.error("Failed to delete memory %s: %s", memory_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Memory deletion failed")
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Memory not found or already deleted")
     return {"status": "deleted", "id": memory_id}
 
 # ---- PII Masking Endpoints ----
@@ -113,7 +118,10 @@ class PIIUnmaskRequest(BaseModel):
 
 
 @router.post("/pii/mask")
-def mask_pii_text(req: PIIMaskRequest):
+def mask_pii_text(
+    req: PIIMaskRequest,
+    _user_id: str = Depends(get_current_user),
+):
     """Detect and mask PII in text using regex + NER, with optional CHIT encryption."""
     from app.ingestion.pii_masker import detect_pii, mask_text, encrypt_pii_fields
 
@@ -139,8 +147,12 @@ def mask_pii_text(req: PIIMaskRequest):
         try:
             vault = encrypt_pii_fields(matches, passphrase)
             result["pii_vault"] = vault
-        except RuntimeError as e:
-            raise HTTPException(status_code=500, detail=str(e))
+        except Exception as e:
+            logger.error("PII encryption failed: %s", e, exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="PII encryption failed; check server logs",
+            )
 
     return result
 

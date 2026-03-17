@@ -326,12 +326,10 @@ router = APIRouter(prefix="/orchestrate", tags=["orchestration"])
 
 @router.post(
     "/decompose",
-    response_model=DecomposeResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Decompose a task into subtasks",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Decompose a task into subtasks (Tier 4)",
     responses={
-        201: {"description": "Task successfully decomposed"},
-        400: {"description": "Invalid request parameters"},
+        501: {"description": "Planned for Tier 4"},
     },
 )
 async def decompose_task(request: DecomposeRequest) -> JSONResponse:
@@ -351,13 +349,10 @@ async def decompose_task(request: DecomposeRequest) -> JSONResponse:
 
 @router.post(
     "/dispatch",
-    response_model=DispatchResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Dispatch a subtask to an agent",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Dispatch a subtask to an agent (Tier 4)",
     responses={
-        202: {"description": "Subtask accepted for dispatch"},
-        400: {"description": "Invalid dispatch request"},
-        404: {"description": "Subtask not found"},
+        501: {"description": "Planned for Tier 4"},
     },
 )
 async def dispatch_subtask(request: DispatchRequest) -> JSONResponse:
@@ -377,12 +372,10 @@ async def dispatch_subtask(request: DispatchRequest) -> JSONResponse:
 
 @router.get(
     "/status/{task_id}",
-    response_model=TaskStatusResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get task execution status",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Get task execution status (Tier 4)",
     responses={
-        200: {"description": "Task status retrieved successfully"},
-        404: {"description": "Task not found"},
+        501: {"description": "Planned for Tier 4"},
     },
 )
 async def get_task_status(task_id: str) -> JSONResponse:
@@ -402,13 +395,10 @@ async def get_task_status(task_id: str) -> JSONResponse:
 
 @router.post(
     "/aggregate",
-    response_model=AggregateResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Aggregate results from subtasks",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Aggregate results from subtasks (Tier 4)",
     responses={
-        200: {"description": "Results aggregated successfully"},
-        400: {"description": "Invalid aggregation request"},
-        404: {"description": "Task or subtasks not found"},
+        501: {"description": "Planned for Tier 4"},
     },
 )
 async def aggregate_results(request: AggregateRequest) -> JSONResponse:
@@ -424,143 +414,3 @@ async def aggregate_results(request: AggregateRequest) -> JSONResponse:
             "endpoint": "/orchestrate/aggregate",
         },
     )
-
-
-# =============================================================================
-# Helper Functions
-# =============================================================================
-
-
-def _generate_mock_subtasks(
-    task: str,
-    max_subtasks: int,
-    agent_hints: Optional[List[AgentType]],
-) -> List[SubtaskInfo]:
-    """Generate mock subtasks for demonstration.
-
-    This stub implementation generates realistic-looking subtasks
-    based on common patterns in the input task description.
-
-    Args:
-        task: The original task description.
-        max_subtasks: Maximum number of subtasks to generate.
-        agent_hints: Optional preferred agent types.
-
-    Returns:
-        List of SubtaskInfo objects representing the decomposition.
-    """
-    # Default agent rotation if no hints provided
-    default_agents = [
-        AgentType.DOCUMENT,
-        AgentType.SEARCH,
-        AgentType.ANALYSIS,
-        AgentType.EXTRACTION,
-        AgentType.REASONING,
-    ]
-    agents = agent_hints if agent_hints else default_agents
-
-    # Generate subtasks based on task keywords
-    subtasks = []
-    task_lower = task.lower()
-
-    subtask_templates = [
-        ("Parse and extract document structure", AgentType.DOCUMENT, "low"),
-        ("Search for relevant context", AgentType.SEARCH, "medium"),
-        ("Analyze extracted content", AgentType.ANALYSIS, "high"),
-        ("Extract key entities and metrics", AgentType.EXTRACTION, "medium"),
-        ("Synthesize findings and conclusions", AgentType.REASONING, "high"),
-    ]
-
-    # Adjust templates based on task content
-    if "financial" in task_lower or "report" in task_lower:
-        subtask_templates[2] = (
-            "Analyze financial metrics and trends",
-            AgentType.ANALYSIS,
-            "high",
-        )
-        subtask_templates[3] = (
-            "Extract key financial indicators",
-            AgentType.EXTRACTION,
-            "medium",
-        )
-
-    if "search" in task_lower or "find" in task_lower:
-        subtask_templates[1] = (
-            "Perform semantic search across documents",
-            AgentType.SEARCH,
-            "medium",
-        )
-
-    # Create subtasks up to max_subtasks
-    for i, (desc, default_agent, complexity) in enumerate(subtask_templates):
-        if i >= max_subtasks:
-            break
-
-        # Use hint agent if available, otherwise default
-        agent = agents[i % len(agents)] if agent_hints else default_agent
-
-        subtask = SubtaskInfo(
-            description=desc,
-            priority=i + 1,
-            estimated_complexity=complexity,
-            suggested_agent=agent,
-            dependencies=[subtasks[i - 1].subtask_id] if i > 0 else [],
-        )
-        subtasks.append(subtask)
-
-    return subtasks
-
-
-def _aggregate_by_strategy(
-    results: List[SubtaskResult],
-    strategy: str,
-) -> Dict[str, Any]:
-    """Aggregate subtask results using the specified strategy.
-
-    Args:
-        results: List of subtask results to aggregate.
-        strategy: Aggregation strategy (merge, concat, weighted, custom).
-
-    Returns:
-        Dictionary containing the aggregated result.
-    """
-    successful_results = [
-        r for r in results if r.status == TaskStatus.COMPLETED and r.result
-    ]
-
-    if strategy == "merge":
-        # Merge all result dictionaries
-        merged = {}
-        for r in successful_results:
-            if r.result:
-                merged[r.subtask_id] = r.result
-        return {"merged_data": merged, "strategy": "merge"}
-
-    elif strategy == "concat":
-        # Concatenate results as a list
-        return {
-            "concatenated_data": [r.result for r in successful_results],
-            "strategy": "concat",
-        }
-
-    elif strategy == "weighted":
-        # Weight by execution time (faster = higher weight)
-        weighted_data = []
-        total_inverse_time = sum(
-            1 / (r.execution_time_ms or 1) for r in successful_results
-        )
-        for r in successful_results:
-            weight = (1 / (r.execution_time_ms or 1)) / total_inverse_time
-            weighted_data.append({
-                "subtask_id": r.subtask_id,
-                "weight": round(weight, 4),
-                "result": r.result,
-            })
-        return {"weighted_data": weighted_data, "strategy": "weighted"}
-
-    else:  # custom
-        return {
-            "custom_data": [r.result for r in successful_results],
-            "strategy": "custom",
-            "note": "Custom aggregation requires implementation",
-        }
