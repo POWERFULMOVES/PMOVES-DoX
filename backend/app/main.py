@@ -1296,7 +1296,7 @@ from app.api.routers.documents import _process_pdf_fast  # single definition in 
 _log = logging.getLogger(__name__)
 
 def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suffix: str, task_id: str | None = None):
-    print(f"[DEBUG-STDERR] _process_and_store called for {file_path}", file=sys.stderr, flush=True)
+    _log.debug("_process_and_store called for %s", file_path)
     try:
         analysis_payload: dict | None = None
         facts: list[dict]
@@ -1304,13 +1304,12 @@ def _process_and_store(file_path: Path, report_week: str, artifact_id: str, suff
         if suffix == ".pdf":
             # PDF is async-capable but can be used sync too
             fast_mode = _env_flag("FAST_PDF_MODE", False)
-            print(f"[DEBUG-STDERR] FAST_PDF_MODE={fast_mode}", file=sys.stderr, flush=True)
-            _log.warning(f"[DEBUG] FAST_PDF_MODE={fast_mode}, processing {file_path.name}")
+            _log.debug("FAST_PDF_MODE=%s, processing %s", fast_mode, file_path.name)
             if fast_mode:
-                _log.warning("[DEBUG] Using _process_pdf_fast")
+                _log.debug("Using _process_pdf_fast")
                 facts, evidence, analysis_payload = _process_pdf_fast(file_path, ARTIFACTS_DIR)
             else:
-                _log.warning("[DEBUG] Using Docling process_pdf (synchronous)")
+                _log.debug("Using Docling process_pdf (synchronous)")
                 try:
                     # Call process_pdf directly - it's synchronous and background tasks
                     # run in thread pools, so no need for anyio.run()
