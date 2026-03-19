@@ -38,13 +38,14 @@ Total committed assets: ~247KB. Photography, video, and document templates are e
 
 ## Files
 
-```
+```text
 frontend/themes/unfcu/
   theme.ts              # Theme definition (brand name, logo paths, glow colors)
-  unfcu-overrides.css   # Corporate glassmorphism, scrollbar, grid tinting
+  unfcu-overrides.css   # Source CSS (glassmorphism, scrollbar, grid tinting)
   README.md             # This file
 
 frontend/public/themes/unfcu/
+  unfcu-overrides.css   # Runtime CSS loaded via <link> (CSS custom properties)
   unfcu-logo-white.png  # Primary logo (white on transparent)
   unfcu-logo-blue.png   # Primary logo (UN Blue on transparent)
   unfcu-wordmark-white.png  # Secondary wordmark (collapsed sidebar)

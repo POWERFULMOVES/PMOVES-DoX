@@ -38,11 +38,14 @@ class SupabaseDatabase:
             )
 
         self.url = url or os.getenv("SUPABASE_URL")
-        self.key = (
-            key
-            or os.getenv("SUPABASE_SERVICE_KEY")
-            or os.getenv("SUPABASE_ANON_KEY")
-        )
+        self.key = key or os.getenv("SUPABASE_SERVICE_KEY")
+        if not self.key:
+            anon = os.getenv("SUPABASE_ANON_KEY")
+            if anon:
+                LOGGER.warning(
+                    "Using SUPABASE_ANON_KEY as fallback — set SUPABASE_SERVICE_KEY for production"
+                )
+                self.key = anon
         if not self.url or not self.key:
             raise SupabaseUnavailable("Supabase credentials (URL/key) are not configured")
 
@@ -335,6 +338,36 @@ class SupabaseDatabase:
             operation="get_evidence",
         )
         return rows[0] if rows else None
+
+    def update_evidence(self, evidence_id: str, **fields: Any) -> None:
+        """Update an evidence record, merging into full_data if provided."""
+        full_data_update = fields.pop("full_data", None)
+
+        if full_data_update is not None:
+            rows = self._run(
+                self._table("evidence").select("full_data").eq("id", evidence_id),
+                operation="get_evidence_full_data",
+            )
+            base: Dict[str, Any] = {}
+            if rows:
+                existing = rows[0].get("full_data")
+                if isinstance(existing, dict):
+                    base = existing
+                elif isinstance(existing, str):
+                    try:
+                        base = json.loads(existing)
+                    except json.JSONDecodeError:
+                        base = {}
+            base.update(full_data_update)
+            fields["full_data"] = base
+
+        if not fields:
+            return
+
+        self._run(
+            self._table("evidence").update(fields).eq("id", evidence_id),
+            operation="update_evidence",
+        )
 
     def get_all_evidence(self) -> List[Dict]:
         return self._run(self._table("evidence").select("*"), operation="get_all_evidence")
@@ -640,6 +673,13 @@ class SupabaseDatabase:
         query = query.order("created_at", desc=True).limit(limit)
 
         return self._run(query, operation="search_memory")
+
+    def delete_memory(self, memory_id: str) -> bool:
+        result = self._run(
+            self._table("cipher_memory").delete().eq("id", memory_id),
+            operation="delete_memory",
+        )
+        return bool(result)
 
     def get_user_prefs(self, user_id: str) -> Dict:
         rows = self._run(

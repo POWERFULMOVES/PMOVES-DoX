@@ -4,12 +4,22 @@ Provides endpoints for health checks, configuration discovery,
 task status monitoring, and system metrics.
 """
 
-from fastapi import APIRouter, HTTPException, Response
+from fastapi import APIRouter, Depends, HTTPException, Response
+from pydantic import BaseModel
+from typing import Optional
+from app.auth import optional_auth
 import csv
 import io
 import os
 import time
 from app.globals import TASKS, START_TIME, DB_BACKEND_META, env_flag, search_index, db, HRM_STATS
+
+
+class RootStatus(BaseModel):
+    """Response model for the root API status endpoint."""
+    message: str
+    status: str
+    edition: str
 
 
 async def check_ollama_available(base_url: str) -> bool:
@@ -62,20 +72,16 @@ try:
 except Exception:
     watch = None  # type: ignore
 
-@router.get("/")
-async def root():
-    """Root endpoint providing API status message.
-
-    Returns:
-        A dictionary with a message indicating the API name and status.
-    """
-    edition = os.getenv("DOX_EDITION", "default")
+@router.get("/", response_model=RootStatus)
+async def root(_user_id: Optional[str] = Depends(optional_auth)):
+    """Root endpoint providing API status message."""
+    edition = os.getenv("DOX_EDITION", "default").strip().lower()
     titles = {"default": "PMOVES-DoX API", "unfcu": "UNFCU DocIntel API"}
     return {"message": titles.get(edition, titles["default"]), "status": "running", "edition": edition}
 
 
 @router.get("/config")
-async def config():
+async def config(_user_id: Optional[str] = Depends(optional_auth)):
     """Get system configuration and deployment information.
 
     Detects GPU availability, Ollama connectivity, and deployment mode
@@ -129,7 +135,7 @@ async def config():
     }
 
 @router.get("/tasks")
-async def list_tasks():
+async def list_tasks(_user_id: Optional[str] = Depends(optional_auth)):
     """List all background tasks with status summary.
 
     Returns:
@@ -156,7 +162,7 @@ async def list_tasks():
     }
 
 @router.get("/tasks/{task_id}")
-async def get_task_status(task_id: str):
+async def get_task_status(task_id: str, _user_id: Optional[str] = Depends(optional_auth)):
     """Get the status of a specific background task.
 
     Args:
@@ -234,7 +240,7 @@ def metrics_prometheus():
     return ("\n".join(lines) + "\n", 200, {"Content-Type": "text/plain; version=0.0.4"})
 
 @router.get("/logs")
-async def get_logs(level: str | None = None, code: str | None = None, q: str | None = None, document_id: str | None = None):
+async def get_logs(level: str | None = None, code: str | None = None, q: str | None = None, document_id: str | None = None, _user_id: Optional[str] = Depends(optional_auth)):
     """Query system logs with optional filters.
 
     Args:
@@ -250,25 +256,25 @@ async def get_logs(level: str | None = None, code: str | None = None, q: str | N
     return {"logs": logs}
 
 @router.get("/logs/export")
-async def export_logs(level: str | None = None):
-    """Export logs as CSV file.
+async def export_logs(level: str | None = None, _user_id: Optional[str] = Depends(optional_auth)):
+    """Export logs as CSV file."""
+    def _safe_csv(val: object) -> str:
+        """Sanitize value for CSV export (OWASP formula injection prevention)."""
+        s = str(val or "").replace("\r", " ").replace("\n", " ")
+        if s and s[0] in ("=", "+", "-", "@", "\t", ";"):
+            return f"\t{s}"
+        return s
 
-    Args:
-        level: Optional filter by log level.
-
-    Returns:
-        A CSV formatted Response with columns: ts, level, code, component, message.
-    """
     logs = db.list_logs(level=level)
     output = io.StringIO()
     writer = csv.writer(output)
     writer.writerow(["ts", "level", "code", "component", "message"])
     for log in logs:
-        writer.writerow([log.get("ts"), log.get("level"), log.get("code"), log.get("component"), log.get("message")])
+        writer.writerow([_safe_csv(log.get("ts")), _safe_csv(log.get("level")), _safe_csv(log.get("code")), _safe_csv(log.get("component")), _safe_csv(log.get("message"))])
     return Response(content=output.getvalue(), media_type="text/csv")
 
 @router.get("/apis")
-async def get_apis(method: str | None = None, tag: str | None = None):
+async def get_apis(method: str | None = None, tag: str | None = None, _user_id: Optional[str] = Depends(optional_auth)):
     """List discovered API endpoints from imported collections.
 
     Args:
@@ -282,7 +288,7 @@ async def get_apis(method: str | None = None, tag: str | None = None):
     return {"apis": apis}
 
 @router.get("/apis/{api_id}")
-async def get_api_detail(api_id: str):
+async def get_api_detail(api_id: str, _user_id: Optional[str] = Depends(optional_auth)):
     """Get detailed information about a specific API endpoint.
 
     Args:
@@ -301,7 +307,7 @@ async def get_api_detail(api_id: str):
     return api
 
 @router.get("/tags")
-async def get_tags(document_id: str | None = None):
+async def get_tags(document_id: str | None = None, _user_id: Optional[str] = Depends(optional_auth)):
     """List extracted tags with optional document filtering.
 
     Args:

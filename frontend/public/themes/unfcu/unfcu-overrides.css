@@ -1,0 +1,13 @@
+/* UNFCU Theme Overrides
+   Brand colors sourced from UNFCU visual identity guidelines.
+   Applied on top of the base DoX theme via CSS custom properties. */
+
+:root {
+  --unfcu-blue: #003DA5;
+  --unfcu-blue-dark: #002868;
+  --unfcu-blue-light: #4A90D9;
+  --unfcu-gold: #FFB81C;
+  --unfcu-white: #FFFFFF;
+  --unfcu-gray-100: #F5F6F8;
+  --unfcu-gray-600: #5A6472;
+}
