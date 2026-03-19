@@ -95,8 +95,137 @@ def delete_memory(
     if memory.get("user_id") != user_id:
         raise HTTPException(status_code=403, detail="Access denied")
 
-    # Memory deletion not yet implemented — return honest 501 instead of lying
-    raise HTTPException(status_code=501, detail="Memory deletion not yet implemented")
+    try:
+        deleted = db.delete_memory(memory_id)
+    except AttributeError as e:
+        raise HTTPException(status_code=501, detail="Memory deletion not supported by current database backend") from e
+    except Exception as e:
+        logger.error("Failed to delete memory %s: %s", memory_id, e, exc_info=True)
+        raise HTTPException(status_code=500, detail="Memory deletion failed") from None
+    if not deleted:
+        raise HTTPException(status_code=404, detail="Memory not found or already deleted")
+    return {"status": "deleted", "id": memory_id}
+
+# ---- PII Masking Endpoints ----
+
+class PIIMaskRequest(BaseModel):
+    text: str
+    mode: str = "redact"  # "redact" | "encrypt"
+
+
+class PIIUnmaskRequest(BaseModel):
+    vault: List[Dict[str, Any]]
+
+
+@router.post("/pii/mask")
+def mask_pii_text(
+    req: PIIMaskRequest,
+    _user_id: str = Depends(get_current_user),
+):
+    """Detect and mask PII in text using regex + NER, with optional CHIT encryption."""
+    from app.ingestion.pii_masker import detect_pii, mask_text, encrypt_pii_fields
+
+    matches = detect_pii(req.text)
+    masked = mask_text(req.text, matches)
+
+    result: Dict[str, Any] = {
+        "masked_text": masked,
+        "fields_detected": len(matches),
+        "detections": [
+            {"type": m.pii_type, "confidence": m.confidence, "source": m.source}
+            for m in matches
+        ],
+    }
+
+    if req.mode == "encrypt" and matches:
+        passphrase = os.getenv("CHIT_PASSPHRASE", "")
+        if not passphrase:
+            raise HTTPException(
+                status_code=400,
+                detail="CHIT_PASSPHRASE not configured — cannot encrypt PII fields",
+            )
+        try:
+            vault = encrypt_pii_fields(matches, passphrase)
+            result["pii_vault"] = vault
+        except Exception as e:
+            logger.error("PII encryption failed: %s", e, exc_info=True)
+            raise HTTPException(
+                status_code=500,
+                detail="PII encryption failed; check server logs",
+            ) from None
+
+    return result
+
+
+@router.post("/pii/unmask")
+def unmask_pii_text(
+    req: PIIUnmaskRequest,
+    user_id: str = Depends(get_current_user),
+    authorization: str = Header(None),
+):
+    """Decrypt PII vault entries. Admin-only (JWT with service_role required)."""
+    # --- Admin gate: check JWT role claim ---
+    _admin_roles = {"service_role", "admin"}
+    _role = None
+    if authorization:
+        try:
+            from jose import jwt as jose_jwt
+            _secret = os.getenv("SUPABASE_JWT_SECRET") or os.getenv("JWT_SECRET", "")
+            _token = authorization.replace("Bearer ", "").replace("bearer ", "")
+            _payload = jose_jwt.decode(_token, _secret, algorithms=["HS256"],
+                                       options={"verify_aud": False})
+            _role = _payload.get("role", "")
+        except Exception:
+            pass
+    if _role not in _admin_roles:
+        raise HTTPException(status_code=403, detail="Admin access required for PII decryption")
+
+    from app.ingestion.pii_masker import decrypt_pii_field
+
+    passphrase = os.getenv("CHIT_PASSPHRASE", "")
+    if not passphrase:
+        raise HTTPException(status_code=400, detail="CHIT_PASSPHRASE not configured")
+
+    decrypted = []
+    required_keys = {"ciphertext", "iv", "salt"}
+    for entry in req.vault:
+        missing = required_keys - entry.keys()
+        if missing:
+            decrypted.append({
+                "pii_type": entry.get("pii_type", "unknown"),
+                "error": f"Missing required fields: {missing}",
+            })
+            continue
+        try:
+            plaintext = decrypt_pii_field(entry, passphrase)
+            decrypted.append({
+                "pii_type": entry.get("pii_type", "unknown"),
+                "original": plaintext,
+            })
+        except Exception:
+            logger.exception("PII decryption failed for entry type=%s", entry.get("pii_type", "unknown"))
+            decrypted.append({
+                "pii_type": entry.get("pii_type", "unknown"),
+                "error": "Decryption failed",
+            })
+    return {"decrypted": decrypted}
+
+
+@router.get("/pii/stats")
+def pii_stats():
+    """Return PII masking configuration and statistics for the demo dashboard."""
+    passphrase_configured = bool(os.getenv("CHIT_PASSPHRASE", ""))
+    masking_enabled = os.getenv("PII_MASKING_ENABLED", "true").lower() != "false"
+    return {
+        "masking_enabled": masking_enabled,
+        "encryption_available": passphrase_configured,
+        "mode": "encrypt" if passphrase_configured else "redact",
+        "supported_types": [
+            "SSN", "ACCOUNT_NUMBER", "ROUTING_NUMBER",
+            "CREDIT_CARD", "EMAIL", "PHONE_US", "PERSON_NAME",
+        ],
+    }
+
 
 @router.get("/skills")
 def get_skills():
@@ -319,7 +448,8 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
         with open(target_path, "w") as f:
             json.dump(config, f, indent=2)
     except Exception as e:
-        raise HTTPException(500, f"Failed to save manifold config: {e}")
+        logger.error("Failed to save manifold config: %s", e, exc_info=True)
+        raise HTTPException(500, "Failed to save manifold config") from None
         
     # 5. Compute zeta spectrum from embeddings
     frequencies, amplitudes = geometry_engine.compute_zeta_spectrum(embeddings)
@@ -341,5 +471,5 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
             "frequencies": frequencies,
             "amplitudes": amplitudes
         },
-        "url": "http://localhost:8000/hyperdimensions?load=chit_manifold.json"
+        "url": f"{os.getenv('DOX_BASE_URL', 'http://localhost:' + os.getenv('PORT', '8484'))}/hyperdimensions?load=chit_manifold.json"
     }

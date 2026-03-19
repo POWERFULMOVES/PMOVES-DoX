@@ -1,0 +1,34 @@
+# UNFCU Edition overlay
+# Usage: docker compose -f docker-compose.yml -f docker-compose.unfcu.yml up
+services:
+  frontend:
+    build:
+      args:
+        NEXT_PUBLIC_DOX_EDITION: unfcu
+    environment:
+      - NEXT_PUBLIC_DOX_EDITION=unfcu
+
+  backend:
+    environment:
+      - DOX_EDITION=unfcu
+      - ENVIRONMENT=production
+      - DB_BACKEND=sqlite
+      - DB_PATH=/app/uploads/unfcu.sqlite3
+      # Full Docling extraction for demo (models cached in docling-models volume)
+      - FAST_PDF_MODE=false
+      - DOCLING_ARTIFACTS_PATH=/app/models/docling
+      # JWT secrets — MUST be set via .env file or shell environment
+      # Generate with: openssl rand -base64 64
+      - SUPABASE_JWT_SECRET=${SUPABASE_JWT_SECRET:?SUPABASE_JWT_SECRET must be set}
+      - JWT_SECRET=${JWT_SECRET:?JWT_SECRET must be set}
+    volumes:
+      # Persist SQLite DB and uploads across restarts
+      - unfcu-data:/app/data
+      - unfcu-uploads:/app/uploads
+      # Docling model cache (avoids re-download on restart)
+      - docling-models:/app/models/docling
+
+volumes:
+  unfcu-data:
+  unfcu-uploads:
+  docling-models:

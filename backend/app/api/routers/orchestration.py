@@ -16,7 +16,7 @@ from enum import Enum
 from typing import Dict, List, Optional, Any
 from uuid import uuid4
 
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
@@ -44,44 +44,6 @@ class AgentType(str, Enum):
     ANALYSIS = "analysis"
     REASONING = "reasoning"
     EXTRACTION = "extraction"
-
-
-# =============================================================================
-# In-Memory Task Storage
-# =============================================================================
-
-
-# In-memory storage for tasks (stub implementation)
-_task_store: Dict[str, Dict[str, Any]] = {}
-
-
-def _get_task(task_id: str) -> Optional[Dict[str, Any]]:
-    """Retrieve a task from the in-memory store.
-
-    Args:
-        task_id: The UUID of the task to retrieve.
-
-    Returns:
-        Task dictionary if found, None otherwise.
-    """
-    return _task_store.get(task_id)
-
-
-def _update_task(task_id: str, updates: Dict[str, Any]) -> bool:
-    """Update a task in the in-memory store.
-
-    Args:
-        task_id: The UUID of the task to update.
-        updates: Dictionary of fields to update.
-
-    Returns:
-        True if task was found and updated, False otherwise.
-    """
-    if task_id not in _task_store:
-        return False
-    _task_store[task_id].update(updates)
-    _task_store[task_id]["updated_at"] = datetime.utcnow().isoformat()
-    return True
 
 
 # =============================================================================
@@ -319,6 +281,14 @@ class AggregateResponse(BaseModel):
 router = APIRouter(prefix="/orchestrate", tags=["orchestration"])
 
 
+class NotImplementedResponse(BaseModel):
+    """Response model for stub endpoints planned for future tiers."""
+
+    status: str = "coming_in_tier_4"
+    message: str = "Agent orchestration available in Tier 4"
+    endpoint: str
+
+
 # =============================================================================
 # Endpoints
 # =============================================================================
@@ -326,433 +296,95 @@ router = APIRouter(prefix="/orchestrate", tags=["orchestration"])
 
 @router.post(
     "/decompose",
-    response_model=DecomposeResponse,
-    status_code=status.HTTP_201_CREATED,
-    summary="Decompose a task into subtasks",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Decompose a task into subtasks (Tier 4)",
+    response_model=NotImplementedResponse,
     responses={
-        201: {"description": "Task successfully decomposed"},
-        400: {"description": "Invalid request parameters"},
+        501: {"description": "Planned for Tier 4", "model": NotImplementedResponse},
     },
 )
-async def decompose_task(request: DecomposeRequest) -> DecomposeResponse:
+async def decompose_task(request: DecomposeRequest):
     """Break a high-level task into coordinated subtasks.
 
-    This endpoint analyzes a complex task and decomposes it into smaller,
-    actionable subtasks that can be dispatched to specialized agents.
-    The decomposition considers task complexity, agent capabilities,
-    and potential dependencies between subtasks.
-
-    Args:
-        request: DecomposeRequest containing the task and constraints.
-
-    Returns:
-        DecomposeResponse with the generated subtasks and metadata.
-
-    Example:
-        ```json
-        {
-            "task": "Analyze the Q3 financial report and extract key metrics",
-            "context": "Focus on revenue growth and operating margins",
-            "max_subtasks": 4
-        }
-        ```
+    Note: Agent orchestration is planned for Tier 4.
     """
-    task_id = str(uuid4())
-    created_at = datetime.utcnow().isoformat()
-
-    # Generate mock subtasks based on the request
-    mock_subtasks = _generate_mock_subtasks(
-        request.task,
-        request.max_subtasks,
-        request.agent_hints,
-    )
-
-    # Store the task in memory
-    _task_store[task_id] = {
-        "task_id": task_id,
-        "original_task": request.task,
-        "context": request.context,
-        "subtasks": [st.model_dump() for st in mock_subtasks],
-        "status": TaskStatus.PENDING.value,
-        "created_at": created_at,
-        "updated_at": created_at,
-    }
-
-    return DecomposeResponse(
-        task_id=task_id,
-        original_task=request.task,
-        subtasks=mock_subtasks,
-        created_at=created_at,
-        metadata={
-            "decomposition_version": "1.0.0",
-            "strategy": "rule_based_mock",
-            "agent_hints_applied": request.agent_hints is not None,
+    return JSONResponse(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        content={
+            "status": "coming_in_tier_4",
+            "message": "Agent orchestration available in Tier 4",
+            "endpoint": "/orchestrate/decompose",
         },
     )
 
 
 @router.post(
     "/dispatch",
-    response_model=DispatchResponse,
-    status_code=status.HTTP_202_ACCEPTED,
-    summary="Dispatch a subtask to an agent",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Dispatch a subtask to an agent (Tier 4)",
+    response_model=NotImplementedResponse,
     responses={
-        202: {"description": "Subtask accepted for dispatch"},
-        400: {"description": "Invalid dispatch request"},
-        404: {"description": "Subtask not found"},
+        501: {"description": "Planned for Tier 4", "model": NotImplementedResponse},
     },
 )
-async def dispatch_subtask(request: DispatchRequest) -> DispatchResponse:
+async def dispatch_subtask(request: DispatchRequest):
     """Send a subtask to an appropriate agent for execution.
 
-    This endpoint dispatches a subtask to the specified agent type.
-    The dispatch is asynchronous - the endpoint returns immediately
-    with a dispatch ID that can be used to track execution status.
-
-    Args:
-        request: DispatchRequest with subtask details and target agent.
-
-    Returns:
-        DispatchResponse with dispatch confirmation and tracking info.
-
-    Note:
-        This is a stub implementation that simulates dispatch.
-        Full implementation requires agent registry integration.
+    Note: Agent orchestration is planned for Tier 4.
     """
-    dispatch_id = str(uuid4())
-    queued_at = datetime.utcnow().isoformat()
-
-    # Store dispatch information
-    dispatch_key = f"dispatch_{dispatch_id}"
-    _task_store[dispatch_key] = {
-        "dispatch_id": dispatch_id,
-        "subtask_id": request.subtask_id,
-        "task_id": request.task_id,
-        "agent_type": request.agent_type.value,
-        "payload": request.payload,
-        "priority": request.priority,
-        "timeout_seconds": request.timeout_seconds,
-        "status": TaskStatus.PENDING.value,
-        "queued_at": queued_at,
-        "updated_at": queued_at,
-    }
-
-    # Simulate status transition to in_progress
-    _task_store[dispatch_key]["status"] = TaskStatus.IN_PROGRESS.value
-    _task_store[dispatch_key]["started_at"] = datetime.utcnow().isoformat()
-
-    return DispatchResponse(
-        dispatch_id=dispatch_id,
-        subtask_id=request.subtask_id,
-        agent_type=request.agent_type,
-        status=TaskStatus.IN_PROGRESS,
-        queued_at=queued_at,
-        estimated_start=None,
+    return JSONResponse(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        content={
+            "status": "coming_in_tier_4",
+            "message": "Agent orchestration available in Tier 4",
+            "endpoint": "/orchestrate/dispatch",
+        },
     )
 
 
 @router.get(
     "/status/{task_id}",
-    response_model=TaskStatusResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Get task execution status",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Get task execution status (Tier 4)",
+    response_model=NotImplementedResponse,
     responses={
-        200: {"description": "Task status retrieved successfully"},
-        404: {"description": "Task not found"},
+        501: {"description": "Planned for Tier 4", "model": NotImplementedResponse},
     },
 )
-async def get_task_status(task_id: str) -> TaskStatusResponse:
+async def get_task_status(task_id: str):
     """Check the execution status of a task or dispatch.
 
-    This endpoint returns the current status of a task, including
-    progress percentage, timestamps, and subtask statuses if the
-    task was decomposed.
-
-    Args:
-        task_id: UUID of the task or dispatch to check.
-
-    Returns:
-        TaskStatusResponse with current status and progress info.
-
-    Raises:
-        HTTPException: 404 if task_id is not found.
+    Note: Agent orchestration is planned for Tier 4.
     """
-    # Check for task in store
-    task = _get_task(task_id)
-
-    # Also check dispatch entries
-    if task is None:
-        task = _get_task(f"dispatch_{task_id}")
-
-    if task is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with ID '{task_id}' not found",
-        )
-
-    # Calculate progress based on subtasks if present
-    subtask_statuses = {}
-    progress = 0
-    if "subtasks" in task:
-        subtasks = task["subtasks"]
-        if subtasks:
-            completed = sum(
-                1 for st in subtasks
-                if st.get("status") == TaskStatus.COMPLETED.value
-            )
-            progress = int((completed / len(subtasks)) * 100)
-            subtask_statuses = {
-                st["subtask_id"]: TaskStatus(
-                    st.get("status", TaskStatus.PENDING.value)
-                )
-                for st in subtasks
-            }
-
-    current_status = TaskStatus(task.get("status", TaskStatus.PENDING.value))
-
-    # Simulate completion for demo purposes
-    if current_status == TaskStatus.IN_PROGRESS:
-        progress = 50
-
-    return TaskStatusResponse(
-        task_id=task_id,
-        status=current_status,
-        progress_percent=progress,
-        created_at=task.get("created_at", datetime.utcnow().isoformat()),
-        updated_at=task.get("updated_at", datetime.utcnow().isoformat()),
-        started_at=task.get("started_at"),
-        completed_at=task.get("completed_at"),
-        subtask_statuses=subtask_statuses,
-        result_preview=task.get("result_preview"),
-        error_message=task.get("error_message"),
+    return JSONResponse(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        content={
+            "status": "coming_in_tier_4",
+            "message": "Agent orchestration available in Tier 4",
+            "endpoint": f"/orchestrate/status/{task_id}",
+        },
     )
 
 
 @router.post(
     "/aggregate",
-    response_model=AggregateResponse,
-    status_code=status.HTTP_200_OK,
-    summary="Aggregate results from subtasks",
+    status_code=status.HTTP_501_NOT_IMPLEMENTED,
+    summary="Aggregate results from subtasks (Tier 4)",
+    response_model=NotImplementedResponse,
     responses={
-        200: {"description": "Results aggregated successfully"},
-        400: {"description": "Invalid aggregation request"},
-        404: {"description": "Task or subtasks not found"},
+        501: {"description": "Planned for Tier 4", "model": NotImplementedResponse},
     },
 )
-async def aggregate_results(request: AggregateRequest) -> AggregateResponse:
+async def aggregate_results(request: AggregateRequest):
     """Combine results from multiple subtasks into a unified response.
 
-    This endpoint aggregates the results from completed subtasks
-    using the specified aggregation strategy. It supports various
-    strategies including merge, concatenation, and weighted combination.
-
-    Args:
-        request: AggregateRequest specifying which subtasks to combine.
-
-    Returns:
-        AggregateResponse with combined results and execution metadata.
-
-    Raises:
-        HTTPException: 404 if task_id is not found.
+    Note: Agent orchestration is planned for Tier 4.
     """
-    # Verify parent task exists
-    task = _get_task(request.task_id)
-    if task is None:
-        raise HTTPException(
-            status_code=status.HTTP_404_NOT_FOUND,
-            detail=f"Task with ID '{request.task_id}' not found",
-        )
-
-    # Generate mock subtask results
-    subtask_results = []
-    total_time = 0
-    success_count = 0
-    failure_count = 0
-
-    for subtask_id in request.subtask_ids:
-        # Simulate completed subtask results
-        exec_time = 150 + (hash(subtask_id) % 500)  # Mock execution time
-        is_success = hash(subtask_id) % 10 != 0  # 90% success rate
-
-        result = SubtaskResult(
-            subtask_id=subtask_id,
-            status=TaskStatus.COMPLETED if is_success else TaskStatus.FAILED,
-            result={"data": f"Result for {subtask_id[:8]}..."} if is_success else None,
-            execution_time_ms=exec_time,
-            agent_type=AgentType.ANALYSIS,
-        )
-        subtask_results.append(result)
-        total_time += exec_time
-
-        if is_success:
-            success_count += 1
-        else:
-            failure_count += 1
-
-    # Generate aggregated result based on strategy
-    aggregated_result = _aggregate_by_strategy(
-        subtask_results,
-        request.aggregation_strategy,
+    return JSONResponse(
+        status_code=status.HTTP_501_NOT_IMPLEMENTED,
+        content={
+            "status": "coming_in_tier_4",
+            "message": "Agent orchestration available in Tier 4",
+            "endpoint": "/orchestrate/aggregate",
+        },
     )
-
-    # Update parent task status
-    if failure_count == 0:
-        _update_task(request.task_id, {
-            "status": TaskStatus.COMPLETED.value,
-            "completed_at": datetime.utcnow().isoformat(),
-        })
-    elif success_count == 0:
-        _update_task(request.task_id, {
-            "status": TaskStatus.FAILED.value,
-            "error_message": "All subtasks failed",
-        })
-
-    return AggregateResponse(
-        task_id=request.task_id,
-        aggregated_result=aggregated_result,
-        subtask_results=subtask_results,
-        aggregation_strategy=request.aggregation_strategy,
-        total_execution_time_ms=total_time,
-        success_count=success_count,
-        failure_count=failure_count,
-    )
-
-
-# =============================================================================
-# Helper Functions
-# =============================================================================
-
-
-def _generate_mock_subtasks(
-    task: str,
-    max_subtasks: int,
-    agent_hints: Optional[List[AgentType]],
-) -> List[SubtaskInfo]:
-    """Generate mock subtasks for demonstration.
-
-    This stub implementation generates realistic-looking subtasks
-    based on common patterns in the input task description.
-
-    Args:
-        task: The original task description.
-        max_subtasks: Maximum number of subtasks to generate.
-        agent_hints: Optional preferred agent types.
-
-    Returns:
-        List of SubtaskInfo objects representing the decomposition.
-    """
-    # Default agent rotation if no hints provided
-    default_agents = [
-        AgentType.DOCUMENT,
-        AgentType.SEARCH,
-        AgentType.ANALYSIS,
-        AgentType.EXTRACTION,
-        AgentType.REASONING,
-    ]
-    agents = agent_hints if agent_hints else default_agents
-
-    # Generate subtasks based on task keywords
-    subtasks = []
-    task_lower = task.lower()
-
-    subtask_templates = [
-        ("Parse and extract document structure", AgentType.DOCUMENT, "low"),
-        ("Search for relevant context", AgentType.SEARCH, "medium"),
-        ("Analyze extracted content", AgentType.ANALYSIS, "high"),
-        ("Extract key entities and metrics", AgentType.EXTRACTION, "medium"),
-        ("Synthesize findings and conclusions", AgentType.REASONING, "high"),
-    ]
-
-    # Adjust templates based on task content
-    if "financial" in task_lower or "report" in task_lower:
-        subtask_templates[2] = (
-            "Analyze financial metrics and trends",
-            AgentType.ANALYSIS,
-            "high",
-        )
-        subtask_templates[3] = (
-            "Extract key financial indicators",
-            AgentType.EXTRACTION,
-            "medium",
-        )
-
-    if "search" in task_lower or "find" in task_lower:
-        subtask_templates[1] = (
-            "Perform semantic search across documents",
-            AgentType.SEARCH,
-            "medium",
-        )
-
-    # Create subtasks up to max_subtasks
-    for i, (desc, default_agent, complexity) in enumerate(subtask_templates):
-        if i >= max_subtasks:
-            break
-
-        # Use hint agent if available, otherwise default
-        agent = agents[i % len(agents)] if agent_hints else default_agent
-
-        subtask = SubtaskInfo(
-            description=desc,
-            priority=i + 1,
-            estimated_complexity=complexity,
-            suggested_agent=agent,
-            dependencies=[subtasks[i - 1].subtask_id] if i > 0 else [],
-        )
-        subtasks.append(subtask)
-
-    return subtasks
-
-
-def _aggregate_by_strategy(
-    results: List[SubtaskResult],
-    strategy: str,
-) -> Dict[str, Any]:
-    """Aggregate subtask results using the specified strategy.
-
-    Args:
-        results: List of subtask results to aggregate.
-        strategy: Aggregation strategy (merge, concat, weighted, custom).
-
-    Returns:
-        Dictionary containing the aggregated result.
-    """
-    successful_results = [
-        r for r in results if r.status == TaskStatus.COMPLETED and r.result
-    ]
-
-    if strategy == "merge":
-        # Merge all result dictionaries
-        merged = {}
-        for r in successful_results:
-            if r.result:
-                merged[r.subtask_id] = r.result
-        return {"merged_data": merged, "strategy": "merge"}
-
-    elif strategy == "concat":
-        # Concatenate results as a list
-        return {
-            "concatenated_data": [r.result for r in successful_results],
-            "strategy": "concat",
-        }
-
-    elif strategy == "weighted":
-        # Weight by execution time (faster = higher weight)
-        weighted_data = []
-        total_inverse_time = sum(
-            1 / (r.execution_time_ms or 1) for r in successful_results
-        )
-        for r in successful_results:
-            weight = (1 / (r.execution_time_ms or 1)) / total_inverse_time
-            weighted_data.append({
-                "subtask_id": r.subtask_id,
-                "weight": round(weight, 4),
-                "result": r.result,
-            })
-        return {"weighted_data": weighted_data, "strategy": "weighted"}
-
-    else:  # custom
-        return {
-            "custom_data": [r.result for r in successful_results],
-            "strategy": "custom",
-            "note": "Custom aggregation requires implementation",
-        }

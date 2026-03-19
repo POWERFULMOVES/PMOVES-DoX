@@ -216,10 +216,10 @@ export default function ArtifactsPanel() {
                 <div className="font-medium mb-1">Evidence ({(detail.evidence||[]).length})</div>
                 <div className="border rounded max-h-60 overflow-auto">
                   <table className="min-w-full text-left text-xs">
-                    <thead><tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">locator</th><th className="px-2 py-1">type</th></tr></thead>
+                    <thead><tr className="bg-gray-50 dark:bg-gray-800"><th className="px-2 py-1">locator</th><th className="px-2 py-1">type</th><th className="px-2 py-1">PII</th></tr></thead>
                     <tbody>
                       {(detail.evidence||[]).slice(0,10).map((e:any,i:number)=> (
-                        <tr key={i} className="border-t"><td className="px-2 py-1">{e.locator}</td><td className="px-2 py-1">{e.content_type}</td></tr>
+                        <tr key={i} className="border-t"><td className="px-2 py-1">{e.locator}</td><td className="px-2 py-1">{e.content_type}</td><td className="px-2 py-1">{e.pii_masked ? <span title={`CHIT-encrypted: ${e.pii_fields_count || 0} field(s) masked`} className="inline-flex items-center text-green-600 dark:text-green-400">&#x1F6E1;&#xFE0F;</span> : null}</td></tr>
                       ))}
                     </tbody>
                   </table>

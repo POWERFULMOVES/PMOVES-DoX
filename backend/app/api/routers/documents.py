@@ -1,6 +1,7 @@
-from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Form, Query
+from fastapi import APIRouter, UploadFile, File, HTTPException, BackgroundTasks, Form, Query, Depends
 from fastapi.responses import FileResponse
 from typing import List, Dict, Annotated, Optional, Any
+from app.auth import get_current_user, optional_auth
 import logging
 import os
 import shutil
@@ -318,7 +319,7 @@ def ingest_file_from_watch(src: Path, report_week: str = ""):
         pass
 
 @router.get("/artifacts")
-async def list_artifacts():
+async def list_artifacts(_user_id: Optional[str] = Depends(optional_auth)):
     artifacts = db.get_artifacts()
     evidence = db.get_all_evidence()
     summary: dict[str, dict[str, int]] = {}
@@ -372,7 +373,7 @@ async def list_artifacts():
     return {"artifacts": enriched}
 
 @router.get("/artifacts/media")
-async def artifact_media():
+async def artifact_media(_user_id: Optional[str] = Depends(optional_auth)):
     artifacts = {a.get("id"): a for a in db.get_artifacts()}
     evidence = db.get_all_evidence()
     transcripts: list[dict] = []
@@ -412,7 +413,7 @@ async def artifact_media():
     }
 
 @router.get("/artifacts/{artifact_id}")
-async def artifact_detail(artifact_id: str):
+async def artifact_detail(artifact_id: str, _user_id: Optional[str] = Depends(optional_auth)):
     arts = db.get_artifacts()
     art = next((a for a in arts if a.get("id") == artifact_id), None)
     if not art:
@@ -422,7 +423,7 @@ async def artifact_detail(artifact_id: str):
     return {"artifact": art, "facts": facts, "evidence": evidence}
 
 @router.get("/documents")
-async def list_documents(type: str | None = None):
+async def list_documents(type: str | None = None, _user_id: Optional[str] = Depends(optional_auth)):
     items = db.list_documents(type=type)
     return {"documents": items}
 
@@ -435,6 +436,7 @@ async def upload_files(
     report_week: str = "",
     async_pdf: bool = True,
     web_urls: WebUrlForm = [],
+    _user_id: Optional[str] = Depends(optional_auth),
 ):
     """Upload and process documents."""
 
@@ -487,7 +489,8 @@ async def upload_files(
                     }
                 )
         except Exception as exc:
-            results.append({"filename": file.filename, "status": "error", "error": str(exc)})
+            logging.getLogger(__name__).error("File processing error", exc_info=True, extra={"filename": file.filename})
+            results.append({"filename": file.filename, "status": "error", "error": "File processing failed"})
 
     for raw_url in web_urls or []:
         url = (raw_url or "").strip()
@@ -544,12 +547,12 @@ async def upload_files(
     return {"results": results}
 
 @router.post("/ingest/xml")
-async def ingest_xml_endpoint(file: UploadFile = File(...)):
+async def ingest_xml_endpoint(file: UploadFile = File(...), _user_id: Optional[str] = Depends(optional_auth)):
     file_id = str(uuid.uuid4())
     file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-    
+
     doc, rows = process_xml(file_path)
     db.add_document(doc)
     for row in rows:
@@ -557,12 +560,12 @@ async def ingest_xml_endpoint(file: UploadFile = File(...)):
     return {"document_id": doc["id"], "status": "success"}
 
 @router.post("/ingest/openapi")
-async def ingest_openapi_endpoint(file: UploadFile = File(...)):
+async def ingest_openapi_endpoint(file: UploadFile = File(...), _user_id: Optional[str] = Depends(optional_auth)):
     file_id = str(uuid.uuid4())
     file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
     with file_path.open("wb") as buffer:
         shutil.copyfileobj(file.file, buffer)
-        
+
     doc, rows = process_openapi(file_path)
     db.add_document(doc)
     for row in rows:
@@ -570,7 +573,7 @@ async def ingest_openapi_endpoint(file: UploadFile = File(...)):
     return {"document_id": doc["id"], "status": "success"}
 
 @router.post("/ingest/postman")
-async def ingest_postman_endpoint(file: UploadFile = File(...)):
+async def ingest_postman_endpoint(file: UploadFile = File(...), _user_id: Optional[str] = Depends(optional_auth)):
     file_id = str(uuid.uuid4())
     file_path = UPLOAD_DIR / f"{file_id}_{file.filename}"
     with file_path.open("wb") as buffer:
@@ -583,7 +586,7 @@ async def ingest_postman_endpoint(file: UploadFile = File(...)):
     return {"document_id": doc["id"], "status": "success"}
 
 @router.post("/load_samples")
-async def load_samples(background_tasks: BackgroundTasks, report_week: str = "", async_pdf: bool = True):
+async def load_samples(background_tasks: BackgroundTasks, report_week: str = "", async_pdf: bool = True, _user_id: Optional[str] = Depends(optional_auth)):
     """Server-side ingestion of sample files from SAMPLE_DIR."""
     sample_dir = Path(os.getenv("SAMPLE_DIR", "/app/samples"))
     if not sample_dir.exists():
@@ -680,7 +683,7 @@ async def load_samples(background_tasks: BackgroundTasks, report_week: str = "",
     return {"results": results}
 
 @router.get("/download")
-async def download_artifact(rel: str):
+async def download_artifact(rel: str, _user_id: Optional[str] = Depends(optional_auth)):
     try:
         target = (ARTIFACTS_DIR / rel).resolve()
         if not str(target).startswith(str(ARTIFACTS_DIR.resolve())):
@@ -694,7 +697,7 @@ async def download_artifact(rel: str):
         raise HTTPException(400, f"Download error: {e}")
 
 @router.get("/open/pdf")
-async def open_pdf(artifact_id: str, page: int = 1):
+async def open_pdf(artifact_id: str, page: int = 1, _user_id: Optional[str] = Depends(optional_auth)):
     if not env_flag("OPEN_PDF_ENABLED", False):
         # The smoke test allows 403 if disabled
         raise HTTPException(403, "PDF opening disabled")

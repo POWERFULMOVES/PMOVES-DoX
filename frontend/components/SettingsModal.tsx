@@ -39,7 +39,11 @@ export default function SettingsModal({ open, onClose }:{ open:boolean; onClose:
         <div className="space-y-3">
           <div>
             <label className="text-sm font-medium">API Base URL</label>
-            <input className="w-full border rounded px-2 py-1 mt-1" value={apiBase} onChange={e=>setApiBaseState(e.target.value)} placeholder="http://localhost:8000" />
+            <input className="w-full border rounded px-2 py-1 mt-1" value={apiBase} onChange={e=>{
+              const val = e.target.value;
+              try { if (val) { const u = new URL(val); if (!['http:', 'https:'].includes(u.protocol)) return; } } catch { return; }
+              setApiBaseState(val);
+            }} placeholder="http://localhost:8000" />
           </div>
           <div>
             <label className="text-sm font-medium">Default Author</label>

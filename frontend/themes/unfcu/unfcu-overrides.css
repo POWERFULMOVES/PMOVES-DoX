@@ -1,0 +1,57 @@
+/* UNFCU DocIntel — Corporate refinements
+ * Imported conditionally when NEXT_PUBLIC_DOX_EDITION=unfcu
+ */
+
+/* Warmer glassmorphism with reduced blur for corporate clarity */
+[data-edition="unfcu"] .glass {
+  background-color: rgba(255, 255, 255, 0.04);
+  backdrop-filter: blur(12px);
+  -webkit-backdrop-filter: blur(12px);
+  border-color: rgba(125, 211, 252, 0.1);
+  box-shadow: 0 10px 15px -3px rgba(0, 0, 0, 0.1), 0 4px 6px -4px rgba(0, 0, 0, 0.1);
+}
+
+[data-edition="unfcu"] .glass-card {
+  background-color: hsl(var(--card) / 0.7);
+  backdrop-filter: blur(16px);
+  -webkit-backdrop-filter: blur(16px);
+  border-color: rgba(125, 211, 252, 0.08);
+  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+}
+
+/* UN Blue scrollbar track */
+[data-edition="unfcu"] ::-webkit-scrollbar {
+  width: 6px;
+}
+
+[data-edition="unfcu"] ::-webkit-scrollbar-track {
+  background: hsl(210 30% 8%);
+}
+
+[data-edition="unfcu"] ::-webkit-scrollbar-thumb {
+  background: hsl(216 74% 50% / 0.3);
+  border-radius: 3px;
+}
+
+[data-edition="unfcu"] ::-webkit-scrollbar-thumb:hover {
+  background: hsl(216 74% 50% / 0.5);
+}
+
+/* Grid pattern with Peace Blue tint */
+[data-edition="unfcu"] .bg-\[url\(\'\/grid-pattern\.svg\'\)\] {
+  background-image: none;
+  background-color: transparent;
+  position: relative;
+}
+
+[data-edition="unfcu"] .bg-\[url\(\'\/grid-pattern\.svg\'\)\]::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-image: url('/grid-pattern.svg');
+  background-attachment: fixed;
+  opacity: 0.5;
+  filter: hue-rotate(-30deg) saturate(0.5);
+  pointer-events: none;
+  z-index: -1;
+}

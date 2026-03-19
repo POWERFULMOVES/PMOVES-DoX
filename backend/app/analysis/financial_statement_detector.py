@@ -50,6 +50,9 @@ class FinancialStatementDetector:
             if matches >= 2 and score > best_score:
                 best_type = stmt_type
                 best_score = score
+            elif matches >= 1 and score > best_score and best_type == "unknown":
+                best_type = stmt_type
+                best_score = score * 0.5
         return best_type, best_score
 
     def parse_financial_statement(self, table_df: pd.DataFrame, stmt_type: str) -> Dict[str, Any]:

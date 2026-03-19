@@ -18,11 +18,16 @@ import {
   BookOpen,
   Network
 } from 'lucide-react';
+import Image from 'next/image';
 import { cn } from "@/lib/utils";
+import { getTheme } from '@/themes';
+
+const theme = getTheme();
+const hasLogo = !!theme.logoPath;
 
 /**
  * Sidebar Component
- * 
+ *
  * Main navigation for the application.
  * Supports collapsible state and renders navigation links with active state highlighting.
  * Includes user profile summary at the bottom.
@@ -57,15 +62,26 @@ export default function Sidebar() {
               exit={{ opacity: 0 }}
               className="flex items-center gap-2"
             >
-              <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-400 to-purple-600 flex items-center justify-center text-white font-bold shadow-lg shadow-purple-500/20">
-                P
-              </div>
-              <span className="font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
-                PMOVES-DoX
-              </span>
+              {hasLogo ? (
+                <Image src={theme.logoPath} alt={theme.brandName} width={140} height={32} className="h-8 w-auto object-contain" priority />
+              ) : (
+                <>
+                  <div className="h-8 w-8 rounded-lg bg-gradient-to-br from-cyan-400 to-purple-600 flex items-center justify-center text-white font-bold shadow-lg shadow-purple-500/20">
+                    P
+                  </div>
+                  <span className="font-bold text-lg bg-clip-text text-transparent bg-gradient-to-r from-white to-gray-400">
+                    {theme.brandName}
+                  </span>
+                </>
+              )}
             </motion.div>
           )}
         </AnimatePresence>
+        {collapsed && hasLogo && (
+          <div className="flex items-center justify-center w-full">
+            <Image src={theme.logoCollapsedPath} alt={theme.brandNameShort} width={32} height={32} className="h-7 w-auto object-contain" />
+          </div>
+        )}
         
         <button 
           onClick={() => setCollapsed(!collapsed)}
@@ -125,7 +141,7 @@ export default function Sidebar() {
           {!collapsed ? (
             <div className="space-y-3">
               <div className="flex items-center gap-3">
-                <div className="h-8 w-8 rounded-full bg-gradient-to-r from-pink-500 to-purple-500" />
+                <div className="h-8 w-8 rounded-full bg-gradient-to-r from-primary to-accent" />
                 <div>
                   <div className="text-sm font-medium text-white">Guest User</div>
                   <div className="text-xs text-muted-foreground">Admin Access</div>
@@ -136,7 +152,7 @@ export default function Sidebar() {
               </button>
             </div>
           ) : (
-             <div className="h-8 w-8 rounded-full bg-gradient-to-r from-pink-500 to-purple-500" />
+             <div className="h-8 w-8 rounded-full bg-gradient-to-r from-primary to-accent" />
           )}
         </div>
       </div>

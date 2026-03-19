@@ -44,7 +44,7 @@ class SecurityHeadersMiddleware(BaseHTTPMiddleware):
     # CSP configuration
     CSP_DIRECTIVES = [
         "default-src 'self'",
-        "script-src 'self' 'unsafe-inline' 'unsafe-eval'",  # unsafe-inline for development
+        "script-src 'self' 'unsafe-inline'",  # unsafe-inline required for Next.js hydration
         "style-src 'self' 'unsafe-inline'",  # unsafe-inline for Tailwind
         "img-src 'self' data: blob: https:",
         "font-src 'self' data:",
