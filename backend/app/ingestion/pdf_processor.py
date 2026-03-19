@@ -504,6 +504,32 @@ def process_pdf(
                         "encryption_failed": True,
                     })
 
+        # Persist PII flags inside full_data so they survive DB round-trips
+        for ev in evidence:
+            if ev.get("pii_masked"):
+                fd = ev.get("full_data") or {}
+                fd["pii_masked"] = True
+                fd["pii_fields_count"] = ev.get("pii_fields_count", 0)
+                ev["full_data"] = fd
+
+        # Re-write artifact files with masked content to prevent raw PII on disk
+        if pii_field_count > 0:
+            try:
+                masked_md_parts = []
+                for ev in evidence:
+                    if ev.get("content_type") == "text":
+                        fd = ev.get("full_data") or {}
+                        masked_md_parts.append(fd.get("text", ""))
+                if masked_md_parts:
+                    markdown_path.write_text(
+                        "\n\n".join(masked_md_parts), encoding="utf-8"
+                    )
+            except Exception:
+                import logging as _log
+                _log.getLogger(__name__).warning(
+                    "Failed to re-write masked artifact files; raw PII may remain on disk"
+                )
+
         if pii_vault:
             analysis_results["pii_vault"] = pii_vault
         analysis_results["pii_stats"] = {

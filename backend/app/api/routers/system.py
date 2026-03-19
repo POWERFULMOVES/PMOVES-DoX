@@ -259,9 +259,10 @@ async def get_logs(level: str | None = None, code: str | None = None, q: str | N
 async def export_logs(level: str | None = None, _user_id: Optional[str] = Depends(optional_auth)):
     """Export logs as CSV file."""
     def _safe_csv(val: object) -> str:
-        s = str(val or "")
-        if s and s[0] in ("=", "+", "-", "@"):
-            return f"'{s}"
+        """Sanitize value for CSV export (OWASP formula injection prevention)."""
+        s = str(val or "").replace("\r", " ").replace("\n", " ")
+        if s and s[0] in ("=", "+", "-", "@", "\t", ";"):
+            return f"\t{s}"
         return s
 
     logs = db.list_logs(level=level)

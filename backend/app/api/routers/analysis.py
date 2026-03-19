@@ -163,7 +163,7 @@ class ReclassifyRequest(BaseModel):
 async def reclassify_financial_statement(
     evidence_id: str,
     req: ReclassifyRequest,
-    _user_id: Optional[str] = Depends(optional_auth),
+    _user_id: str = Depends(get_current_user),
 ):
     """Reclassify a table's financial statement type and re-extract metrics."""
     from app.analysis.financial_statement_detector import FinancialStatementDetector
@@ -339,7 +339,7 @@ async def auto_tag_document(document_id: str, req: AutoTagRequest):
         try:
             db.update_artifact(document_id, extras={"tags": tags})
         except Exception as e:
-            logger.warning(f"Failed to persist tags for {document_id}: {e}")
+            logger.warning("Failed to persist tags for %s: %s", document_id, type(e).__name__)
 
     return {"status": "success", "document_id": document_id, "tags": tags}
 

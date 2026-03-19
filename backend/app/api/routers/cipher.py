@@ -161,8 +161,25 @@ def mask_pii_text(
 def unmask_pii_text(
     req: PIIUnmaskRequest,
     user_id: str = Depends(get_current_user),
+    authorization: str = Header(None),
 ):
-    """Decrypt PII vault entries. Admin-only (JWT required)."""
+    """Decrypt PII vault entries. Admin-only (JWT with service_role required)."""
+    # --- Admin gate: check JWT role claim ---
+    _admin_roles = {"service_role", "admin"}
+    _role = None
+    if authorization:
+        try:
+            from jose import jwt as jose_jwt
+            _secret = os.getenv("SUPABASE_JWT_SECRET") or os.getenv("JWT_SECRET", "")
+            _token = authorization.replace("Bearer ", "").replace("bearer ", "")
+            _payload = jose_jwt.decode(_token, _secret, algorithms=["HS256"],
+                                       options={"verify_aud": False})
+            _role = _payload.get("role", "")
+        except Exception:
+            pass
+    if _role not in _admin_roles:
+        raise HTTPException(status_code=403, detail="Admin access required for PII decryption")
+
     from app.ingestion.pii_masker import decrypt_pii_field
 
     passphrase = os.getenv("CHIT_PASSPHRASE", "")
@@ -454,5 +471,5 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
             "frequencies": frequencies,
             "amplitudes": amplitudes
         },
-        "url": f"http://localhost:{os.getenv('PORT', '8484')}/hyperdimensions?load=chit_manifold.json"
+        "url": f"{os.getenv('DOX_BASE_URL', 'http://localhost:' + os.getenv('PORT', '8484'))}/hyperdimensions?load=chit_manifold.json"
     }

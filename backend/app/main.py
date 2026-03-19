@@ -336,10 +336,15 @@ async def _startup_watch():
         from app.middleware.rate_limit import get_limiter
         limiter = get_limiter()
         while True:
-            await asyncio.sleep(300)  # every 5 minutes
-            await limiter.cleanup()
+            try:
+                await asyncio.sleep(300)  # every 5 minutes
+                await limiter.cleanup()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logging.getLogger(__name__).exception("Rate limiter cleanup failed")
 
-    asyncio.create_task(_rate_limit_cleanup_loop())
+    app.state.rate_limit_cleanup_task = asyncio.create_task(_rate_limit_cleanup_loop())
 
 @app.get("/healthz")
 async def health():
