@@ -28,8 +28,10 @@ services:
       - REDIS_URL=redis://redis:6379
       - DB_BACKEND=${DB_BACKEND:-supabase}
       - NATS_URL=${NATS_URL:-nats://nats:pmoves@nats:4222}
-      - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-false}
+      - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-true}
       - NATS_TLS_CA=/app/nats-certs/ca.crt
+      - NATS_TLS_CERT=/app/nats-certs/client.crt
+      - NATS_TLS_KEY=/app/nats-certs/client.key
       - FRONTEND_ORIGIN=http://localhost:8484,http://127.0.0.1:8484,http://frontend:3001,http://localhost:3001,http://127.0.0.1:3001
       - PORT=${BACKEND_PORT:-8484}
       - HUGGINGFACE_HUB_TOKEN=${HF_API_KEY:-${HUGGINGFACE_HUB_TOKEN:-}}
@@ -91,7 +93,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_BASE: /api
-        NEXT_PUBLIC_NATS_WS_URL: ws://localhost:9223
+        NEXT_PUBLIC_NATS_WS_URL: wss://localhost:9223
     container_name: pmoves-dox-frontend
     env_file:
       - path: env.shared
@@ -100,7 +102,7 @@ services:
     environment:
       - API_URL=http://backend:8484
       - NEXT_PUBLIC_API_BASE=/api
-      - NEXT_PUBLIC_NATS_WS_URL=ws://localhost:9223
+      - NEXT_PUBLIC_NATS_WS_URL=wss://localhost:9223
       - PORT=3001
     ports:
       - "3001:3001"
@@ -123,8 +125,9 @@ services:
       # TLS certificates (generate with: ./backend/nats-config/generate-certs.sh)
       - ./backend/nats-config/certs:/etc/nats/certs:ro
     environment:
-      # Enable TLS for distributed deployments (requires certs in ./backend/nats-config/certs/)
-      - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-false}
+      # TLS enabled by default for enterprise deployments
+      - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-true}
+      - NATS_PASSWORD=${NATS_PASSWORD:-pmoves}
     networks:
       - bus_tier
       - api_tier
