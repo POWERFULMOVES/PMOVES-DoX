@@ -93,18 +93,20 @@ class EchoRequest(BaseModel):
 # ---------------- Endpoints ----------------
 
 def _get_user_artifact_ids(user_id: Optional[str]) -> Optional[set]:
-    """Return set of artifact IDs owned by user_id, or None if no scoping needed."""
+    """Return set of artifact IDs owned by user_id, or None if no scoping needed.
+
+    Returns None only for anonymous access (user_id is None).
+    Authenticated users always get scoped results — if no artifacts have
+    ownership metadata, returns empty set (no access) for safety.
+    """
     if not user_id:
-        return None
+        return None  # Anonymous — no scoping
     artifacts = db.get_artifacts()
     owned = set()
     for a in artifacts:
-        # Supabase RLS populates uploaded_by; SQLite may not have it
         if a.get("uploaded_by") == user_id or a.get("user_id") == user_id:
             owned.add(a.get("id"))
-    # If no ownership metadata exists, return None (no filtering — backwards compat)
-    if not owned and artifacts:
-        return None
+    # Authenticated user always gets scoped results, even if empty
     return owned
 
 

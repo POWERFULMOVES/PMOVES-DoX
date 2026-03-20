@@ -11,16 +11,20 @@ Endpoints:
     POST /orchestrate/aggregate: Combine results from multiple subtasks
 """
 
+import json
 import logging
 import os
+from collections import OrderedDict
 from datetime import datetime, timezone
 from enum import Enum
 from typing import Dict, List, Optional, Any
 from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from pydantic import BaseModel, Field
+
+from app.auth import get_current_user
 
 logger = logging.getLogger(__name__)
 
@@ -29,8 +33,18 @@ AGENT_ZERO_URL = os.getenv("AGENT_ZERO_MCP_URL", "http://pmoves-agent-zero:50051
 AGENT_ZERO_TOKEN = os.getenv("AGENT_ZERO_MCP_TOKEN", "")
 AGENT_ZERO_TIMEOUT = int(os.getenv("AGENT_ZERO_TIMEOUT", "30"))
 
-# In-memory task registry for status tracking
-_task_registry: Dict[str, Dict[str, Any]] = {}
+# In-memory task registry with bounded size (LRU eviction)
+_REGISTRY_MAX_SIZE = 1000
+_task_registry: OrderedDict[str, Dict[str, Any]] = OrderedDict()
+
+
+def _registry_put(key: str, value: Dict[str, Any]) -> None:
+    """Insert into task registry with LRU eviction at max size."""
+    _task_registry[key] = value
+    _task_registry.move_to_end(key)
+    while len(_task_registry) > _REGISTRY_MAX_SIZE:
+        evicted_key, _ = _task_registry.popitem(last=False)
+        logger.debug("Task registry evicted: %s", evicted_key)
 
 
 # =============================================================================
@@ -148,15 +162,23 @@ class AggregateResponse(BaseModel):
 async def _agent_zero_request(endpoint: str, payload: Dict[str, Any]) -> Dict[str, Any]:
     """Send a request to Agent Zero MCP API."""
     url = f"{AGENT_ZERO_URL.rstrip('/')}{endpoint}"
+    headers = {"Content-Type": "application/json"}
+    if AGENT_ZERO_TOKEN:
+        headers["Authorization"] = f"Bearer {AGENT_ZERO_TOKEN}"
     try:
         async with httpx.AsyncClient(timeout=AGENT_ZERO_TIMEOUT) as client:
-            response = await client.post(
-                url,
-                json=payload,
-                headers={"Content-Type": "application/json"},
-            )
+            response = await client.post(url, json=payload, headers=headers)
             response.raise_for_status()
-            return response.json()
+            try:
+                return response.json()
+            except (ValueError, json.JSONDecodeError) as e:
+                logger.error("Agent Zero non-JSON at %s: %s (body: %s)", endpoint, e, response.text[:500])
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Agent orchestrator returned an unparseable response",
+                )
+    except HTTPException:
+        raise
     except httpx.TimeoutException:
         logger.warning("Agent Zero timeout at %s", endpoint)
         raise HTTPException(
@@ -185,7 +207,7 @@ router = APIRouter(prefix="/orchestrate", tags=["orchestration"])
 
 
 @router.post("/decompose", response_model=DecomposeResponse, summary="Decompose a task into subtasks via Agent Zero")
-async def decompose_task(request: DecomposeRequest) -> DecomposeResponse:
+async def decompose_task(request: DecomposeRequest, _user_id: str = Depends(get_current_user)) -> DecomposeResponse:
     """Break a high-level task into coordinated subtasks via Agent Zero MCP."""
     task_id = str(uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -221,14 +243,14 @@ async def decompose_task(request: DecomposeRequest) -> DecomposeResponse:
             )
         )
 
-    _task_registry[task_id] = {
+    _registry_put(task_id, {
         "task_id": task_id,
         "status": TaskStatus.COMPLETED.value,
         "original_task": request.task,
         "subtasks": {s.subtask_id: TaskStatus.PENDING.value for s in subtasks},
         "created_at": now,
         "updated_at": now,
-    }
+    })
 
     return DecomposeResponse(
         task_id=task_id,
@@ -240,7 +262,7 @@ async def decompose_task(request: DecomposeRequest) -> DecomposeResponse:
 
 
 @router.post("/dispatch", response_model=DispatchResponse, summary="Dispatch a subtask to an agent via Agent Zero")
-async def dispatch_subtask(request: DispatchRequest) -> DispatchResponse:
+async def dispatch_subtask(request: DispatchRequest, _user_id: str = Depends(get_current_user)) -> DispatchResponse:
     """Send a subtask to an appropriate agent for execution via Agent Zero MCP."""
     dispatch_id = str(uuid4())
     now = datetime.now(timezone.utc).isoformat()
@@ -265,7 +287,7 @@ async def dispatch_subtask(request: DispatchRequest) -> DispatchResponse:
         task["subtasks"][request.subtask_id] = TaskStatus.IN_PROGRESS.value
         task["updated_at"] = now
 
-    _task_registry[dispatch_id] = {
+    _registry_put(dispatch_id, {
         "task_id": dispatch_id,
         "parent_task_id": request.task_id,
         "subtask_id": request.subtask_id,
@@ -274,7 +296,7 @@ async def dispatch_subtask(request: DispatchRequest) -> DispatchResponse:
         "created_at": now,
         "updated_at": now,
         "result": result,
-    }
+    })
 
     return DispatchResponse(
         dispatch_id=dispatch_id,
@@ -286,7 +308,7 @@ async def dispatch_subtask(request: DispatchRequest) -> DispatchResponse:
 
 
 @router.get("/status/{task_id}", response_model=TaskStatusResponse, summary="Get task execution status")
-async def get_task_status(task_id: str) -> TaskStatusResponse:
+async def get_task_status(task_id: str, _user_id: str = Depends(get_current_user)) -> TaskStatusResponse:
     """Check the execution status of a task or dispatch."""
     now = datetime.now(timezone.utc).isoformat()
 
@@ -325,7 +347,9 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
             updated_at=result.get("updated_at", now),
             result_preview=result.get("preview"),
         )
-    except HTTPException:
+    except HTTPException as e:
+        if e.status_code >= 500:
+            raise  # Propagate infrastructure errors as-is
         raise HTTPException(
             status_code=status.HTTP_404_NOT_FOUND,
             detail=f"Task {task_id} not found",
@@ -333,7 +357,7 @@ async def get_task_status(task_id: str) -> TaskStatusResponse:
 
 
 @router.post("/aggregate", response_model=AggregateResponse, summary="Aggregate results from subtasks")
-async def aggregate_results(request: AggregateRequest) -> AggregateResponse:
+async def aggregate_results(request: AggregateRequest, _user_id: str = Depends(get_current_user)) -> AggregateResponse:
     """Combine results from multiple subtasks into a unified response."""
     subtask_results = []
     success_count = 0
@@ -388,10 +412,14 @@ async def aggregate_results(request: AggregateRequest) -> AggregateResponse:
                     merged_result.update(az_result.get("result", {}))
                 elif request.aggregation_strategy == "concat":
                     merged_result[subtask_id] = az_result.get("result", {})
-            except HTTPException:
+            except HTTPException as e:
                 failure_count += 1
                 subtask_results.append(
-                    SubtaskResult(subtask_id=subtask_id, status=TaskStatus.FAILED)
+                    SubtaskResult(
+                        subtask_id=subtask_id,
+                        status=TaskStatus.FAILED,
+                        result={"error": e.detail, "status_code": e.status_code},
+                    )
                 )
 
     if request.task_id in _task_registry:

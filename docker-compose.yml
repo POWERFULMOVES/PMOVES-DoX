@@ -27,7 +27,7 @@ services:
       - SUPABASE_SERVICE_KEY=${SUPABASE_SERVICE_KEY:-${SUPABASE_SERVICE_ROLE_KEY}}
       - REDIS_URL=redis://redis:6379
       - DB_BACKEND=${DB_BACKEND:-supabase}
-      - NATS_URL=${NATS_URL:-nats://nats:pmoves@nats:4222}
+      - NATS_URL=${NATS_URL:-tls://nats:${NATS_PASSWORD:-pmoves}@nats:4222}
       - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-true}
       - NATS_TLS_CA=/app/nats-certs/ca.crt
       - NATS_TLS_CERT=/app/nats-certs/client.crt
@@ -93,7 +93,7 @@ services:
       dockerfile: Dockerfile
       args:
         NEXT_PUBLIC_API_BASE: /api
-        NEXT_PUBLIC_NATS_WS_URL: wss://localhost:9223
+        NEXT_PUBLIC_NATS_WS_URL: ${NEXT_PUBLIC_NATS_WS_URL:-wss://localhost:9223}
     container_name: pmoves-dox-frontend
     env_file:
       - path: env.shared
@@ -102,7 +102,7 @@ services:
     environment:
       - API_URL=http://backend:8484
       - NEXT_PUBLIC_API_BASE=/api
-      - NEXT_PUBLIC_NATS_WS_URL=wss://localhost:9223
+      - NEXT_PUBLIC_NATS_WS_URL=${NEXT_PUBLIC_NATS_WS_URL:-wss://localhost:9223}
       - PORT=3001
     ports:
       - "3001:3001"
@@ -115,7 +115,8 @@ services:
   nats:
     image: nats:latest
     container_name: pmoves-dox-nats
-    command: -c /etc/nats/nats.conf
+    # Auth via CLI flags (nats.conf does NOT expand env vars)
+    command: -c /etc/nats/nats.conf --user ${NATS_USER:-nats} --pass ${NATS_PASSWORD:-pmoves}
     ports:
       - "4223:4222"
       - "8223:8222"

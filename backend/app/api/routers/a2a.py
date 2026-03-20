@@ -25,10 +25,11 @@ from typing import List, Dict, Any, Optional
 from uuid import uuid4
 
 import httpx
-from fastapi import APIRouter, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status
 from fastapi.responses import JSONResponse
 from pydantic import BaseModel, Field
 
+from app.auth import get_current_user, optional_auth
 from app.models.agent_card import AgentCard, AgentCapability, MCPTool
 from app.services.cipher_service import CipherService
 from app.services.reasoning_service import reasoning_service
@@ -186,19 +187,28 @@ async def _call_agent_zero_mcp(command: str, params: Dict[str, Any]) -> Dict[str
     Raises:
         HTTPException: If Agent Zero is unreachable or returns an error.
     """
-    mcp_endpoint = f"{AGENT_ZERO_MCP_URL}/mcp"
+    headers = {"Content-Type": "application/json"}
     if AGENT_ZERO_MCP_TOKEN:
-        mcp_endpoint = f"{AGENT_ZERO_MCP_URL}/mcp/t-{AGENT_ZERO_MCP_TOKEN}/sse"
+        headers["Authorization"] = f"Bearer {AGENT_ZERO_MCP_TOKEN}"
 
     try:
         async with httpx.AsyncClient(timeout=AGENT_ZERO_TIMEOUT) as client:
             response = await client.post(
                 f"{AGENT_ZERO_MCP_URL}/mcp/command",
                 json={"command": command, "params": params},
-                headers={"Content-Type": "application/json"},
+                headers=headers,
             )
             response.raise_for_status()
-            return response.json()
+            try:
+                return response.json()
+            except (ValueError, json.JSONDecodeError) as e:
+                logger.error("Agent Zero non-JSON response for '%s': %s (body: %s)", command, e, response.text[:500])
+                raise HTTPException(
+                    status_code=status.HTTP_502_BAD_GATEWAY,
+                    detail="Agent orchestrator returned an unparseable response",
+                )
+    except HTTPException:
+        raise
     except httpx.TimeoutException:
         logger.warning("Agent Zero MCP timeout for command: %s", command)
         raise HTTPException(
@@ -418,7 +428,10 @@ async def get_tools():
     summary="Decompose task into subtasks via Agent Zero",
     tags=["a2a", "orchestration"],
 )
-async def orchestrate_decompose(request: TaskDecomposeRequest) -> TaskDecomposeResponse:
+async def orchestrate_decompose(
+    request: TaskDecomposeRequest,
+    _user_id: str = Depends(get_current_user),
+) -> TaskDecomposeResponse:
     """Decompose a high-level task into coordinated subtasks.
 
     Delegates to Agent Zero MCP API for intelligent task decomposition.
@@ -464,7 +477,10 @@ async def orchestrate_decompose(request: TaskDecomposeRequest) -> TaskDecomposeR
     summary="Search Cipher persistent memory",
     tags=["a2a", "memory"],
 )
-async def memory_search(request: MemorySearchRequest) -> MemorySearchResponse:
+async def memory_search(
+    request: MemorySearchRequest,
+    user_id: str = Depends(get_current_user),
+) -> MemorySearchResponse:
     """Search and retrieve from Cipher persistent memory.
 
     Uses CipherService to search stored knowledge, context, and history.
@@ -472,9 +488,13 @@ async def memory_search(request: MemorySearchRequest) -> MemorySearchResponse:
     """
     # If workspace is specified, use team memory shared context
     if request.workspace:
-        shared = await CipherService.get_shared_context(
-            request.workspace, limit=request.limit
-        )
+        try:
+            shared = await CipherService.get_shared_context(
+                request.workspace, limit=request.limit
+            )
+        except Exception as e:
+            logger.error("CipherService.get_shared_context failed for '%s': %s", request.workspace, e)
+            raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Memory service unavailable")
         results = []
         for item in shared.get("items", []):
             content = item.get("content", "")
@@ -501,7 +521,11 @@ async def memory_search(request: MemorySearchRequest) -> MemorySearchResponse:
     if request.filters and "category" in request.filters:
         category = request.filters["category"]
 
-    raw_results = CipherService.search_memory(category=category, q=request.query)
+    try:
+        raw_results = CipherService.search_memory(category=category, q=request.query, user_id=user_id)
+    except Exception as e:
+        logger.error("CipherService.search_memory failed: %s", e)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Memory service unavailable")
 
     results = []
     for item in raw_results[:request.limit]:
@@ -540,16 +564,25 @@ async def memory_search(request: MemorySearchRequest) -> MemorySearchResponse:
     summary="Start multi-step reasoning trace",
     tags=["a2a", "reasoning"],
 )
-async def reasoning_start(request: ReasoningStartRequest) -> ReasoningStartResponse:
+async def reasoning_start(
+    request: ReasoningStartRequest,
+    _user_id: str = Depends(get_current_user),
+) -> ReasoningStartResponse:
     """Start a multi-step reasoning trace with evidence tracking.
 
     Uses the ReasoningService to create and manage reasoning traces.
     """
-    trace = await reasoning_service.start_reasoning(
-        question=request.question,
-        context=request.context,
-        max_steps=request.max_steps,
-    )
+    try:
+        trace = await reasoning_service.start_reasoning(
+            question=request.question,
+            context=request.context,
+            max_steps=request.max_steps,
+        )
+    except ValueError as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e))
+    except Exception as e:
+        logger.error("ReasoningService.start_reasoning failed: %s", e)
+        raise HTTPException(status_code=status.HTTP_503_SERVICE_UNAVAILABLE, detail="Reasoning service unavailable")
 
     return ReasoningStartResponse(
         trace_id=trace.trace_id,
@@ -571,14 +604,21 @@ async def reasoning_start(request: ReasoningStartRequest) -> ReasoningStartRespo
     summary="Analyze semantic space geometry",
     tags=["a2a", "geometry"],
 )
-async def geometry_analyze(request: GeometryAnalyzeRequest) -> GeometryAnalyzeResponse:
+async def geometry_analyze(
+    request: GeometryAnalyzeRequest,
+    _user_id: str = Depends(get_current_user),
+) -> GeometryAnalyzeResponse:
     """Analyze semantic space using manifold geometry.
 
     Uses GeometryEngine for curvature analysis and ChitService for
     embedding generation when available.
     """
+    embedding_source = "none"
+
     # Generate embeddings for the query using ChitService if available
     embeddings = chit_service.generate_embeddings([request.query])
+    if embeddings:
+        embedding_source = "chit_service"
 
     if not embeddings:
         # Fall back to search_index embeddings
@@ -587,18 +627,19 @@ async def geometry_analyze(request: GeometryAnalyzeRequest) -> GeometryAnalyzeRe
             embedding = search_index.embed_text(request.query)
             if embedding is not None:
                 embeddings = [embedding.tolist() if hasattr(embedding, 'tolist') else list(embedding)]
-        except Exception as e:
-            logger.debug("Search index embedding fallback failed: %s", e)
+                embedding_source = "search_index"
+        except (ImportError, AttributeError, RuntimeError) as e:
+            logger.warning("Search index embedding fallback failed: %s", e)
 
     if not embeddings or len(embeddings) < 4:
         # Need at least 4 points for curvature analysis — pad with synthetic points
-        # Generate slight variations for meaningful analysis
         if embeddings:
             import random
             base = embeddings[0]
             while len(embeddings) < 4:
                 noisy = [v + random.gauss(0, 0.01) for v in base]
                 embeddings.append(noisy)
+            embedding_source = f"{embedding_source}+synthetic"
         else:
             return GeometryAnalyzeResponse(
                 query=request.query,
@@ -641,7 +682,7 @@ async def geometry_analyze(request: GeometryAnalyzeRequest) -> GeometryAnalyzeRe
         metrics=metrics,
         nearest_regions=[],
         status="completed",
-        message=f"Manifold analysis: {manifold_type} (K={k:.3f})",
+        message=f"Manifold analysis: {manifold_type} (K={k:.3f}, source={embedding_source})",
     )
 
 
@@ -675,7 +716,10 @@ class TaskExecuteResponse(BaseModel):
     tags=["a2a", "task"],
     summary="Execute a dispatched task",
 )
-async def execute_task(request: TaskExecuteRequest) -> TaskExecuteResponse:
+async def execute_task(
+    request: TaskExecuteRequest,
+    user_id: str = Depends(get_current_user),
+) -> TaskExecuteResponse:
     """Execute a task dispatched by the agent dispatcher.
 
     Routes tasks to appropriate internal services based on the payload's
@@ -710,7 +754,7 @@ async def execute_task(request: TaskExecuteRequest) -> TaskExecuteResponse:
 
         elif action == "memory_search":
             query = request.payload.get("query", request.description)
-            raw = CipherService.search_memory(q=query)
+            raw = CipherService.search_memory(q=query, user_id=user_id)
             result = {"action": "memory_search", "results": raw[:10]}
 
         else:
@@ -721,15 +765,18 @@ async def execute_task(request: TaskExecuteRequest) -> TaskExecuteResponse:
                 "message": f"Task acknowledged. Action '{action}' routed to default handler.",
             }
 
-    except Exception as e:
-        logger.error("Task execution failed for %s: %s", request.task_id, e)
+    except (ValueError, KeyError) as e:
         execution_time_ms = int((time.time() - start_time) * 1000)
         return TaskExecuteResponse(
-            task_id=request.task_id,
-            status="failed",
-            result={},
-            error=str(e),
-            execution_time_ms=execution_time_ms,
+            task_id=request.task_id, status="failed", result={},
+            error=f"Invalid input: {e}", execution_time_ms=execution_time_ms,
+        )
+    except Exception as e:
+        logger.error("Task execution failed for %s: %s", request.task_id, e, exc_info=True)
+        execution_time_ms = int((time.time() - start_time) * 1000)
+        return TaskExecuteResponse(
+            task_id=request.task_id, status="failed", result={},
+            error="Internal service error", execution_time_ms=execution_time_ms,
         )
 
     execution_time_ms = int((time.time() - start_time) * 1000)
