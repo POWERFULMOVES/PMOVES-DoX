@@ -39,7 +39,7 @@ services:
       interval: 30s
       timeout: 10s
       retries: 5
-      start_period: 30s
+      start_period: 60s
     # Remove internal network restrictions for distributed access
     networks:
       api_tier:
@@ -65,11 +65,14 @@ services:
     # Expose on all interfaces for external clients
     ports:
       - "0.0.0.0:4223:4222"  # Core NATS
-      - "0.0.0.0:8223:8222"  # HTTP monitoring
+      - "127.0.0.1:8223:8222"  # HTTP monitoring (local only — no external exposure)
       - "0.0.0.0:9223:9222"  # WebSocket
     volumes:
       - ./backend/nats-config/nats.tls.conf:/etc/nats/nats.tls.conf:ro
-      - ./backend/nats-config/certs:/etc/nats/certs:ro
+      # Mount only server certs — least privilege (no client.key exposure)
+      - ./backend/nats-config/certs/ca.crt:/etc/nats/certs/ca.crt:ro
+      - ./backend/nats-config/certs/server.crt:/etc/nats/certs/server.crt:ro
+      - ./backend/nats-config/certs/server.key:/etc/nats/certs/server.key:ro
     environment:
       - NATS_TLS_ENABLED=${NATS_TLS_ENABLED:-true}
 

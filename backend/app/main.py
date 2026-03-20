@@ -181,6 +181,7 @@ def _env_flag(name: str, default: bool = False) -> bool:
 # Simple in-memory task registry
 TASKS: dict[str, dict] = {}
 START_TIME = time.time()
+_ready = False  # Set to True after startup initialization completes
 
 
 def _ingest_file_from_watch(src: Path, report_week: str = ""):
@@ -323,6 +324,11 @@ async def _startup_watch():
     except Exception as e:
         print(f"Failed to initiate NATS connection: {e}")
 
+    # Mark service as ready for healthcheck readiness gate
+    global _ready
+    _ready = True
+    print("[STARTUP] Service ready")
+
 @app.get("/")
 async def root():
     return {"message": "PMOVES-DoX API", "status": "running"}
@@ -386,15 +392,23 @@ async def list_tasks():
 
 @app.get("/healthz")
 async def health():
-    """Health check endpoint for PMOVES.AI standard compliance."""
-    # Return basic health status immediately for CI/smoke tests
-    # Integration health checks are skipped to avoid CI failures
-    return {
-        "status": "healthy",
+    """Health check with readiness gate for PMOVES.AI standard compliance.
+
+    Returns 503 during startup (before integrations initialize),
+    200 once ready. Compose healthcheck retries handle the transition.
+    """
+    from fastapi.responses import JSONResponse
+
+    base = {
         "version": os.getenv("APP_VERSION", "1.0.0"),
         "uptime_seconds": int(time.time() - START_TIME),
-        "integrations": "skipped",
     }
+    if not _ready:
+        return JSONResponse(
+            status_code=503,
+            content={**base, "status": "starting", "integrations": "pending"},
+        )
+    return {**base, "status": "healthy", "integrations": "ok"}
 
 
 @app.get("/health")

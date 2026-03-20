@@ -59,7 +59,7 @@ class IntegrationHealth:
 
     async def check_nats(self, timeout: float = 2.0) -> bool:
         """
-        Check if NATS is reachable.
+        Check if NATS is reachable, with TLS support when enabled.
 
         Args:
             timeout: Connection timeout in seconds
@@ -67,17 +67,25 @@ class IntegrationHealth:
         Returns:
             True if NATS is reachable, False otherwise
         """
+        from app.utils.nats_tls import create_nats_tls_context, sanitize_nats_url
         try:
-            nc = await nats.connect(
-                self.nats_url,
-                timeout=timeout
-            )
+            connect_kwargs: dict = {"timeout": timeout}
+            nats_url = self.nats_url
+
+            # Use shared TLS context when NATS_TLS_ENABLED
+            tls_ctx = create_nats_tls_context()
+            if tls_ctx:
+                connect_kwargs["tls"] = tls_ctx
+                if nats_url.startswith("nats://"):
+                    nats_url = nats_url.replace("nats://", "tls://", 1)
+
+            nc = await nats.connect(nats_url, **connect_kwargs)
             await nc.flush()
             await nc.close()
-            logger.debug(f"NATS health check passed: {self.nats_url}")
+            logger.debug(f"NATS health check passed: {sanitize_nats_url(nats_url)}")
             return True
         except asyncio.TimeoutError:
-            logger.warning(f"NATS health check timed out: {self.nats_url}")
+            logger.warning(f"NATS health check timed out: {sanitize_nats_url(self.nats_url)}")
             return False
         except Exception as e:
             logger.warning(f"NATS health check failed: {e}")
@@ -123,6 +131,8 @@ class IntegrationHealth:
         Returns:
             Dict mapping integration names to their health status and URLs
         """
+        from app.utils.nats_tls import sanitize_nats_url
+
         results = await asyncio.gather(
             self.check_tensorzero(),
             self.check_nats(),
@@ -137,7 +147,7 @@ class IntegrationHealth:
             },
             "nats": {
                 "healthy": results[1] if not isinstance(results[1], Exception) else False,
-                "url": self.nats_url
+                "url": sanitize_nats_url(self.nats_url)
             },
             "gpu_orchestrator": {
                 "healthy": results[2] if not isinstance(results[2], Exception) else False,
