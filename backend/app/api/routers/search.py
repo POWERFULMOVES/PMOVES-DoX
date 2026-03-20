@@ -4,6 +4,7 @@ from typing import Optional
 import time
 from app.globals import search_index
 from app.auth import get_current_user, optional_auth
+from app.api.routers.analysis import _get_user_artifact_ids
 
 router = APIRouter()
 
@@ -15,15 +16,13 @@ class SearchRequest(BaseModel):
 @router.post("/search")
 async def search_documents(
     req: SearchRequest,
-    # TODO: Use user_id for user-scoped search results in future implementation
-    _user_id: Optional[str] = Depends(optional_auth)
+    user_id: Optional[str] = Depends(optional_auth),
 ):
-    """Search documents.
-
-    Authentication: Optional. Currently returns global results.
-    Future: Authenticated users will get user-scoped results.
-    """
+    """Search documents, scoped to authenticated user's artifacts."""
     results = search_index.search(req.q, k=req.k)
+    allowed = _get_user_artifact_ids(user_id)
+    if allowed is not None:
+        results = [r for r in results if r.get("artifact_id") in allowed]
     return {"results": results}
 
 @router.post("/search/rebuild")
