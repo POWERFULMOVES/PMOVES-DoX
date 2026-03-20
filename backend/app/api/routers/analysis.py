@@ -101,7 +101,11 @@ def _get_user_artifact_ids(user_id: Optional[str]) -> Optional[set]:
     """
     if not user_id:
         return None  # Anonymous — no scoping
-    artifacts = db.get_artifacts()
+    try:
+        artifacts = db.get_artifacts()
+    except Exception as e:
+        logger.error("Failed to fetch artifacts for user scoping: %s", e)
+        return set()  # Fail-closed: no access on DB failure
     owned = set()
     for a in artifacts:
         if a.get("uploaded_by") == user_id or a.get("user_id") == user_id:

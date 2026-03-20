@@ -242,7 +242,8 @@ def _load_mcp_manifest() -> Dict[str, Any]:
     try:
         with open(manifest_path, "r", encoding="utf-8") as f:
             return json.load(f)
-    except (json.JSONDecodeError, IOError):
+    except (json.JSONDecodeError, IOError) as e:
+        logger.warning("Failed to load MCP manifest from %s: %s", manifest_path, e)
         return {}
 
 
