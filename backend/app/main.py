@@ -21,6 +21,7 @@ import re
 from pydantic import BaseModel
 from app.hrm import HRMConfig, HRMMetrics, refine_sort_digits
 from app.api.routers import documents, analysis, system, cipher, models, graph, a2a, orchestration
+from app.api.routers.analysis import _get_user_artifact_ids
 from app.security import SecurityMiddleware
 # JWT Authentication (replaces CORS)
 from app.auth import get_current_user, optional_auth
@@ -1724,8 +1725,10 @@ async def download_artifact(rel: str, user_id: str = Depends(get_current_user)):
         if not artifact:
             raise HTTPException(status_code=404, detail="Artifact not found")
 
-        # TODO: Add ownership check: if artifact.get("owner_id") != user_id:
-        #     raise HTTPException(status_code=403, detail="Access denied")
+        # Ownership check: enforce user-scoped access (fail-closed)
+        allowed = _get_user_artifact_ids(user_id)
+        if allowed is not None and artifact.get("id") not in allowed:
+            raise HTTPException(status_code=403, detail="Access denied")
 
         return FileResponse(
             str(target),
