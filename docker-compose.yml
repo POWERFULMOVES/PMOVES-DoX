@@ -11,6 +11,7 @@ services:
       - ./backend/app:/app/app
       - ./backend/data:/app/data
       - hf-cache:/root/.cache/huggingface
+      - docling-models:/app/models/docling
       # NATS TLS certificates (for distributed deployments)
       - ./backend/nats-config/certs:/app/nats-certs:ro
     env_file:
@@ -555,6 +556,7 @@ networks:
 
 volumes:
   hf-cache:
+  docling-models:
   ollama:
   cipher-data:
   supabase_data:

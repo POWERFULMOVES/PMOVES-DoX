@@ -173,6 +173,59 @@ async def get_financial_statements(
     )
     return {"statements": statements}
 
+class ReclassifyRequest(BaseModel):
+    statement_type: str = Field(..., description="New statement type: balance_sheet, income_statement, cash_flow")
+
+
+@router.post("/analysis/financials/{evidence_id}/reclassify")
+async def reclassify_financial_statement(
+    evidence_id: str,
+    req: ReclassifyRequest,
+    _user_id: str = Depends(get_current_user),
+):
+    """Reclassify a table's financial statement type and re-extract metrics."""
+    from app.analysis.financial_statement_detector import FinancialStatementDetector
+
+    valid_types = {"balance_sheet", "income_statement", "cash_flow"}
+    if req.statement_type not in valid_types:
+        raise HTTPException(400, f"statement_type must be one of {sorted(valid_types)}")
+
+    evidence = db.get_evidence(evidence_id)
+    if not evidence:
+        raise HTTPException(404, "Evidence not found")
+
+    full_data = evidence.get("full_data") or {}
+    if not isinstance(full_data, dict):
+        raise HTTPException(400, "Evidence has no table data")
+
+    # Rebuild DataFrame from stored rows/columns
+    columns = full_data.get("columns", [])
+    rows = full_data.get("rows", [])
+    if not rows:
+        raise HTTPException(400, "Evidence has no table rows to reclassify")
+
+    import pandas as pd
+    df = pd.DataFrame(rows, columns=columns if columns else None)
+
+    detector = FinancialStatementDetector()
+    summary = detector.parse_financial_statement(df, req.statement_type)
+
+    new_statement = {
+        "type": req.statement_type,
+        "confidence": 1.0,
+        "summary": summary,
+    }
+
+    db.update_evidence(evidence_id, full_data={"statement": new_statement})
+
+    return {
+        "evidence_id": evidence_id,
+        "statement_type": req.statement_type,
+        "confidence": 1.0,
+        "summary": summary,
+    }
+
+
 @router.get("/evidence/{evidence_id}")
 async def get_evidence(
     evidence_id: str,
@@ -302,9 +355,15 @@ async def auto_tag_document(document_id: str, req: AutoTagRequest):
     extract_req = ExtractTagsRequest(text=text_content)
     res = await extract_tags_text(extract_req)
     
-    # Store tags (mock storage for now, or use db.add_tag if we want to persist)
-    # We'll just return them
-    return {"status": "success", "document_id": document_id, "tags": res["tags"]}
+    # Persist tags to the artifact record
+    tags = res["tags"]
+    if tags:
+        try:
+            db.update_artifact(document_id, extras={"tags": tags})
+        except Exception as e:
+            logger.warning("Failed to persist tags for %s: %s", document_id, type(e).__name__)
+
+    return {"status": "success", "document_id": document_id, "tags": tags}
 
 @router.get("/tags/presets")
 async def get_tag_presets():

@@ -25,9 +25,9 @@ services:
       - TENSORZERO_BASE_URL=${TENSORZERO_URL:-http://tensorzero-gateway:3030}
       # Ollama on remote host
       - OLLAMA_BASE_URL=${OLLAMA_BASE_URL:-http://host.docker.internal:11434}
-      - EMBEDDING_OLLAMA_URL=${EMBEDDING_OLLAMA_URL:-http://ollama:11434}
-      # Allow connections from any host for distributed access
-      - FRONTEND_ORIGIN=*
+      - EMBEDDING_OLLAMA_URL=${EMBEDDING_OLLAMA_URL:-${OLLAMA_BASE_URL:-http://host.docker.internal:11434}}
+      # CORS: Set to specific origin for production. Wildcard is for initial setup only.
+      - FRONTEND_ORIGIN=${DOX_FRONTEND_ORIGIN:-*}
       # Neo4j parent instance on remote host
       - NEO4J_PARENT_URI=${NEO4J_PARENT_URI:-bolt://pmoves-neo4j-1:7687}
     # Expose on all interfaces for external access
@@ -78,7 +78,7 @@ services:
 
   # Optional Tailscale sidecar for VPN mesh networking
   tailscale:
-    image: tailscale/tailscale:latest
+    image: tailscale/tailscale:v1.80.3
     container_name: pmoves-dox-tailscale
     hostname: ${TAILSCALE_HOSTNAME:-pmoves-dox}
     profiles:

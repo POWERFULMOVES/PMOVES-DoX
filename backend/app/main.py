@@ -325,6 +325,21 @@ async def _startup_watch():
     except Exception as e:
         print(f"Failed to initiate NATS connection: {e}")
 
+    # Periodic rate limiter cleanup to prevent memory leaks
+    async def _rate_limit_cleanup_loop():
+        from app.middleware.rate_limit import get_limiter
+        limiter = get_limiter()
+        while True:
+            try:
+                await asyncio.sleep(300)  # every 5 minutes
+                await limiter.cleanup()
+            except asyncio.CancelledError:
+                break
+            except Exception:
+                logging.getLogger(__name__).exception("Rate limiter cleanup failed")
+
+    app.state.rate_limit_cleanup_task = asyncio.create_task(_rate_limit_cleanup_loop())
+
     # Mark service as ready for healthcheck readiness gate
     global _ready
     _ready = True

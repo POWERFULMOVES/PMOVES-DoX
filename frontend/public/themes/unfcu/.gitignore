@@ -1,0 +1,9 @@
+*.jpg
+*.jpeg
+*.mov
+*.mp4
+*.zip
+*.pdf
+*.pptx
+*.dotx
+# Tracked PNGs and SVGs are force-added

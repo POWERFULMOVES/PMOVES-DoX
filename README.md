@@ -101,6 +101,25 @@ Then:
 - Try Global Search; explore Logs/APIs/Tags
 - Tags → Load LMS Preset → Preview/Extract → Export POML (pick variant)
 
+### Editions
+
+PMOVES-DoX supports branded editions via environment-driven theming. Set `NEXT_PUBLIC_DOX_EDITION` to activate an edition:
+
+| Edition   | Activation                         | Description                              |
+|-----------|------------------------------------|------------------------------------------|
+| `default` | (no env var needed)                | Original purple/cyan theme               |
+| `unfcu`   | `NEXT_PUBLIC_DOX_EDITION=unfcu`    | UNFCU DocIntel (UN Blue / Elite Navy)    |
+
+```bash
+# Local
+NEXT_PUBLIC_DOX_EDITION=unfcu npm run dev
+
+# Docker
+docker compose -f docker-compose.yml -f docker-compose.unfcu.yml up --build
+```
+
+See [`frontend/themes/unfcu/README.md`](frontend/themes/unfcu/README.md) for the UNFCU edition details.
+
 ### Command Line Interface (CLI)
 
 Use the bundled Typer CLI to drive ingestion and backend workflows without opening the UI.

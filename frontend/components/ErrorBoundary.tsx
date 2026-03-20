@@ -32,11 +32,9 @@ export class ErrorBoundary extends React.Component<ErrorBoundaryProps, ErrorBoun
       return (
         <div className="p-4 bg-red-900/20 border border-red-500 rounded text-red-200">
           <h2 className="text-lg font-bold mb-2">Something went wrong.</h2>
-          <details className="whitespace-pre-wrap font-mono text-sm">
-            {this.state.error && this.state.error.toString()}
-            <br />
-            {this.state.errorInfo && this.state.errorInfo.componentStack}
-          </details>
+          <p className="text-sm text-gray-400">
+            An unexpected error occurred. Please refresh the page or contact support.
+          </p>
         </div>
       );
     }
