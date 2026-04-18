@@ -42,6 +42,9 @@ desktop.ini
 nul
 **/nul
 
+# Runtime CGP/CHIT artifacts
+pmoves/docs/logs/
+
 # Logs
 *.log
 npm-debug.log*
