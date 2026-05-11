@@ -21,7 +21,7 @@ matplotlib>=3.8.0
 watchgod>=0.8.2
 sqlmodel>=0.0.16
 alembic>=1.13.1
-faiss-cpu>=1.8.0
+faiss-cpu>=1.13.2
 pytest>=7.4.0,<10.0.0
 supabase>=2.4.0,<3.0.0
 # Knowledge Graph
