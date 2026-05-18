@@ -26,13 +26,6 @@ try:
 except ImportError:
     HAS_NUMPY = False
 
-# Check for SentenceTransformers
-try:
-    import sentence_transformers  # noqa: F401
-    HAS_SENTENCE_TRANSFORMERS = True
-except ImportError:
-    HAS_SENTENCE_TRANSFORMERS = False
-
 
 def _convert_numpy_types(obj: Any) -> Any:
     """Convert numpy types to Python native types for JSON serialization."""
@@ -146,19 +139,6 @@ class ChitService:
         """
         return self._use_local_embeddings and HAS_SENTENCE_TRANSFORMERS
 
-    @staticmethod
-    def _redact_url(url: str) -> str:
-        """Redact credentials from NATS URLs for safe logging."""
-        try:
-            from urllib.parse import urlparse, urlunparse
-            parsed = urlparse(url)
-            if parsed.username:
-                redacted = parsed._replace(netloc=f"***@{parsed.hostname}:{parsed.port or ''}")
-                return urlunparse(redacted)
-        except Exception:
-            pass
-        return url
-
     def _is_docked_mode(self) -> bool:
         """Check if running in docked mode within PMOVES.AI.
 
@@ -181,42 +161,17 @@ class ChitService:
     def _create_tls_context(self) -> Optional[ssl.SSLContext]:
         """Create SSL context for TLS connections if enabled.
 
+        Delegates to shared utility. Fail-closed: raises RuntimeError
+        when TLS is enabled but context creation fails.
+
         Returns:
             SSLContext if TLS is enabled and configured, None otherwise.
+
+        Raises:
+            RuntimeError: If TLS is enabled but cert setup fails.
         """
-        tls_enabled = os.getenv("NATS_TLS_ENABLED", "").lower() in {"1", "true", "yes"}
-        if not tls_enabled:
-            return None
-
-        try:
-            # Create SSL context
-            ctx = ssl.create_default_context(ssl.Purpose.SERVER_AUTH)
-
-            # Load CA certificate if provided
-            ca_file = os.getenv("NATS_TLS_CA", "/app/nats-certs/ca.crt")
-            if os.path.exists(ca_file):
-                ctx.load_verify_locations(ca_file)
-                logger.info(f"Loaded NATS CA certificate from {ca_file}")
-            else:
-                # For development, allow unverified connections with warning
-                logger.warning("NATS CA certificate not found at %s, using default verification", ca_file)
-
-            # Load client certificate if mutual TLS is configured
-            client_cert = os.getenv("NATS_TLS_CERT", "/app/nats-certs/client.crt")
-            client_key = os.getenv("NATS_TLS_KEY", "/app/nats-certs/client.key")
-            if os.path.exists(client_cert) and os.path.exists(client_key):
-                ctx.load_cert_chain(client_cert, client_key)
-                logger.info("Loaded NATS client certificate for mutual TLS")
-
-            return ctx
-        except Exception as e:
-            tls_enabled = os.getenv("NATS_TLS_ENABLED", "").lower() == "true"
-            if tls_enabled:
-                # TLS was explicitly requested — fail fast, do not silently downgrade
-                logger.error("TLS context creation failed with NATS_TLS_ENABLED=true: %s", e)
-                raise RuntimeError(f"NATS TLS required but context creation failed: {e}") from e
-            logger.warning("TLS context creation failed (TLS not required): %s", e)
-            return None
+        from app.utils.nats_tls import create_nats_tls_context
+        return create_nats_tls_context()
 
     async def connect_nats(self, nats_url: str = "nats://nats:pmoves@nats:4222") -> None:
         """Connect to NATS and JetStream.
@@ -249,14 +204,16 @@ class ChitService:
                 # Update URL scheme if not already TLS
                 if nats_url.startswith("nats://"):
                     nats_url = nats_url.replace("nats://", "tls://", 1)
-                    logger.info("Upgraded NATS URL to TLS: %s", self._redact_url(nats_url))
+                    from app.utils.nats_tls import sanitize_nats_url
+                    logger.info(f"Upgraded NATS URL to TLS: {sanitize_nats_url(nats_url)}")
 
             self.nc = await nats.connect(nats_url, **connect_options)
             self.js = self.nc.jetstream()
             self._nats_available = True
 
             tls_status = "with TLS" if tls_ctx else "without TLS"
-            logger.info("Connected to NATS at %s (%s)", self._redact_url(nats_url), tls_status)
+            from app.utils.nats_tls import sanitize_nats_url
+            logger.info(f"Connected to NATS at {sanitize_nats_url(nats_url)} ({tls_status})")
 
             # Ensure the stream exists
             # We want a 'geometry' stream capturing all geometry events
@@ -267,11 +224,11 @@ class ChitService:
             is_docked = self._is_docked_mode()
             if is_docked:
                 # Graceful degradation in docked mode
-                logger.warning("NATS connection failed (docked mode, continuing anyway): %s", e)
+                logger.warning(f"NATS connection failed (docked mode, continuing anyway): {e}")
                 logger.warning("Geometry bus features will be disabled")
             else:
                 # In standalone mode, NATS is expected to be available
-                logger.error("Failed to connect to NATS (standalone mode): %s", e)
+                logger.error(f"Failed to connect to NATS (standalone mode): {e}")
                 # Re-raise in standalone mode so admin knows NATS is required
                 raise
 

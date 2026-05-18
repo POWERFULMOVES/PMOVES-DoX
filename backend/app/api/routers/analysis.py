@@ -92,34 +92,52 @@ class EchoRequest(BaseModel):
 
 # ---------------- Endpoints ----------------
 
+def _get_user_artifact_ids(user_id: Optional[str]) -> Optional[set]:
+    """Return set of artifact IDs owned by user_id, or None if no scoping needed.
+
+    Returns None only for anonymous access (user_id is None).
+    Authenticated users always get scoped results — if no artifacts have
+    ownership metadata, returns empty set (no access) for safety.
+    """
+    if not user_id:
+        return None  # Anonymous — no scoping
+    try:
+        artifacts = db.get_artifacts()
+    except Exception as e:
+        logger.error("Failed to fetch artifacts for user scoping: %s", e)
+        return set()  # Fail-closed: no access on DB failure
+    owned = set()
+    for a in artifacts:
+        if a.get("uploaded_by") == user_id or a.get("user_id") == user_id:
+            owned.add(a.get("id"))
+    # Authenticated user always gets scoped results, even if empty
+    return owned
+
+
 @router.get("/facts")
 async def get_facts(
     report_week: Optional[str] = None,
-    # TODO: Use user_id for user-scoped results in future implementation
-    _user_id: Optional[str] = Depends(optional_auth)
+    user_id: Optional[str] = Depends(optional_auth),
 ):
-    """Get all facts, optionally filtered by report week.
-
-    Authentication: Optional. Currently returns global results.
-    Future: Authenticated users will get user-scoped facts.
-    """
+    """Get facts, optionally filtered by report week and scoped to authenticated user."""
     facts = db.get_facts(report_week)
+    allowed = _get_user_artifact_ids(user_id)
+    if allowed is not None:
+        facts = [f for f in facts if f.get("artifact_id") in allowed]
     return {"facts": facts}
 
 @router.get("/analysis/financials")
 async def get_financial_statements(
     artifact_id: str | None = None,
-    # TODO: Use user_id for user-scoped results in future implementation
-    _user_id: Optional[str] = Depends(optional_auth)
+    user_id: Optional[str] = Depends(optional_auth),
 ):
-    """Return detected financial statements from processed tables.
-
-    Authentication: Optional. Currently returns global results.
-    Future: Authenticated users will get user-scoped statements.
-    """
+    """Return detected financial statements from processed tables, scoped to user."""
+    allowed = _get_user_artifact_ids(user_id)
     statements: List[Dict[str, Any]] = []
     for ev in db.get_all_evidence():
         if artifact_id and ev.get("artifact_id") != artifact_id:
+            continue
+        if allowed is not None and ev.get("artifact_id") not in allowed:
             continue
         if ev.get("content_type") not in {"financial_table", "table"}:
             continue
@@ -211,16 +229,14 @@ async def reclassify_financial_statement(
 @router.get("/evidence/{evidence_id}")
 async def get_evidence(
     evidence_id: str,
-    # TODO: Use user_id for user-scoped access control in future implementation
-    _user_id: Optional[str] = Depends(optional_auth)
+    user_id: Optional[str] = Depends(optional_auth),
 ):
-    """Get evidence by ID.
-
-    Authentication: Optional. Currently allows global access.
-    Future: Authenticated users will only access their own evidence.
-    """
+    """Get evidence by ID, with user-scoped access control."""
     evidence = db.get_evidence(evidence_id)
     if not evidence:
+        raise HTTPException(404, "Evidence not found")
+    allowed = _get_user_artifact_ids(user_id)
+    if allowed is not None and evidence.get("artifact_id") not in allowed:
         raise HTTPException(404, "Evidence not found")
     return evidence
 
@@ -228,16 +244,18 @@ async def get_evidence(
 async def ask_question(
     question: str,
     use_hrm: bool = Query(False, description="Enable HRM sidecar (if supported)"),
-    # TODO: Use user_id for user-scoped context in future implementation
-    _user_id: Optional[str] = Depends(optional_auth),
+    user_id: Optional[str] = Depends(optional_auth),
 ):
-    """Ask a question and get answer with citations.
-
-    Authentication: Optional. Currently searches all documents.
-    Future: Authenticated users will get answers from their own documents.
-    """
+    """Ask a question and get answer with citations, scoped to user's documents."""
     t0 = time.time()
     result = await qa_engine.ask(question)
+    # Filter citations to user-owned artifacts
+    allowed = _get_user_artifact_ids(user_id)
+    if allowed is not None and "citations" in result:
+        result["citations"] = [
+            c for c in result["citations"]
+            if c.get("artifact_id") in allowed
+        ]
     if HRM_ENABLED and use_hrm:
         steps = max(HRM_CFG.Mmin, 2)
         refined = result.get("answer", "").strip()
@@ -268,9 +286,13 @@ async def list_tags(document_id: str | None = None):
 async def extract_tags_text(req: ExtractTagsRequest):
     text = req.text or ""
     if not text and req.document_id:
-        # Fetch document text from DB (placeholder as we don't have a direct text store for docs yet, maybe from evidence)
-        # For now, just use what's passed or empty
-        pass
+        # Fetch document text by aggregating evidence previews for the artifact
+        evidence_list = db.get_all_evidence()
+        doc_text_parts = []
+        for ev in evidence_list:
+            if ev.get("artifact_id") == req.document_id and ev.get("preview"):
+                doc_text_parts.append(ev["preview"])
+        text = "\n".join(doc_text_parts)
 
     if not text:
         return {"tags": []}
