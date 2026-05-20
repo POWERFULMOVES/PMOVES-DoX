@@ -45,7 +45,7 @@ PMOVES-DoX supports two database backends:
 | `SUPABASE_URL` | Supabase project URL | - |
 | `SUPABASE_ANON_KEY` | Anonymous key (public) | - |
 | `SUPABASE_SERVICE_KEY` | Service role key (admin) | - |
-| `SUPABASE_JWT_SECRET` | JWT secret for PostgREST | - |
+| `JWT_SECRET` | JWT secret for PostgREST | - |
 | `SUPABASE_SCHEMA` | PostgreSQL schema | `public` |
 | `SUPABASE_DUAL_WRITE` | Enable dual-write mode | `false` |
 
@@ -85,7 +85,7 @@ Add to `.env.local`:
 
 # JWT secret for signing/verifying tokens
 # CRITICAL: Keep this secret secure and never commit to version control
-SUPABASE_JWT_SECRET=your-generated-secret-here
+JWT_SECRET=your-generated-secret-here
 
 # Service role key (signed with JWT secret, role=service_role)
 # This key has admin privileges, bypasses RLS
@@ -146,7 +146,7 @@ supabase-rest:
     PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
     PGRST_DB_SCHEMA: public,storage,graphql_public
     PGRST_DB_ANON_ROLE: anon
-    PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+    PGRST_JWT_SECRET: ${JWT_SECRET}
     PGRST_OPENAPI_SERVER_PROXY_URI: http://localhost:54321/rest/v1
 ```
 

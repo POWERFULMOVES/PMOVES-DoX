@@ -103,7 +103,7 @@ app.add_middleware(RateLimitMiddleware, default_limit="100/minute")
 # Frontend must include valid JWT in Authorization header
 # Example: Authorization: Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9...
 #
-# The token is validated against SUPABASE_JWT_SECRET.
+# The token is validated against JWT_SECRET.
 # Get token from: https://supabase.com/dashboard/project/_/settings/api
 #
 # Legacy CORS support can be enabled for development:
