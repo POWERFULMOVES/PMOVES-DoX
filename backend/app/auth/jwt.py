@@ -14,7 +14,7 @@ Usage:
 
 SECURITY WARNING:
     In development mode (ENVIRONMENT=development), this module may return a fake
-    "dev_user" payload if python-jose is not installed or SUPABASE_JWT_SECRET is not
+    "dev_user" payload if python-jose is not installed or JWT_SECRET is not
     configured. Always verify ENVIRONMENT=production in production deployments.
 """
 
@@ -42,7 +42,7 @@ except ImportError:
     )
 
 # Supabase JWT secret (shared with PMOVES.AI)
-JWT_SECRET = os.getenv("SUPABASE_JWT_SECRET", "")
+JWT_SECRET = os.getenv("JWT_SECRET", "")
 
 # Development mode flag - defaults to production for security
 # Explicitly set ENVIRONMENT=development to enable dev mode bypass
@@ -57,16 +57,16 @@ if not DEV_MODE and not HAS_JOSE:
 
 if not DEV_MODE and not JWT_SECRET:
     raise RuntimeError(
-        "SUPABASE_JWT_SECRET must be configured in production mode. "
-        "Set the SUPABASE_JWT_SECRET environment variable."
+        "JWT_SECRET must be configured in production mode. "
+        "Set the JWT_SECRET environment variable."
     )
 
 # Log configuration status at startup
 if not JWT_SECRET:
     if DEV_MODE:
         logger.warning(
-            "SUPABASE_JWT_SECRET not configured - using dev mode bypass. "
-            "Configure SUPABASE_JWT_SECRET for proper authentication."
+            "JWT_SECRET not configured - using dev mode bypass. "
+            "Configure JWT_SECRET for proper authentication."
         )
 else:
     logger.info("JWT authentication configured properly")
@@ -108,7 +108,7 @@ def validate_jwt_token(token: str) -> Tuple[bool, Optional[Dict[str, Any]], str]
         if DEV_MODE:
             logger.warning(
                 "JWT_SECRET not configured; allowing requests in DEV_MODE. "
-                "Configure SUPABASE_JWT_SECRET for proper authentication."
+                "Configure JWT_SECRET for proper authentication."
             )
             return True, {"sub": "dev_user", "role": "authenticated"}, "NO_SECRET_CONFIGURED"
         logger.error("JWT_SECRET not configured and not in DEV_MODE - authentication will fail")
