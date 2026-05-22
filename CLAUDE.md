@@ -7,7 +7,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 PMOVES-DoX is a document intelligence platform for extracting, analyzing, and structuring data from PDFs, spreadsheets, XML logs, and API collections. It combines AI-powered processing (Docling, spaCy, LangExtract) with visualization tools (datavzrd) in a local-first architecture.
 
 **Main Branch**: `PMOVES.AI-Edition-Hardened` (for PRs)
-**Current Branch**: `feat/integrate-internal-agents`
 
 ## Documentation
 
@@ -269,7 +268,7 @@ Artifacts  Pages/       Chunks with         Structured   FAISS/NumPy
   - Tools available: `send_message`, `finish_chat`
 - **Configuration**:
   - Profile: `PROFILE=pmoves_custom` (uses `agents/pmoves_custom/` prompts)
-  - LLM orchestration: Uses TensorZero at `http://tensorzero:3000/v1`
+  - LLM orchestration: Uses TensorZero at `http://tensorzero-gateway:3000` (OpenAI-compatible routes under `/openai/v1`)
   - Models: `orchestrator` (chat), `utility` (util), `embed` (embeddings)
   - Settings file: `external/PMOVES-Agent-Zero/tmp/settings.json`
 - **Pattern similarity**: Follows same env-based switching as Supabase (database_factory.py) and Neo4j (PsyFeR knowledge graph)

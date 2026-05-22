@@ -157,7 +157,7 @@ agent-zero:
     # Standalone Web UI
     - WEB_UI_PORT=50051
     # LLM orchestration
-    - TENSORZERO_API_BASE=http://tensorzero:3000/v1
+    - TENSORZERO_API_BASE=http://tensorzero-gateway:3000
   networks:
     - app_tier
     - api_tier
