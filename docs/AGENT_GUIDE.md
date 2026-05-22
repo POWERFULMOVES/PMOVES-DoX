@@ -7,7 +7,6 @@ This file provides guidance to Claude Code (claude.ai/code) when working with co
 PMOVES-DoX is a document intelligence platform for extracting, analyzing, and structuring data from PDFs, spreadsheets, XML logs, and API collections. It combines AI-powered processing (Docling, spaCy, LangExtract) with visualization tools (datavzrd) in a local-first architecture.
 
 **Main Branch**: `PMOVES.AI-Edition-Hardened` (for PRs)
-**Current Branch**: `feat/integrate-internal-agents`
 
 ## Common Development Commands
 

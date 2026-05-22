@@ -522,7 +522,7 @@ async with KnowledgeManagerAgent("knowledge-001") as agent:
 
 ```yaml
 # TensorZero Integration
-TENSORZERO_BASE_URL: ${TENSORZERO_BASE_URL:-http://tensorzero:3000}
+TENSORZERO_BASE_URL: ${TENSORZERO_BASE_URL:-http://tensorzero-gateway:3000}
 
 # n8n Integration
 N8N_API_KEY: ${N8N_API_KEY}
