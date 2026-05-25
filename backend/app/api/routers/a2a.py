@@ -154,6 +154,10 @@ class ManifoldMetrics(BaseModel):
     manifold_type: str = Field("euclidean", description="hyperbolic, spherical, or euclidean")
     dimension: int = Field(3, ge=1, description="Manifold dimension")
     coordinates: List[float] = Field(default_factory=list, description="Position in embedding space")
+    poincare: Optional[Dict[str, Any]] = Field(
+        None,
+        description="Deterministic 2D Poincare disk projection for geometry consumers",
+    )
 
 
 class GeometryAnalyzeResponse(BaseModel):
@@ -667,11 +671,17 @@ async def geometry_analyze(
     else:
         manifold_type = "euclidean"
 
+    labels = [f"embedding_{i}" for i in range(len(embeddings))]
+    if labels:
+        labels[0] = "query"
+    poincare = geometry_engine.project_embeddings_to_poincare(embeddings, labels=labels)
+
     metrics = ManifoldMetrics(
         curvature=float(k),
         manifold_type=manifold_type,
         dimension=len(embeddings[0]) if embeddings else 3,
         coordinates=embeddings[0][:10] if embeddings else [],
+        poincare=poincare,
     )
 
     # Publish manifold update to NATS if available

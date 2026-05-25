@@ -307,6 +307,7 @@ async def simulate_geometry_event(cgp: Dict[str, Any] = Body(...)):
 
     # Compute dynamic zeta spectrum from embeddings
     frequencies, amplitudes = geometry_engine.compute_zeta_spectrum(embeddings)
+    poincare = geometry_engine.project_embeddings_to_poincare(embeddings)
 
     return {
         "surfaceUpdate": {
@@ -346,7 +347,8 @@ async def simulate_geometry_event(cgp: Dict[str, Any] = Body(...)):
         "meta": {
             "computed_zeta": True,
             "embedding_count": len(embeddings),
-            "frequency_count": len(frequencies)
+            "frequency_count": len(frequencies),
+            "hyperbolic_projection": poincare,
         }
     }
 
@@ -453,6 +455,7 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
         
     # 5. Compute zeta spectrum from embeddings
     frequencies, amplitudes = geometry_engine.compute_zeta_spectrum(embeddings)
+    poincare = geometry_engine.project_embeddings_to_poincare(embeddings)
 
     # 6. Publish manifold update to NATS for real-time visualization
     try:
@@ -471,5 +474,6 @@ async def visualize_manifold(document_id: str = Body(..., embed=True)):
             "frequencies": frequencies,
             "amplitudes": amplitudes
         },
+        "hyperbolic_projection": poincare,
         "url": f"{os.getenv('DOX_BASE_URL', 'http://localhost:' + os.getenv('PORT', '8484'))}/hyperdimensions?load=chit_manifold.json"
     }

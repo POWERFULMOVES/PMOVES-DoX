@@ -23,6 +23,98 @@ class GeometryEngine:
     Hyperbolic (Tree), Spherical (Cycle), or Euclidean (Flat) manifold.
     """
 
+    def project_embeddings_to_poincare(
+        self,
+        embeddings: List[List[float]],
+        labels: Optional[List[str]] = None,
+        max_radius: float = 0.95,
+    ) -> Dict[str, Any]:
+        """
+        Project arbitrary embedding vectors into a deterministic 2D Poincare disk.
+
+        This is a pragmatic visualization/indexing projection:
+        - SVD/PCA supplies stable angular direction.
+        - distance from the embedding centroid supplies radial hierarchy.
+        - all emitted points are clamped inside the open unit disk.
+
+        It does not train a hyperbolic embedding model; consumers should treat
+        the result as a CHIT/DoX geometry view over the original embedding space.
+        """
+        if not embeddings:
+            return {
+                "space": "poincare_disk",
+                "curvature": -1.0,
+                "method": "svd_direction_radial_rank",
+                "max_radius": float(max_radius),
+                "points": [],
+                "source_dimension": 0,
+            }
+
+        max_radius = float(np.clip(max_radius, 0.01, 0.999))
+
+        try:
+            data = self._coerce_embedding_matrix(embeddings)
+            n_samples, source_dim = data.shape
+
+            centered = data - np.mean(data, axis=0)
+            centroid_distances = np.linalg.norm(centered, axis=1)
+            directions = self._principal_directions_2d(centered)
+
+            order = np.argsort(centroid_distances, kind="mergesort")
+            ranks = np.empty(n_samples, dtype=float)
+            ranks[order] = np.arange(n_samples, dtype=float)
+
+            if n_samples == 1:
+                radii = np.array([0.0], dtype=float)
+            else:
+                radii = max_radius * np.sqrt(ranks / (n_samples - 1))
+
+            points = []
+            for idx, (direction, radius) in enumerate(zip(directions, radii)):
+                direction_norm = np.linalg.norm(direction)
+                if direction_norm < 1e-12:
+                    theta = (2.0 * np.pi * idx) / max(n_samples, 1)
+                    unit = np.array([np.cos(theta), np.sin(theta)])
+                else:
+                    unit = direction / direction_norm
+                    theta = float(np.arctan2(unit[1], unit[0]))
+
+                x = float(unit[0] * radius)
+                y = float(unit[1] * radius)
+                r = float(np.sqrt((x * x) + (y * y)))
+                label = labels[idx] if labels and idx < len(labels) else f"embedding_{idx}"
+
+                points.append({
+                    "id": str(label),
+                    "label": str(label),
+                    "x": x,
+                    "y": y,
+                    "r": r,
+                    "theta": theta,
+                    "source_norm": float(centroid_distances[idx]),
+                    "radial_rank": int(ranks[idx]),
+                })
+
+            return {
+                "space": "poincare_disk",
+                "curvature": -1.0,
+                "method": "svd_direction_radial_rank",
+                "max_radius": max_radius,
+                "points": points,
+                "source_dimension": int(source_dim),
+            }
+        except (ValueError, TypeError, np.linalg.LinAlgError) as e:
+            logger.error(f"project_embeddings_to_poincare error: {e}")
+            return {
+                "space": "poincare_disk",
+                "curvature": -1.0,
+                "method": "svd_direction_radial_rank",
+                "max_radius": max_radius,
+                "points": [],
+                "source_dimension": 0,
+                "error": str(e),
+            }
+
     def analyze_curvature(self, embeddings: List[List[float]]) -> Dict[str, float]:
         """
         Estimates the delta-hyperbolicity of a set of embeddings using a 4-point condition check
@@ -204,7 +296,7 @@ class GeometryEngine:
             return default_frequencies[:3], default_amplitudes[:3]
 
         try:
-            matrix = np.array(embeddings)
+            matrix = self._coerce_embedding_matrix(embeddings)
 
             # Handle 1D case (single feature)
             if matrix.ndim == 1 or matrix.shape[1] == 1:
@@ -688,6 +780,44 @@ class GeometryEngine:
             x = 1.0
 
         return float(np.arccosh(x))
+
+    def _coerce_embedding_matrix(self, embeddings: List[List[float]]) -> np.ndarray:
+        """Convert ragged embedding lists into a finite 2D float matrix."""
+        if not embeddings:
+            raise ValueError("embeddings must not be empty")
+
+        rows = []
+        max_dim = 0
+        for embedding in embeddings:
+            row = np.asarray(embedding, dtype=float).flatten()
+            if row.size == 0:
+                row = np.zeros(1, dtype=float)
+            row = np.nan_to_num(row, nan=0.0, posinf=0.0, neginf=0.0)
+            rows.append(row)
+            max_dim = max(max_dim, row.size)
+
+        matrix = np.zeros((len(rows), max_dim), dtype=float)
+        for idx, row in enumerate(rows):
+            matrix[idx, : row.size] = row
+
+        return matrix
+
+    def _principal_directions_2d(self, centered: np.ndarray) -> np.ndarray:
+        """Return deterministic 2D directions from centered embeddings."""
+        n_samples, n_dims = centered.shape
+
+        if n_dims == 1:
+            return np.column_stack([centered[:, 0], np.zeros(n_samples)])
+
+        if np.allclose(centered, 0.0):
+            return np.zeros((n_samples, 2), dtype=float)
+
+        _u, _s, vh = np.linalg.svd(centered, full_matrices=False)
+        components = vh[:2]
+        if components.shape[0] == 1:
+            components = np.vstack([components, np.zeros((1, n_dims))])
+
+        return centered @ components.T
 
     def _spherical_distance(self, point_a: np.ndarray, point_b: np.ndarray) -> float:
         """Compute great circle distance on a sphere.

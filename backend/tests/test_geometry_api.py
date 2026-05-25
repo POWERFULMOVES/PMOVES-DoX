@@ -163,6 +163,19 @@ class TestSimulateEndpoint:
                 assert isinstance(zeta["amplitudes"], list)
                 assert len(zeta["frequencies"]) > 0
 
+    def test_includes_hyperbolic_projection_metadata(self):
+        """Simulate response should include deterministic Poincare projection metadata."""
+        cgp = client.get("/cipher/geometry/demo-packet").json()
+
+        response = client.post("/cipher/geometry/simulate", json=cgp)
+        data = response.json()
+
+        projection = data["meta"]["hyperbolic_projection"]
+        assert projection["space"] == "poincare_disk"
+        assert projection["method"] == "svd_direction_radial_rank"
+        assert projection["points"]
+        assert all(point["r"] < 1.0 for point in projection["points"])
+
 
 class TestVisualizeManifoldEndpoint:
     """Tests for POST /cipher/geometry/visualize_manifold."""
@@ -216,6 +229,19 @@ class TestVisualizeManifoldEndpoint:
         assert "hyperdimensions" in data["url"]
         assert "chit_manifold.json" in data["url"]
 
+    def test_returns_hyperbolic_projection(self):
+        """Visualize manifold should return projection points for downstream geometry consumers."""
+        response = client.post(
+            "/cipher/geometry/visualize_manifold",
+            json={"document_id": "demo"}
+        )
+
+        data = response.json()
+        projection = data["hyperbolic_projection"]
+        assert projection["space"] == "poincare_disk"
+        assert len(projection["points"]) > 0
+        assert all(point["r"] < 1.0 for point in projection["points"])
+
 
 class TestSkillsEndpoints:
     """Tests for cipher skills endpoints (requires database)."""
@@ -246,7 +272,7 @@ class TestSkillsEndpoints:
         if response.status_code == 500:
             pytest.skip("Database not properly configured for memory endpoint")
 
-        assert response.status_code in [200, 404]  # May not have data
+        assert response.status_code in [200, 401, 404]  # May be auth-gated or empty
 
 
 class TestGeometryResponseSchemas:

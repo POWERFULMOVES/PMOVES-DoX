@@ -9,7 +9,7 @@ The GEOMETRY BUS transforms the PMOVES.AI platform from a traditional message-pa
 - **Holographic Data Representation**: Information encoded on "boundary surfaces" (CGP packets) rather than volumetric redundancy
 - **Hierarchical Knowledge Encoding**: Poincare disk geometry for exponential storage capacity
 - **Spectral Signal Processing**: Riemann zeta zeros as universal frequency filters
-- **Provable Attribution**: Dirichlet-weighted contributions with Merkle proof verification
+- **Verifiable Attribution**: Dirichlet-weighted contributions with Merkle proof verification where those contracts are present
 
 ## Mathematical Foundations
 
@@ -18,10 +18,10 @@ The GEOMETRY BUS transforms the PMOVES.AI platform from a traditional message-pa
 | Pillar | Implementation | Purpose |
 |--------|----------------|---------|
 | **Dirichlet Distributions** | `DirichletWeights` class | Probabilistic attribution weighting |
-| **Hyperbolic Geometry** | `HyperbolicEncoder` class | Poincare disk hierarchical encoding |
+| **Hyperbolic Geometry** | `HyperbolicEncoder` class; DoX `GeometryEngine.project_embeddings_to_poincare` | Poincare disk hierarchical encoding and document embedding projection |
 | **Merkle Proofs** | `ShapeAttribution` class | Verifiable attribution chains |
-| **Zeta Spectral Filtering** | `ZetaInspiredFilter` class | Signal/noise separation via Riemann zeros |
-| **Swarm Optimization** | `SwarmAttribution` class | Distributed consensus without backpropagation |
+| **Zeta Spectral Filtering** | `ZetaInspiredFilter` class; DoX spectrum analyzer | Heuristic spectral analysis until method review |
+| **Swarm Optimization** | `SwarmAttribution` class | Fitness/population metadata; real optimizer integration lives outside DoX |
 
 ### Why Hyperbolic Space?
 
@@ -30,6 +30,8 @@ Standard Euclidean embeddings suffer from **hierarchy collapse** - the "Bank" pr
 - **Exponential Volume Expansion**: Space grows exponentially from origin to boundary
 - **Natural Hierarchy Mapping**: Abstract concepts at origin, specific instances at boundary
 - **Geodesic Reasoning**: Logical inference as shortest-path computation through curved space
+
+DoX currently implements a deterministic projection layer for existing embeddings. It uses principal directions for angle and centroid-distance rank for radius, then emits bounded Poincare disk coordinates for visualization, A2A geometry responses, and future LONGBOW/Arrow handoff.
 
 ```typescript
 // Example: Encoding hierarchical data in Poincare disk

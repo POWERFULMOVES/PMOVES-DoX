@@ -1,6 +1,6 @@
 # PMOVESCHIT Implementation Status
 
-**Last Updated:** January 16, 2026
+**Last Updated:** May 25, 2026
 **Related PRs:** #56-61 (Geometry Intelligence), #42, #44 (Standalone alignment)
 
 ---
@@ -11,27 +11,37 @@ This document tracks the implementation status of PMOVESCHIT (Cymatic-Holographi
 
 ---
 
-## PMOVES-DoX Geometry Status (January 2026)
+## PMOVES-DoX Geometry Status (May 2026)
 
-### Implementation Complete ✅
+### Scope Reality Check
 
-All 5 phases of Geometric Intelligence have been implemented:
+DoX has a working geometry pipeline for document/search embeddings, CGP visualization, and geometry API responses. The production-safe interpretation is narrower than the older "all pillars complete" wording:
+
+- Hyperbolic geometry is implemented as deterministic Poincare disk projection and geodesic helpers.
+- Dynamic zeta output is heuristic spectral visualization, not validated Riemann-zeta filtering.
+- Swarm and optimizer behavior is not implemented inside DoX.
+- LONGBOW integration is a planned storage/retrieval handoff, not an active Arrow Flight bridge in this repository.
+
+### Implemented Geometry Phases
 
 | Phase | Feature | Status | Tests |
 |-------|---------|--------|-------|
-| Phase 1 | GeometryEngine curvature analysis | ✅ Complete | 28 tests |
+| Phase 1 | GeometryEngine curvature analysis | ✅ Complete | 28 focused tests |
 | Phase 2 | CHIT config generation | ✅ Complete | 14 tests |
-| Phase 3 | Dynamic Zeta spectrum | ✅ Complete | 18 tests |
+| Phase 3 | Dynamic zeta-like spectrum | ◐ Heuristic | API tests |
 | Phase 4 | NATS context provider | ✅ Complete | 12 tests |
 | Phase 5 | Frontend integration | ✅ Complete | 18 tests |
+| Phase 6 | Embedding-to-Poincare projection | ✅ Complete | Focused backend/API tests |
 
-**Total: 90 tests passing**
+Focused validation for the May 2026 hyperbolic projection pass:
+- `python -m pytest -q backend/tests/test_geometry_engine.py`
+- `ENVIRONMENT=development python -m pytest -q backend/tests/test_geometry_api.py::TestSimulateEndpoint backend/tests/test_geometry_api.py::TestVisualizeManifoldEndpoint`
 
 ### Backend Services
 
 | Service | File | Status |
 |---------|------|--------|
-| GeometryEngine | `app/services/geometry_engine.py` | ✅ Production |
+| GeometryEngine | `app/services/geometry_engine.py` | ✅ Curvature, geodesics, spectrum heuristic, Poincare projection |
 | ChitService | `app/services/chit_service.py` | ✅ Production |
 | Cipher Router | `app/api/routers/cipher.py` | ✅ Production |
 
@@ -65,10 +75,10 @@ All 5 phases of Geometric Intelligence have been implemented:
 |-----------|----------|--------|----------|-------|
 | **CGP Generator** | TypeScript | ✅ Complete | `PMOVES-ToKenism-Multi/integrations/contracts/chit/cgp-generator.ts` | Generates CGP v0.1/v0.2 packets |
 | **Dirichlet Weights** | TypeScript | ✅ Complete | `PMOVES-ToKenism-Multi/integrations/contracts/chit/dirichlet-weights.ts` | Dirichlet distribution attribution |
-| **Hyperbolic Encoder** | TypeScript | ✅ Complete | `PMOVES-ToKenism-Multi/integrations/contracts/chit/hyperbolic-encoder.ts` | Poincaré disk embedding |
+| **Hyperbolic Encoder** | TypeScript/Python | ✅ Projection layer | `PMOVES-ToKenism-Multi/integrations/contracts/chit/hyperbolic-encoder.ts`; `PMOVES-DoX/backend/app/services/geometry_engine.py` | Poincare disk embedding/projection |
 | **Shape Attribution** | TypeScript | ✅ Complete | `PMOVES-ToKenism-Multi/integrations/contracts/chit/shape-attribution.ts` | Multi-modal shape analysis |
-| **Swarm Attribution** | TypeScript | ✅ Complete | `PMOVES-ToKenism-Multi/integrations/contracts/chit/swarm-attribution.ts` | EvoSwarm consensus |
-| **Zeta Filter** | TypeScript | ✅ Complete | `PMOVES-ToKenism-Multi/integrations/contracts/chit/zeta-filter.ts` | Riemann zeta-inspired filtering |
+| **Swarm Attribution** | TypeScript | ◐ Metadata only | `PMOVES-ToKenism-Multi/integrations/contracts/chit/swarm-attribution.ts` | Fitness/population metadata; optimizer lives elsewhere |
+| **Zeta Filter** | TypeScript/Python | ◐ Heuristic | `PMOVES-ToKenism-Multi/integrations/contracts/chit/zeta-filter.ts`; `PMOVES-DoX/backend/app/services/geometry_engine.py` | Zeta-like spectral visualization |
 | **NATS Publisher** | TypeScript | ✅ Complete | `PMOVES-ToKenism-Multi/integrations/contracts/chit/chit-nats-publisher.ts` | GEOMETRY BUS integration |
 | **Module Index** | TypeScript | ✅ Complete | `PMOVES-ToKenism-Multi/integrations/contracts/chit/index.ts` | Unified exports |
 | **Sample CGP Export** | TypeScript | ✅ Complete | `PMOVES-ToKenism-Multi/integrations/contracts/chit/export-sample-cgp.ts` | Demo/testing |
@@ -90,10 +100,10 @@ The CHIT system is built on five mathematical foundations:
 - **Use Case:** Fair credit allocation across contributors
 
 ### 2. Hyperbolic Geometry (Poincaré Disk)
-- **Status:** ✅ Implemented
-- **Module:** `hyperbolic-encoder.ts`
-- **Purpose:** Embed hierarchical structures in hyperbolic space
-- **Use Case:** Tree-like relationship encoding with bounded coordinates
+- **Status:** ✅ Implemented as projection layer
+- **Modules:** `hyperbolic-encoder.ts`; `GeometryEngine.project_embeddings_to_poincare`
+- **Purpose:** Embed/project hierarchical structures in bounded Poincare coordinates
+- **Use Case:** Tree-like relationship visualization, A2A geometry responses, future LONGBOW handoff
 
 ### 3. Merkle Proofs
 - **Status:** ✅ Implemented (via CGP generator)
@@ -102,13 +112,13 @@ The CHIT system is built on five mathematical foundations:
 - **Use Case:** Tamper-proof attribution chains
 
 ### 4. Zeta-Inspired Filtering
-- **Status:** ✅ Implemented
+- **Status:** ◐ Heuristic
 - **Module:** `zeta-filter.ts`
 - **Purpose:** Filter signals using Riemann zeta zero distribution
 - **Use Case:** Noise reduction, signal extraction
 
 ### 5. Swarm Optimization (EvoSwarm)
-- **Status:** ✅ Implemented
+- **Status:** ◐ Metadata in CHIT; optimizer outside DoX
 - **Module:** `swarm-attribution.ts`
 - **Purpose:** Distributed consensus via evolutionary algorithms
 - **Use Case:** Multi-agent agreement on attribution values

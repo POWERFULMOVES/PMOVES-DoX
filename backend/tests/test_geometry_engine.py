@@ -224,6 +224,73 @@ class TestGenerateChitConfig:
             assert fn.count("{") == fn.count("}")
 
 
+class TestProjectEmbeddingsToPoincare:
+    """Tests for deterministic Poincare disk projection."""
+
+    def test_projection_is_deterministic_and_bounded(self):
+        engine = GeometryEngine()
+        embeddings = [
+            [0.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],
+            [0.0, 2.0, 0.0],
+            [-3.0, 0.0, 1.0],
+        ]
+
+        first = engine.project_embeddings_to_poincare(embeddings)
+        second = engine.project_embeddings_to_poincare(embeddings)
+
+        assert first == second
+        assert first["space"] == "poincare_disk"
+        assert first["curvature"] == -1.0
+        assert first["method"] == "svd_direction_radial_rank"
+        assert len(first["points"]) == len(embeddings)
+        assert all(point["r"] < 1.0 for point in first["points"])
+
+    def test_projection_preserves_radial_hierarchy_from_centroid_distance(self):
+        engine = GeometryEngine()
+        embeddings = [
+            [0.0, 0.0],
+            [0.01, 0.0],
+            [4.0, 0.0],
+            [-6.0, 0.0],
+        ]
+
+        projection = engine.project_embeddings_to_poincare(
+            embeddings,
+            labels=["core", "near_core", "branch", "leaf"],
+        )
+        points = {point["label"]: point for point in projection["points"]}
+
+        assert points["leaf"]["r"] > points["branch"]["r"]
+        assert points["branch"]["r"] > points["near_core"]["r"]
+        assert points["near_core"]["r"] >= points["core"]["r"]
+
+    def test_projection_handles_ragged_and_non_finite_embeddings(self):
+        engine = GeometryEngine()
+        embeddings = [
+            [1.0, 2.0],
+            [float("nan")],
+            [float("inf"), 3.0, 4.0],
+        ]
+
+        projection = engine.project_embeddings_to_poincare(embeddings)
+
+        assert projection["source_dimension"] == 3
+        assert len(projection["points"]) == 3
+        for point in projection["points"]:
+            assert np.isfinite(point["x"])
+            assert np.isfinite(point["y"])
+            assert np.isfinite(point["r"])
+
+    def test_empty_projection_returns_empty_packet(self):
+        engine = GeometryEngine()
+
+        projection = engine.project_embeddings_to_poincare([])
+
+        assert projection["points"] == []
+        assert projection["source_dimension"] == 0
+
+
 class TestGetSurfaceFnCode:
     """Tests for GeometryEngine._get_surface_fn_code()."""
 

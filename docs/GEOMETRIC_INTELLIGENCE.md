@@ -59,11 +59,34 @@ We use the **Pmoves-hyperdimensions** tool (`/hyperdimensions`) to visualize the
 *   **Usage**: The standard interchange format for geometry.
 *   **Agent Action**: You can **generate** `chit_manifold.json` files to show the user the "Shape" of their query.
 
-### 3.2 Key Files
+### 3.2 Hyperbolic Embedding Projection
+
+DoX now exposes a deterministic projection from local document/search embeddings into a 2D Poincare disk:
+
+*   **Backend method**: `GeometryEngine.project_embeddings_to_poincare(...)`
+*   **Projection contract**: SVD/PCA determines angular direction; centroid-distance rank determines radial hierarchy; emitted points are clamped inside the open unit disk.
+*   **API surfaces**:
+    *   `POST /cipher/geometry/simulate` returns `meta.hyperbolic_projection`
+    *   `POST /cipher/geometry/visualize_manifold` returns `hyperbolic_projection`
+    *   `POST /a2a/geometry/analyze` returns `metrics.poincare`
+*   **Current scope**: This is a pragmatic geometry view over embeddings, not a trained hyperbolic sidecar and not a proof-backed fairness mechanism.
+
+This is the stable handoff shape for future LONGBOW/Arrow work: DoX emits the Poincare coordinates and source embedding metadata; LONGBOW remains responsible for vector storage, HNSW/GraphRAG search, quantization, and distributed retrieval.
+
+### 3.3 Key Files
 
 *   **`external/Pmoves-hyperdimensions/index.html`**: The visualization engine.
 *   **`chit_service.py`**: The backend decoder.
+*   **`geometry_engine.py`**: Curvature analysis, zeta-like spectrum generation, geodesic helpers, and Poincare projection.
 *   **`HyperbolicNavigator.tsx`**: The frontend viewer.
+
+### 3.4 Notebook Track
+
+The active Jupyter reference for this math lane is:
+
+*   `docs/context/Latent_Geometry_Is_a_Control_Knob/Latent_Geometry_Is_a_Control_Knob.ipynb`
+
+Keep implementation claims tied to tested code. Notebook results are research evidence until they are turned into deterministic service code and tests.
 
 ## 4. Workflows
 
