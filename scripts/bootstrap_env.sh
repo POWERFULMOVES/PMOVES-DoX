@@ -175,7 +175,7 @@ load_from_parent() {
         "SUPABASE_ANON_KEY"
         "SUPABASE_SERVICE_KEY"
         "SUPABASE_SERVICE_ROLE_KEY"
-        "SUPABASE_JWT_SECRET"
+        "JWT_SECRET"
         "NEO4J_PASSWORD"
         "MEILI_MASTER_KEY"
         "DISCORD_WEBHOOK_URL"

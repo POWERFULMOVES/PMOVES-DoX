@@ -510,9 +510,9 @@ async with KnowledgeManagerAgent("knowledge-001") as agent:
 | Server | Transport | Authentication | Description |
 |--------|-----------|----------------|-------------|
 | skills | stdio | None | Agent skill management |
-| docling | SSE | JWT (SUPABASE_JWT_SECRET) | Document processing |
-| e2b | SSE | JWT (SUPABASE_JWT_SECRET) | Code sandbox |
-| vl-sentinel | SSE | JWT (SUPABASE_JWT_SECRET) | Vision-language |
+| docling | SSE | JWT (JWT_SECRET) | Document processing |
+| e2b | SSE | JWT (JWT_SECRET) | Code sandbox |
+| vl-sentinel | SSE | JWT (JWT_SECRET) | Vision-language |
 | cipher-memory | stdio | TENSORZERO_API_KEY | Persistent memory |
 | postman | stdio | POSTMAN_API_KEY | API testing |
 | n8n-agent | stdio | N8N_API_KEY | Workflow automation |
