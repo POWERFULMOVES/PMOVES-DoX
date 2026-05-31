@@ -174,7 +174,7 @@ services:
       PGRST_DB_URI: postgres://postgres:${POSTGRES_PASSWORD}@supabase-db:5432/postgres
       PGRST_DB_SCHEMA: public,storage,graphql_public
       PGRST_DB_ANON_ROLE: anon
-      PGRST_JWT_SECRET: ${SUPABASE_JWT_SECRET}
+      PGRST_JWT_SECRET: ${JWT_SECRET}
       # Serve API at /rest/v1 prefix for Supabase Python client compatibility
       PGRST_SERVER_UNIX_SOCKET_MODE: ""
       PGRST_OPENAPI_SERVER_PROXY_URI: http://localhost:54321/rest/v1

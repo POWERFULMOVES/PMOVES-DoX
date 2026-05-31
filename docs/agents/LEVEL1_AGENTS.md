@@ -166,7 +166,7 @@ e2b-runner:
 | Status | Details |
 |--------|---------|
 | **LLM Routing** | Not Required (deterministic code execution) |
-| **Authentication** | Uses `SUPABASE_JWT_SECRET` for MCP auth, `E2B_API_KEY` for E2B API |
+| **Authentication** | Uses `JWT_SECRET` for MCP auth, `E2B_API_KEY` for E2B API |
 | **Enhancement Opportunity** | None - deterministic sandbox execution |
 
 ### Environment Variables

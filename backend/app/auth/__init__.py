@@ -5,7 +5,7 @@ Provides JWT authentication following PMOVES.AI patterns.
 
 SECURITY WARNING:
     In development mode (ENVIRONMENT=development), authentication may be bypassed
-    if python-jose is not installed or SUPABASE_JWT_SECRET is not configured.
+    if python-jose is not installed or JWT_SECRET is not configured.
     Always verify ENVIRONMENT=production in production deployments.
 """
 
