@@ -102,7 +102,7 @@ python smoke/smoke_backend.py
 
 PMOVES-DoX includes experimental geometric data visualization powered by hyperbolic geometry, Riemann Zeta spectral analysis, and 3D manifold rendering.
 
-**CHIT Protocol** (Cymatic-Holographic Information Transfer):
+**CHIT Protocol** (Compressed Hierarchical Information Transfer):
 - Backend: `app/services/chit_service.py` - NATS-based geometry event bus
 - Backend: `app/services/geometry_engine.py` - Curvature analysis and manifold detection
 - API: `POST /cipher/geometry/simulate` - Simulate CHIT Geometry Packets (CGP)

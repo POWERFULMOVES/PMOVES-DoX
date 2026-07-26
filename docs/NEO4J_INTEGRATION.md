@@ -242,7 +242,7 @@ Properties:
 
 ### CHIT/Cipher Schema Extensions
 
-For the Cymatic-Holographic Information Transfer (CHIT) protocol, the schema includes:
+For the Cymatic Holographic Information Theory (CHIT) protocol, the schema includes:
 
 #### CGP Node (Geometry Packet)
 

@@ -6,7 +6,7 @@
 
 ## Description
 
-This skill enables agents to interact with the CHIT (Cymatic-Holographic Information Transfer) Geometry Bus. It provides tools for publishing and subscribing to CHIT Geometry Packets (CGP), generating embeddings, and managing NATS-based real-time geometry event streams.
+This skill enables agents to interact with the CHIT (Compressed Hierarchical Information Transfer) Geometry Bus. It provides tools for publishing and subscribing to CHIT Geometry Packets (CGP), generating embeddings, and managing NATS-based real-time geometry event streams.
 
 **When to use:**
 - Publishing document geometry to the visualization layer
