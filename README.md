@@ -208,7 +208,7 @@ Local-first models
 - **New** **Geometric Intelligence**: "Mathematical UI" powered by Hyperbolic Geometry and Riemann Zeta spectral analysis.
     - **Hyperbolic Navigator**: Visualize knowledge hierarchies on a Poincaré Disk.
     - **Manifold Visualizer**: "Trickout" 3D surfaces to see the "Shape of Data" (via `Pmoves-hyperdimensions`).
-- **New** **CHIT Protocol**: Support for "Cymatic-Holographic Information Transfer" geometry packets.
+- **New** **CHIT Protocol**: Support for "Cymatic Holographic Information Theory" geometry packets.
 - Vector search (FAISS or NumPy fallback) with a global UI search bar
 - PDF page awareness: Global Search displays page numbers for PDF hits; optional "Open PDF at page" links when enabled
 - Logs view with time/level/code filters and CSV export

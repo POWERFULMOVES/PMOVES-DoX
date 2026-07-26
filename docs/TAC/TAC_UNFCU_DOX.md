@@ -82,7 +82,7 @@ Private PMOVES-DoX fork for United Nations Federal Credit Union (UNFCU). Replace
 
 ### What This Adds (On Top of Tier 2)
 - E2B self-hosted Firecracker microVM sandboxes for safe code execution
-- CHIT (Cymatic-Holographic Information Transfer) attribution for provenance
+- CHIT (Compressed Hierarchical Information Transfer) attribution for provenance
 - Graphiti trail for agent action audit logging
 - JWT fail-closed authentication (no default-open modes)
 - NATS authenticated message bus (event-driven architecture)

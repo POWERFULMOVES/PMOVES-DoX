@@ -39,7 +39,7 @@ Recent documentation updates to the PMOVES.AI ecosystem reveal a fundamental par
     *   `tokenism.cgp.ready.v1`: Finished geometry packets ready for visualization.
     *   `geometry.event.v1`: Raw geometric events.
 
-### 2.2 CHIT (Cymatic-Holographic Information Transfer)
+### 2.2 CHIT (Cymatic Holographic Information Theory)
 *   **Protocol**: A high-efficiency data interchange format.
 *   **Data Structure**: **CGP (CHIT Geometry Packet)**.
     *   **Format**: JSON.
