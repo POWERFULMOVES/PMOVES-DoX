@@ -9,7 +9,7 @@ The AgentCard advertises:
 - MCP tools available for invocation
 - Input/output modalities supported
 
-Reference: https://a2ui.org/a2a-extension/a2ui/v0.9
+Reference: https://a2ui.org/a2a-extension/a2ui/v0.8
 """
 
 from pydantic import BaseModel, Field
