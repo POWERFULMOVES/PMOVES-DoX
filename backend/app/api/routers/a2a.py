@@ -13,7 +13,7 @@ Endpoints:
     POST /a2a/geometry/analyze: Analyze semantic space geometry
     POST /a2a/task/execute: Execute a dispatched task
 
-Reference: https://a2ui.org/a2a-extension/a2ui/v0.9
+Reference: https://a2ui.org/a2a-extension/a2ui/v0.8
 """
 
 import json
@@ -270,12 +270,12 @@ def _build_default_capabilities() -> List[AgentCapability]:
     """Build default capability list for PMOVES-DoX."""
     return [
         AgentCapability(
-            uri="https://a2ui.org/a2a-extension/a2ui/v0.9",
+            uri="https://a2ui.org/a2a-extension/a2ui/v0.8",
             description="A2UI rendering capability for rich UI responses",
             required=False,
             params={
                 "supportedCatalogIds": [
-                    "https://a2ui.dev/specification/v0_9/standard_catalog.json"
+                    "https://github.com/google/A2UI/blob/main/specification/v0_8/json/standard_catalog_definition.json"
                 ],
                 "acceptsInlineCatalogs": True,
             },
