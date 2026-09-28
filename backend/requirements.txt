@@ -1,8 +1,8 @@
 fastapi>=0.109.0
 uvicorn[standard]>=0.27.0
-python-multipart>=0.0.27
+python-multipart>=0.0.31
 # Docling 2.x supports Python 3.11 and modern pipeline APIs
-docling>=2.50.0,<3.0
+docling>=2.94.0,<3.0
 pandas>=2.2.0
 openpyxl>=3.1.5,<4.0.0
 sqlalchemy>=2.0.25
@@ -27,7 +27,7 @@ supabase>=2.4.0,<3.0.0
 # Knowledge Graph
 neo4j>=5.0.0
 # Colab/Local AI Support
-torch>=2.3.0
+torch>=2.13.0
 torchvision>=0.18.0
 accelerate>=0.27.0
 bitsandbytes>=0.43.0; sys_platform != "win32" 
@@ -38,8 +38,8 @@ nats-py>=2.8.0
 google-generativeai>=0.4.0
 google-cloud-aiplatform>=1.38.0
 # Security updates (Dependabot alerts)
-aiohttp>=3.13.3
-urllib3>=2.6.3
+aiohttp>=3.14.1
+urllib3>=2.7.0
 filelock>=3.20.3
 # JWT Authentication (>=3.5.0 for CVE fixes)
 python-jose[cryptography]>=3.5.0
