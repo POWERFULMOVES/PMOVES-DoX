@@ -32,7 +32,7 @@
 [submodule "external/PMOVES-n8n"]
 	path = external/PMOVES-n8n
 	url = https://github.com/POWERFULMOVES/PMOVES-n8n.git
-	branch = PMOVES.AI-Edition-Hardened-DoX
+	branch = PMOVES-N8N-Auto
 [submodule "external/PMOVES-n8n-mcp"]
 	path = external/PMOVES-n8n-mcp
 	url = https://github.com/POWERFULMOVES/PMOVES-n8n-mcp.git
